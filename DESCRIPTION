@@ -1,0 +1,67 @@
+Package: DuckDBDataFrame
+Version: 0.9.0
+Date: 2026-01-21
+Title: DuckDB-Backed DataFrame and Table Structures
+Description:
+    Provides DuckDB-backed implementations of core tabular data structures
+    including DuckDBTable, DuckDBDataFrame, and DuckDBColumn. These classes
+    extend Bioconductor's S4Vectors framework to enable efficient, out-of-memory
+    operations on large tabular datasets using DuckDB's analytical database engine.
+    The package includes SQL function discovery, connection management, and support
+    for list columns and embeddings stored in ARRAY[] columns.
+Authors@R:
+    c(
+        person("Patrick", "Aboyoun", role=c("aut", "cre"), email="aboyounp@gene.com"),
+        person("Genentech, Inc.", role="cph")
+    )
+License: MIT + file LICENSE
+Depends:
+    R (>= 4.3.0),
+    methods,
+    stats,
+    bit64,
+    sf,
+    S4Vectors,
+    IRanges
+Imports:
+    BiocGenerics,
+    S4Arrays,
+    SparseArray,
+    DelayedArray,
+    MatrixGenerics,
+    DBI,
+    rlang,
+    dplyr,
+    dbplyr,
+    duckdb,
+    arrow,
+    tibble
+Suggests:
+    knitr,
+    rmarkdown,
+    BiocStyle,
+    testthat
+biocViews:
+    DataImport,
+    DataRepresentation,
+    Infrastructure,
+    Software
+VignetteBuilder: knitr
+RoxygenNote: 7.3.3
+Encoding: UTF-8
+Collate:
+    'sql_fun.R'
+    'sql_call.R'
+    'tblconn.R'
+    'keynames.R'
+    'DuckDBConnection.R'
+    'DuckDBTable-class.R'
+    'DuckDBTable-utils.R'
+    'DuckDBColumn-class.R'
+    'DuckDBAtomicList-class.R'
+    'DuckDBColumn-utils.R'
+    'DuckDBEmbeddings-class.R'
+    'DuckDBDataFrame-class.R'
+    'DuckDBDataFrameList-class.R'
+    'DuckDBTable-matrixStats.R'
+    'DuckDBTransposedDataFrame-class.R'

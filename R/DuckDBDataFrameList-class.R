@@ -1,0 +1,483 @@
+#' DuckDBDataFrameList objects
+#'
+#' @description
+#' The DuckDBDataFrame class extends \linkS4class{SplitDataFrameList}.
+#'
+#' @section Constructor:
+#' \describe{
+#'   \item{\code{split(x, f)}:}{
+#'     Creates a DuckDBDataFrameList object.
+#'     \describe{
+#'       \item{\code{x}}{
+#'         A DuckDBDataFrame object to split.
+#'       }
+#'       \item{\code{f}}{
+#'         A DuckDBColumn object to split \code{x} by.
+#'       }
+#'     }
+#'   }
+#' }
+#'
+#' @section Accessors:
+#' In the code snippets below, \code{x} is a DuckDBDataFrameList object:
+#' \describe{
+#'   \item{\code{length(x)}:}{
+#'     Get the number of elements in \code{x}.
+#'   }
+#'   \item{\code{names(x)}, \code{names(x) <- value}:}{
+#'     Get or set the names of the elements of \code{x}.
+#'   }
+#'   \item{\code{mcols(x)}, \code{mcols(x) <- value}:}{
+#'      Get or set the metadata columns.
+#'   }
+#'   \item{\code{elementNROWS(x)}:}{
+#'     Get the length (or nb of row for a matrix-like object) of each of the
+#'     elements.
+#'   }
+#'   \item{\code{dimtbls(x, drop = TRUE)}, \code{dimtbls(x) <- value}:}{
+#'     Get or set the list of dimension tables used to define partitions for
+#'     efficient queries. If \code{drop = TRUE}, then it returns a named
+#'     \code{DataFrameList} object, else it returns an environment containing
+#'     a \code{dimtbls} named \code{DataFrameList} element.
+#'   }
+#'   \item{\code{dims(x)}:}{
+#'     Get the two-column matrix indicating the number of rows and columns for
+#'     each of the list elements.
+#'   }
+#'   \item{\code{nrows(x)}, \code{ncols(x)}:}{
+#'     Get the number of rows and columns, respectively, for each of the list
+#'     elements.
+#'   }
+#'   \item{\code{dimnames(x)}:}{
+#'     Get the list of two \linkS4class{CharacterList}s, the first holding the
+#'     rownames and the second the column names.
+#'   }
+#'   \item{\code{rownames(x)}, \code{colnames(x)}:}{
+#'     Get the \linkS4class{CharacterList} of row and colum names, respectively.
+#'   }
+#'   \item{\code{commonColnames(x)}, \code{commonColnames(x) <- value}:}{
+#'     Get or set the character vector of column names present in the individual
+#'     DataFrames in \code{x}.
+#'   }
+#'   \item{\code{columnMetadata(x)}, \code{columnMetadata(x) <- value}:}{
+#'     Get the \linkS4class{DataFrame} of metadata along the columns, i.e.,
+#'     where each column in \code{x} is represented by a row in the metadata.
+#'     The metadata is common across all elements of \code{x}. Note that calling
+#'     \code{mcols(x)} returns the metadata on the \linkS4class{DataFrame}
+#'     elements of \code{x}.
+#'   }
+#' }
+#'
+#' @section Coercion:
+#' In the code snippets below, \code{x} is a DuckDBDataFrameList object:
+#' \describe{
+#'   \item{\code{unlist(x)}:}{
+#'     Returns the underlying DuckDBDataFrame object.
+#'   }
+#'   \item{\code{as(from, "DFrameList")}:}{
+#'     Converts a DuckDBDataFrameList object to a DFrameList object. This
+#'     process involves first loading the data into memory using
+#'     \code{as(from, "DFrame")}. The resulting DFrame is then split into a
+#'     DFrameList. Additionally, any associated metadata and mcols (metadata
+#'     columns) are preserved and added to the DFrameList, if they exist.
+#'   }
+#'   \item{\code{realize(x, BACKEND = getAutoRealizationBackend())}:}{
+#'     Realize an object into memory or on disk using the equivalent of
+#'     \code{realize(as(x, "DFrameList"), BACKEND)}.
+#'   }
+#' }
+#'
+#' @section Subsetting:
+#' In the code snippets below, \code{x} is a DuckDBDataFrameList object:
+#' \describe{
+#'   \item{\code{x[i]}:}{
+#'     Returns a DuckDBDataFrameList object containing the selected elements.
+#'   }
+#'   \item{\code{x[[i]]}:}{
+#'     Return the selected DuckDBDataFrame by \code{i}, where \code{i} is an
+#'     numeric or character vector of length 1.
+#'   }
+#'   \item{\code{x$name}:}{
+#'     Similar to \code{x[[name]]}, but \code{name} is taken literally as an
+#'     element name.
+#'   }
+#'   \item{\code{head(x, n = 6L)}:}{
+#'     If \code{n} is non-negative, returns the first n elements of \code{x}.
+#'     If \code{n} is negative, returns all but the last \code{abs(n)} elements
+#'     of \code{x}.
+#'   }
+#'   \item{\code{tail(x, n = 6L)}:}{
+#'     If \code{n} is non-negative, returns the last n elements of \code{x}.
+#'     If \code{n} is negative, returns all but the first \code{abs(n)} elements
+#'     of \code{x}.
+#'   }
+#' }
+#'
+#' @author Patrick Aboyoun
+#'
+#' @examples
+#' # Mocking up a file:
+#' tf <- tempfile(fileext = ".parquet")
+#' on.exit(unlink(tf))
+#' arrow::write_parquet(cbind(model = rownames(mtcars), mtcars), tf)
+#'
+#' # Creating our DuckDB-backed data frame:
+#' df <- DuckDBDataFrame(tf, datacols = colnames(mtcars), keycol = "model")
+#' dflist <- split(df, df$cyl)
+#' dflist
+#'
+#' @aliases
+#' DuckDBDataFrameList-class
+#'
+#' dbconn,DuckDBDataFrameList-method
+#' tblconn,DuckDBDataFrameList-method
+#' dimtbls,DuckDBDataFrameList-method
+#' dimtbls<-,DuckDBDataFrameList-method
+#' length,DuckDBDataFrameList-method
+#' names,DuckDBDataFrameList-method
+#' names<-,DuckDBDataFrameList-method
+#' elementNROWS,DuckDBDataFrameList-method
+#' ncols,DuckDBDataFrameList-method
+#' rownames<-,DuckDBDataFrameList-method
+#' colnames<-,DuckDBDataFrameList-method
+#' commonColnames,DuckDBDataFrameList-method
+#' columnMetadata,DuckDBDataFrameList-method
+#' columnMetadata<-,DuckDBDataFrameList-method
+#'
+#' split,DuckDBDataFrame,DuckDBColumn-method
+#'
+#' unlist,DuckDBDataFrameList-method
+#'
+#' extractROWS,DuckDBDataFrameList,ANY-method
+#' getListElement,DuckDBDataFrameList-method
+#' head,DuckDBDataFrameList-method
+#' tail,DuckDBDataFrameList-method
+#'
+#' coerce,DuckDBDataFrameList,DFrameList-method
+#' realize,DuckDBDataFrameList-method
+#'
+#' @seealso
+#' \itemize{
+#'   \item \code{\link{DuckDBDataFrame-class}} for the unsplit class
+#'   \item \code{\link[IRanges]{SplitDataFrameList}} for the base class
+#' }
+#'
+#' @include DuckDBDataFrame-class.R
+#'
+#' @keywords classes methods
+#'
+#' @name DuckDBDataFrameList-class
+NULL
+
+#' @export
+#' @importClassesFrom IRanges SplitDataFrameList
+setClass("DuckDBDataFrameList", contains = "SplitDataFrameList",
+         slots = c(unlistData = "ANY", partitioning = "expression",
+                   names = "character", elementNROWS = "integer"),
+         prototype = prototype(elementType = "DuckDBDataFrame",
+                               unlistData = new("DuckDBDataFrame"),
+                               elementNROWS = setNames(integer(), character())))
+
+### - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+### Accessors
+###
+
+#' @export
+#' @importFrom BiocGenerics dbconn
+setMethod("dbconn", "DuckDBDataFrameList", function(x) callGeneric(x@unlistData))
+
+#' @export
+setMethod("tblconn", "DuckDBDataFrameList", function(x, select = TRUE, filter = TRUE) {
+    callGeneric(x@unlistData, select = select, filter = filter)
+})
+
+#' @export
+setMethod("dimtbls", "DuckDBDataFrameList", function(x, drop = TRUE) {
+    callGeneric(x@unlistData, drop = drop)
+})
+
+#' @export
+setReplaceMethod("dimtbls", "DuckDBDataFrameList", function(x, value) {
+    callGeneric(x@unlistData, value)
+})
+
+#' @export
+setMethod("length", "DuckDBDataFrameList", function(x) length(x@names))
+
+#' @export
+setMethod("names", "DuckDBDataFrameList", function(x) {
+    names(x@names) %||% x@names
+})
+
+#' @export
+#' @importFrom S4Vectors mcols
+setReplaceMethod("names", "DuckDBDataFrameList", function(x, value) {
+    x_names <- x@names
+    names(x_names) <- value
+    mc <- mcols(x)
+    if (!is.null(mc)) {
+        rownames(mc) <- value
+    }
+    replaceSlots(x, names = x_names, elementMetadata = mc, check = FALSE)
+})
+
+#' @export
+#' @importFrom S4Vectors elementNROWS
+#' @importFrom stats setNames
+setMethod("elementNROWS", "DuckDBDataFrameList", function(x) {
+    setNames(x@elementNROWS, names(x))
+})
+
+# nrows method inherited from DataFrameList
+
+#' @export
+#' @importFrom BiocGenerics ncols
+#' @importFrom S4Vectors isTRUEorFALSE
+setMethod("ncols", "DuckDBDataFrameList", function(x, use.names = TRUE) {
+    if (!isTRUEorFALSE(use.names)) {
+        stop("'use.names' must be TRUE or FALSE")
+    }
+    ans <- rep.int(ncol(x@unlistData), length(x))
+    if (use.names) {
+        names(ans) <- names(x)
+    }
+    ans
+})
+
+# dims method inherited from DataFrameList
+# rownames method inherited from DataFrameList
+# colnames method inherited from SplitDataFrameList
+# dimnames method inherited from DataFrameList
+
+#' @export
+#' @importFrom BiocGenerics rownames<-
+setReplaceMethod("rownames", "DuckDBDataFrameList", function(x, value) {
+    stop("cannot replace the rownames of a DuckDBDataFrameList object")
+})
+
+#' @export
+#' @importClassesFrom IRanges CharacterList
+#' @importFrom BiocGenerics colnames<-
+setReplaceMethod("colnames", "DuckDBDataFrameList", function(x, value) {
+    if (is.null(value) || is.character(value)) {
+        colnames(x@unlistData) <- value
+    } else if (is(value, "CharacterList")) {
+        if (length(x) != length(value)) {
+            stop("replacement value must be the same length as x")
+        } else if (!all(vapply(value, function(y) identical(y, value[[1L]]), logical(1L)))) {
+            stop("replacement value must be a CharacterList with identical elements")
+        }
+        colnames(x@unlistData) <- value[[1L]]
+    } else {
+        stop("replacement value must either be NULL or a CharacterList")
+    }
+    x
+})
+
+# dimnames<- method inherited from DataFrameList
+# NROW method inherited from DataFrameList
+# ROWNAMES method inherited from DataFrameList
+# ROWNAMES<- method inherited from DataFrameList
+
+#' @export
+#' @importFrom IRanges commonColnames
+setMethod("commonColnames", "DuckDBDataFrameList", function(x) colnames(x@unlistData))
+
+# commonColnames<- method inherited from SplitDataFrameList
+
+#' @export
+#' @importFrom IRanges columnMetadata
+#' @importFrom S4Vectors mcols
+setMethod("columnMetadata", "DuckDBDataFrameList", function(x) mcols(x@unlistData, use.names = FALSE))
+
+#' @export
+#' @importFrom IRanges columnMetadata<-
+#' @importFrom S4Vectors mcols<-
+setReplaceMethod("columnMetadata", "DuckDBDataFrameList", function(x, value) {
+    mcols(x@unlistData) <- value
+    x
+})
+
+### - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+### Validity
+###
+
+#' @importFrom S4Vectors setValidity2
+setValidity2("DuckDBDataFrameList", function(x) {
+    msg <- NULL
+    if (sum(as.numeric(x@elementNROWS)) > 0) {
+        if (length(x@partitioning) != 1L) {
+            msg <- c(msg, "must have exactly one partitioning expression")
+        }
+    }
+    if (length(x@names) != length(x@elementNROWS)) {
+        msg <- c(msg, "'names' and 'elementNROWS' must have the same length")
+    }
+    if (!identical(unname(x@names), names(x@elementNROWS))) {
+        msg <- c(msg, "'names' and 'elementNROWS' must use the same names")
+    }
+    if (is.null(names(x@elementNROWS))) {
+        msg <- c(msg, "'elementNROWS' must be a named integer64 vector")
+    }
+    msg %||% TRUE
+})
+
+### - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+### Splitting
+###
+
+#' @export
+#' @importFrom S4Vectors split new2
+#' @importFrom stats setNames
+setMethod("split", c("DuckDBDataFrame", "DuckDBColumn"), function(x, f, drop = FALSE, ...) {
+    if (!isTRUE(all.equal(as(x, "DuckDBTable"), f@table))) {
+        stop("cannot split a DuckDBDataFrame object by an incompatible DuckDBColumn object")
+    }
+    elementNROWS <- table(f)
+    elementNROWS <- setNames(as.vector(elementNROWS), names(elementNROWS))
+    new2("DuckDBDataFrameList", unlistData = x, partitioning = f@table@datacols,
+         names = names(elementNROWS), elementNROWS = elementNROWS, check = FALSE)
+})
+
+### - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+### Unlisting
+###
+
+#' @export
+#' @importFrom BiocGenerics dbconn unlist
+#' @importFrom S4Vectors new2
+setMethod("unlist", "DuckDBDataFrameList",
+function(x, recursive = TRUE, use.names = TRUE) {
+    if ((is.null(dbconn(x@unlistData))) &&
+        (sum(as.numeric(x@elementNROWS)) == 0)) {
+        return(new(x@elementType))
+    }
+    unlistData <- x@unlistData
+    conn <- tblconn(unlistData, select = FALSE, filter = FALSE)
+    datacols <- x@partitioning
+    keycols <- .keycols(unlistData)
+    dimtbls <- dimtbls(unlistData, drop = FALSE)
+    table <- new2("DuckDBTable", conn = conn, datacols = datacols, keycols = keycols,
+                  dimtbls = dimtbls, check = FALSE)
+    group <- new2("DuckDBColumn", table = table, check = FALSE)
+    keep <- group %in% x@names
+    extractROWS(unlistData, keep)
+})
+
+### - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+### Subsetting
+###
+
+#' @export
+#' @importFrom S4Vectors extractROWS normalizeSingleBracketSubscript
+setMethod("extractROWS", "DuckDBDataFrameList", function(x, i) {
+    if (missing(i)) {
+        return(x)
+    }
+
+    i <- normalizeSingleBracketSubscript(i, elementNROWS(x))
+
+    names <- x@names[i]
+
+    elementNROWS <- x@elementNROWS[i]
+
+    mcols <- x@elementMetadata
+    if (NROW(mcols) > 0L) {
+        mcols <- callGeneric(mcols, i = i)
+    }
+
+    replaceSlots(x, names = names, elementNROWS = elementNROWS, elementMetadata = mcols, check = FALSE)
+})
+
+#' @export
+#' @importFrom BiocGenerics dbconn
+#' @importFrom S4Vectors getListElement new2 normalizeDoubleBracketSubscript
+setMethod("getListElement", "DuckDBDataFrameList", function(x, i) {
+    if ((is.null(dbconn(x@unlistData))) &&
+        (sum(as.numeric(x@elementNROWS)) == 0)) {
+        return(new(x@elementType))
+    }
+    i <- normalizeDoubleBracketSubscript(i, elementNROWS(x), allow.nomatch = TRUE)
+    if (is.na(i))
+        return(NULL)
+    unlistData <- x@unlistData
+    conn <- tblconn(unlistData, select = FALSE, filter = FALSE)
+    datacols <- x@partitioning
+    keycols <- .keycols(unlistData)
+    dimtbls <- dimtbls(unlistData, drop = FALSE)
+    table <- new2("DuckDBTable", conn = conn, datacols = datacols, keycols = keycols,
+                  dimtbls = dimtbls, check = FALSE)
+    group <- new2("DuckDBColumn", table = table, check = FALSE)
+    keep <- group == x@names[i]
+    extractROWS(unlistData, keep)
+})
+
+#' @export
+#' @importFrom S4Vectors head
+setMethod("head", "DuckDBDataFrameList", function(x, n = 6L, ...) {
+    names <- callGeneric(x@names, n = n, ...)
+
+    elementNROWS <- callGeneric(x@elementNROWS, n = n, ...)
+
+    mcols <- x@elementMetadata
+    if (!is.null(mcols)) {
+        mcols <- callGeneric(mcols, n = n, ...)
+    }
+
+    replaceSlots(x, names = names, elementNROWS = elementNROWS, elementMetadata = mcols, check = FALSE)
+})
+
+#' @export
+#' @importFrom S4Vectors tail
+setMethod("tail", "DuckDBDataFrameList", function(x, n = 6L, ...) {
+    names <- callGeneric(x@names, n = n, ...)
+
+    elementNROWS <- callGeneric(x@elementNROWS, n = n, ...)
+
+    mcols <- x@elementMetadata
+    if (!is.null(mcols)) {
+        mcols <- callGeneric(mcols, n = n, ...)
+    }
+
+    replaceSlots(x, names = names, elementNROWS = elementNROWS, elementMetadata = mcols, check = FALSE)
+})
+
+### - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+### Coercion
+###
+
+#' @export
+#' @importClassesFrom IRanges DFrameList
+#' @importClassesFrom S4Vectors DFrame
+#' @importFrom S4Vectors mcols mcols<- metadata metadata<- split
+setAs("DuckDBDataFrameList", "DFrameList", function(from) {
+    unlistData <- unlist(from)
+    datacols <- c(unlistData@datacols, from@partitioning)
+    names(datacols) <- make.unique(names(datacols), sep = "_")
+    unlistData <- replaceSlots(unlistData, datacols = datacols, check = FALSE)
+
+    df <- as(unlistData, "DFrame")
+    group <- df[[ncol(df)]]
+    df <- df[-ncol(df)]
+    dflist <- split(df, group)
+
+    metadata(dflist) <- metadata(from)
+    mc <- mcols(from)
+    if (!is.null(mc)) {
+        mcols(dflist) <- as(mc, "DFrame")
+    }
+
+    dflist
+})
+
+#' @export
+#' @importClassesFrom IRanges DFrameList
+#' @importFrom DelayedArray getAutoRealizationBackend realize
+setMethod("realize", "DuckDBDataFrameList",
+function(x, BACKEND = getAutoRealizationBackend()) {
+    x <- as(x, "DFrameList")
+    if (!is.null(BACKEND)) {
+        x <- callGeneric(x, BACKEND = BACKEND)
+    }
+    x
+})
