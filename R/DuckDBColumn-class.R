@@ -104,7 +104,6 @@ setClass("DuckDBColumn", contains = "Vector", slots = c(table = "DuckDBTable"))
 ###
 
 #' @export
-#' @importFrom BiocGenerics dbconn
 setMethod("dbconn", "DuckDBColumn", function(x) callGeneric(x@table))
 
 #' @export
@@ -149,11 +148,9 @@ setReplaceMethod("names", "DuckDBColumn", function(x, value) {
 })
 
 #' @export
-#' @importFrom BiocGenerics type
 setMethod("type", "DuckDBColumn", function(x) unname(coltypes(x@table)))
 
 #' @export
-#' @importFrom BiocGenerics type<-
 setReplaceMethod("type", "DuckDBColumn", function(x, value) {
     table <- x@table
     coltypes(table) <- value
@@ -242,7 +239,6 @@ setMethod("tail", "DuckDBColumn", function(x, n = 6L, ...) {
 ###
 
 #' @export
-#' @importFrom BiocGenerics as.vector
 #' @importFrom stats setNames
 setMethod("as.vector", "DuckDBColumn", function(x, mode = "any") {
     df <- as.data.frame(x@table, optional = TRUE)

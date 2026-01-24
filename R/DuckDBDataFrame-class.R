@@ -250,14 +250,12 @@ setClass("DuckDBDataFrame", contains = c("DuckDBTable", "DataFrame"))
 setMethod("length", "DuckDBDataFrame", function(x) ncol(x))
 
 #' @export
-#' @importFrom BiocGenerics colnames
 setMethod("names", "DuckDBDataFrame", function(x) colnames(x))
 
 # nrow method inherited from DuckDBTable
 # rownames method inherited from DuckDBTable
 
 #' @export
-#' @importFrom BiocGenerics rownames<-
 setReplaceMethod("rownames", "DuckDBDataFrame", function(x, value) {
     if (.has_row_number(x)) {
         stop("cannot replace row numbers with rownames")
@@ -267,7 +265,6 @@ setReplaceMethod("rownames", "DuckDBDataFrame", function(x, value) {
 })
 
 #' @export
-#' @importFrom BiocGenerics colnames<-
 #' @importFrom S4Vectors mcols
 setReplaceMethod("colnames", "DuckDBDataFrame", function(x, value) {
     datacols <- x@datacols
@@ -450,7 +447,6 @@ function(value, x) {
 })
 
 #' @export
-#' @importFrom BiocGenerics subset
 setMethod("subset", "DuckDBDataFrame",
 function(x, subset, select, drop = FALSE, ...) {
     if (!missing(subset)) {
@@ -538,7 +534,6 @@ setMethod("cbind", "DuckDBDataFrame", cbind.DuckDBDataFrame)
 ###
 
 #' @export
-#' @importFrom BiocGenerics as.data.frame
 #' @importFrom bit64 is.integer64
 #' @importFrom stats setNames
 setMethod("as.data.frame", "DuckDBDataFrame",

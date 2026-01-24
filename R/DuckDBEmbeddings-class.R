@@ -151,30 +151,24 @@ setClass("DuckDBEmbeddings",
 ### RectangularData methods
 
 #' @export
-#' @importFrom BiocGenerics nrow
 setMethod("nrow", "DuckDBEmbeddings", function(x) length(x))
 
 #' @export
-#' @importFrom BiocGenerics ncol
 setMethod("ncol", "DuckDBEmbeddings", function(x) x@ncol)
 
 #' @export
-#' @importFrom BiocGenerics rownames
 setMethod("rownames", "DuckDBEmbeddings", function(x) names(x))
 
 #' @export
-#' @importFrom BiocGenerics rownames<-
 setReplaceMethod("rownames", "DuckDBEmbeddings", function(x, value) {
     names(x) <- value
     x
 })
 
 #' @export
-#' @importFrom BiocGenerics colnames
 setMethod("colnames", "DuckDBEmbeddings", function(x) NULL)
 
 #' @export
-#' @importFrom BiocGenerics colnames<-
 setReplaceMethod("colnames", "DuckDBEmbeddings", function(x, value) {
     x
 })
@@ -283,7 +277,6 @@ setMethod("as.matrix", "DuckDBEmbeddings", function(x, ...) {
 })
 
 #' @export
-#' @importFrom BiocGenerics as.list
 setMethod("as.list", "DuckDBEmbeddings", function(x, ...) {
     mat <- as.matrix(x)
     result <- asplit(mat, 1L)
