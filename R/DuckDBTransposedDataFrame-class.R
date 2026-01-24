@@ -105,7 +105,6 @@ setClass("DuckDBTransposedDataFrame", contains = "TransposedDataFrame",
 ###
 
 #' @export
-#' @importFrom BiocGenerics dbconn
 setMethod("dbconn", "DuckDBTransposedDataFrame", function(x) callGeneric(x@data))
 
 #' @export
@@ -140,7 +139,6 @@ t.DuckDBDataFrame <- function(x)
 }
 
 #' @export
-#' @importFrom BiocGenerics t
 setMethod("t", "DuckDBDataFrame", t.DuckDBDataFrame)
 
 ### - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -

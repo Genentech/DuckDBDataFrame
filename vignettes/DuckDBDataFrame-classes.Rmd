@@ -1,0 +1,720 @@
+---
+title: "Architecture of the DuckDBDataFrame Package"
+author:
+- name: Patrick Aboyoun
+  email: aboyounp@gene.com
+  affiliation: Genentech, Inc.
+date: "Compiled: `r format(Sys.time(), '%B %d, %Y')`"
+package: DuckDBDataFrame
+vignette: >
+  %\VignetteIndexEntry{Architecture of the DuckDBDataFrame Package}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+output:
+  BiocStyle::html_document:
+    number_sections: true
+    toc: true
+    toc_depth: 4
+---
+
+```{r setup, echo=FALSE}
+library(BiocStyle)
+knitr::opts_chunk$set(error=FALSE, warning=FALSE, message=FALSE)
+```
+
+# Introduction
+
+The `r Biocpkg("DuckDBDataFrame")` package provides DuckDB-backed implementations
+of core tabular data structures for the Bioconductor project. It serves as the
+foundational layer for the DuckDB-backed Bioconductor ecosystem, which includes
+`r Biocpkg("DuckDBArray")` for array/matrix operations and 
+`r Biocpkg("DuckDBGRanges")` for genomic interval operations.
+
+## Position in the Bioconductor Ecosystem
+
+`r Biocpkg("DuckDBDataFrame")` extends the `r Biocpkg("S4Vectors")` framework,
+implementing DuckDB-backed versions of core classes:
+
+| Class | Extends | Purpose |
+|-------|---------|---------|
+| *DuckDBTable* | *RectangularData* | N-dimensional table with SQL backend |
+| *DuckDBDataFrame* | *DataFrame* | 2D tabular data with row/column names |
+| *DuckDBColumn* | *Vector* | Single column extraction |
+| *DuckDBAtomicList* | *List* | List columns (DuckDB LIST[]) |
+| *DuckDBEmbeddings* | *Matrix* | Fixed-length arrays (DuckDB ARRAY[]) |
+
+The package is designed as an **infrastructure package** for developers building
+DuckDB-backed Bioconductor tools, while remaining accessible to end users for
+large-scale data manipulation.
+
+## Installation
+
+```{r install, eval=FALSE}
+if (!require("BiocManager"))
+    install.packages("BiocManager")
+BiocManager::install("DuckDBDataFrame")
+```
+
+```{r load-package}
+library(DuckDBDataFrame)
+```
+
+
+# Core Design Principles
+
+## The N-Dimensional Table Abstraction
+
+At the heart of `r Biocpkg("DuckDBDataFrame")` is *DuckDBTable*, an
+n-dimensional table class that serves as the backend for both 2D DataFrames
+and higher-dimensional arrays. This design choice enables:
+
+1. **Unified SQL operations**: All operations translate to SQL regardless of dimensionality
+2. **Flexible key dimensions**: Support for 0, 1, 2, or more key dimensions
+3. **Efficient storage**: Parquet's columnar format for all data types
+4. **Lazy evaluation**: Operations build SQL queries without immediate execution
+
+### Key Concepts
+
+**keycols**
+: Named list defining dimension indices. Each element is an atomic vector
+  representing the values along that dimension. Can be integer indices or
+  named character/factor levels.
+
+**datacols**
+: Named expression defining the data columns. Each element is an R expression
+  that translates to a SQL column reference or computation.
+
+**conn**
+: A `tbl_duckdb_connection` object from `r CRANpkg("dplyr")` and 
+  `r CRANpkg("dbplyr")`, providing the SQL interface to DuckDB.
+
+**dimtbls**
+: Optional dimension lookup tables for partitioned data, enabling efficient
+  filtering across grid partitions.
+
+
+## SQL Translation Philosophy
+
+`r Biocpkg("DuckDBDataFrame")` translates R operations into SQL queries that
+execute in DuckDB's optimized analytical engine. This provides:
+
+- **Columnar operations**: DuckDB's columnar engine excels at aggregations
+- **Lazy evaluation**: Build complex queries without intermediate materialization
+- **Memory efficiency**: Process data larger than RAM
+- **Parquet optimization**: Direct Parquet file scanning with predicate pushdown
+
+
+# The DuckDBTable Class
+
+## Class Structure
+
+*DuckDBTable* is the foundational class, extending *RectangularData* from
+`r Biocpkg("S4Vectors")`:
+
+```{r DuckDBTable-class}
+showClass("DuckDBTable")
+```
+
+### Slots
+
+**conn** (`tbl_duckdb_connection`)
+: The dplyr/dbplyr connection to a DuckDB table or query. Can reference
+  Parquet files, CSV files, or in-memory tables.
+
+**datacols** (`expression`)
+: Named expression where each element defines a data column. Elements can be
+  simple column references (e.g., `as.name("mpg")`) or complex SQL expressions
+  (e.g., `call("/", as.name("mpg"), as.name("hp"))`).
+
+**keycols** (`list`)
+: Named list defining dimension indices. For a 2D table with row names, this
+  would be a single-element list. For higher dimensions, multiple elements.
+  Special encoding for row numbers: `list(row_number = c(NA_integer64_, -n))`.
+
+**dimtbls** (`environment`)
+: Locked environment containing a `DataFrameList` of dimension lookup tables.
+  Used for partitioned arrays to map dimension indices to grid groups.
+
+
+## Construction Patterns
+
+### From Parquet Files
+
+The most common construction pattern reads Parquet files directly:
+
+```{r DuckDBTable-from-parquet}
+# Write mtcars to Parquet
+mtcars_path <- tempfile(fileext = ".parquet")
+mtcars_df <- cbind(model = rownames(mtcars), mtcars)
+arrow::write_parquet(mtcars_df, mtcars_path)
+
+# Create DuckDBTable with row names
+tbl <- DuckDBTable(mtcars_path,
+                   datacols = colnames(mtcars),
+                   keycols = list(model = mtcars_df$model))
+tbl
+```
+
+### From CSV Files
+
+DuckDB can read CSV files directly, including gzipped files:
+
+```{r DuckDBTable-from-csv}
+# Write to gzipped CSV
+csv_path <- tempfile(fileext = ".csv.gz")
+write.csv(mtcars_df, gzfile(csv_path), row.names = FALSE)
+
+# DuckDB reads it directly
+tbl_csv <- DuckDBTable(csv_path,
+                       datacols = colnames(mtcars),
+                       keycols = list(model = mtcars_df$model))
+```
+
+### From dplyr Connections
+
+Advanced users can construct tables from existing dplyr connections:
+
+```{r DuckDBTable-from-dplyr}
+library(dplyr)
+
+# Get the DuckDB connection
+conn <- acquireDuckDBConn()
+
+# Create a dplyr connection with filtering
+tbl_conn <- tbl(conn, paste0("read_parquet('", mtcars_path, "')")) %>%
+    filter(cyl >= 6)
+
+# Wrap in DuckDBTable
+tbl_filtered <- DuckDBTable(tbl_conn,
+                            datacols = colnames(mtcars),
+                            keycols = list(model = mtcars_df$model[mtcars$cyl >= 6]))
+tbl_filtered
+```
+
+
+## The DuckDBTable Contract
+
+Classes extending *DuckDBTable* or using it as a backend must understand its
+contract:
+
+### Required Operations
+
+1. **Dimensionality**: `nrow()`, `ncol()`, `dim()` via keycols and datacols
+2. **Subsetting**: `[` operator for extracting sub-tables
+3. **Accessors**: `keynames()`, `keydimnames()`, `colnames()`
+4. **Coercion**: `as.data.frame()` for materialization
+
+### Key Dimension Semantics
+
+- **0 key dimensions**: No row names, generates row numbers internally
+- **1 key dimension**: Row names for DataFrames
+- **2+ key dimensions**: Array indices for higher-dimensional structures
+
+### Special Row Number Encoding
+
+When no keycols are provided, *DuckDBTable* uses a special encoding:
+
+```{r row-number-encoding}
+# Table without explicit row names
+tbl_no_keys <- DuckDBTable(mtcars_path, datacols = colnames(mtcars))
+
+# Check if it has row numbers
+.has_row_number(tbl_no_keys)
+
+# The keycols encoding
+.keycols(tbl_no_keys)
+```
+
+This encoding `c(NA_integer64_, -n)` indicates row numbers from 1 to n.
+
+
+## Matrix Statistics on Tables
+
+Because *DuckDBTable* is n-dimensional, it supports `r CRANpkg("matrixStats")`
+operations when `nkey(x) >= 2`:
+
+```{r DuckDBTable-matrixStats}
+# Create a 2D table (matrix-like) in long format
+state_path <- tempfile(fileext = ".parquet")
+state_df <- data.frame(
+  state = rep(rownames(state.x77), times = ncol(state.x77)),
+  metric = rep(colnames(state.x77), each = nrow(state.x77)),
+  value = as.vector(state.x77)
+)
+arrow::write_parquet(state_df, state_path)
+
+tbl_2d <- DuckDBTable(state_path,
+                      datacols = "value",
+                      keycols = list(state = rownames(state.x77),
+                                     metric = colnames(state.x77)))
+
+# Matrix statistics work directly
+colMeans(tbl_2d)
+rowSums(tbl_2d)
+```
+
+This is a key architectural decision: *DuckDBTable* implements matrixStats
+methods because it's fundamentally n-dimensional, not because it's trying to
+be a matrix. This enables both *DuckDBDataFrame* and *DuckDBArray* to inherit
+efficient statistical operations.
+
+
+# The DuckDBDataFrame Class
+
+## Class Structure
+
+*DuckDBDataFrame* extends both *DuckDBTable* and *DataFrame*:
+
+```{r DuckDBDataFrame-class}
+showClass("DuckDBDataFrame")
+```
+
+This dual inheritance provides:
+- *DuckDBTable*: SQL backend and n-dimensional operations
+- *DataFrame*: Bioconductor DataFrame API and metadata support
+
+### Validity Constraints
+
+*DuckDBDataFrame* adds one constraint: `nkey(x) <= 1`. This ensures the object
+is 2-dimensional (0 or 1 key dimensions).
+
+```{r DuckDBDataFrame-validity, error=TRUE}
+# This would fail: 2 key dimensions
+# DuckDBDataFrame(tbl_2d)  # Error: keycols has more than one element
+```
+
+
+## Construction
+
+The *DuckDBDataFrame* constructor wraps *DuckDBTable* construction:
+
+```{r DuckDBDataFrame-construct}
+df <- DuckDBDataFrame(mtcars_path,
+                      datacols = colnames(mtcars),
+                      keycol = list(model = mtcars_df$model))
+df
+```
+
+Note the parameter name change: `keycol` (singular) instead of `keycols`,
+emphasizing the single-dimension constraint.
+
+
+## DataFrame Operations
+
+*DuckDBDataFrame* supports the full *DataFrame* API from `r Biocpkg("S4Vectors")`:
+
+### Column Access
+
+```{r DuckDBDataFrame-columns}
+# Extract single column (returns DuckDBColumn)
+mpg <- df$mpg
+mpg
+
+# Extract multiple columns
+df[, c("mpg", "cyl", "hp")]
+```
+
+### Row Subsetting
+
+```{r DuckDBDataFrame-rows}
+# By row names
+df[c("Mazda RX4", "Honda Civic"), ]
+
+# By logical vector
+df[df$mpg > 25, ]
+
+# By integer positions (order not preserved!)
+df[1:5, ]
+```
+
+### Column Assignment
+
+```{r DuckDBDataFrame-assign}
+# Create a copy
+df_copy <- df
+
+# Add computed column
+df_copy$efficiency <- df$mpg / df$hp
+df_copy[1:3, c("mpg", "hp", "efficiency")]
+```
+
+### Combining
+
+```{r DuckDBDataFrame-combine}
+# Column binding
+df_subset <- df[, c("mpg", "cyl")]
+df_combined <- cbind(df_subset, hp = df$hp)
+df_combined[1:3, ]
+```
+
+
+## Metadata Support
+
+*DuckDBDataFrame* fully supports DataFrame metadata:
+
+```{r DuckDBDataFrame-metadata}
+# Column metadata
+mcols(df) <- DataFrame(
+    description = c("Miles/(US) gallon", "Number of cylinders",
+                   "Displacement (cu.in.)", "Gross horsepower",
+                   "Rear axle ratio", "Weight (1000 lbs)",
+                   "1/4 mile time", "Engine (0 = V-shaped, 1 = straight)",
+                   "Transmission (0 = automatic, 1 = manual)",
+                   "Number of forward gears", "Number of carburetors"),
+    row.names = colnames(mtcars)
+)
+
+mcols(df)
+```
+
+
+# The DuckDBColumn Class
+
+## Class Structure
+
+*DuckDBColumn* represents a single extracted column, wrapping a *DuckDBTable*
+with `ncol(table) == 1`:
+
+```{r DuckDBColumn-class}
+showClass("DuckDBColumn")
+```
+
+### Slots
+
+**table** (*DuckDBTable*)
+: A single-column DuckDBTable containing the data.
+
+**metadata** (`list`)
+: Column metadata from the parent DataFrame's mcols.
+
+
+## Vector-like Behavior
+
+*DuckDBColumn* behaves like an ordinary R vector:
+
+```{r DuckDBColumn-ops}
+mpg <- df$mpg
+
+# Length
+length(mpg)
+
+# Subsetting
+mpg[1:5]
+
+# Arithmetic
+mpg / 2
+
+# Comparison
+mpg > 20
+
+# Summary
+mean(mpg)
+median(mpg)
+```
+
+## Lazy Evaluation
+
+Operations on *DuckDBColumn* remain lazy until values are needed:
+
+```{r DuckDBColumn-lazy}
+# This builds a SQL expression, doesn't execute
+efficiency <- df$mpg / df$hp
+efficiency
+
+# Materialization happens on demand
+as.vector(efficiency)[1:5]
+```
+
+
+# The DuckDBAtomicList Class
+
+## Purpose
+
+*DuckDBAtomicList* represents list columns where each element is an atomic
+vector. In DuckDB, these are stored as `LIST[]` columns.
+
+```{r DuckDBAtomicList-class}
+showClass("DuckDBAtomicList")
+```
+
+## Construction
+
+```{r DuckDBAtomicList-construct}
+# Create data with list column
+list_df <- data.frame(
+    id = 1:3,
+    name = c("Alice", "Bob", "Charlie"),
+    scores = I(list(c(85, 90, 88), c(92, 87), c(78, 82, 85, 90)))
+)
+
+list_path <- tempfile(fileext = ".parquet")
+arrow::write_parquet(list_df, list_path)
+
+# Create DuckDBDataFrame
+df_list <- DuckDBDataFrame(list_path, keycol = "id")
+
+# Extract list column
+scores <- df_list$scores
+scores
+```
+
+## List Operations
+
+```{r DuckDBAtomicList-ops}
+# Element lengths
+elementNROWS(scores)
+
+# Extract single element
+scores[[1]]
+
+# Unlisting
+unlist(scores)
+```
+
+
+# The DuckDBEmbeddings Class
+
+## Purpose
+
+*DuckDBEmbeddings* represents fixed-length numeric arrays, typically used for
+embeddings or feature vectors. In DuckDB, these are stored as `ARRAY[n]` columns.
+
+```{r DuckDBEmbeddings-class}
+showClass("DuckDBEmbeddings")
+```
+
+## Construction
+
+```{r DuckDBEmbeddings-construct}
+# Create data with fixed-length arrays
+embeddings_df <- data.frame(
+    id = 1:5,
+    embedding = I(lapply(1:5, function(i) runif(10)))
+)
+
+emb_path <- tempfile(fileext = ".parquet")
+arrow::write_parquet(embeddings_df, emb_path)
+
+# Create DuckDBDataFrame
+df_emb <- DuckDBDataFrame(emb_path, keycol = "id")
+
+# Extract embeddings column (returns DuckDBEmbeddings)
+emb <- df_emb$embedding
+emb
+```
+
+## Matrix-like Operations
+
+*DuckDBEmbeddings* behaves like a matrix where each row is an embedding:
+
+```{r DuckDBEmbeddings-ops}
+# Dimensions
+dim(emb)
+
+# Subsetting
+emb[1:3, 1:5]
+```
+
+
+# SQL Function Discovery
+
+## The sql_fun() Function
+
+`r Biocpkg("DuckDBDataFrame")` provides `sql_fun()` to discover available SQL
+functions for a given data type:
+
+```{r sql_fun}
+# Find functions for numeric columns
+sql_fun(df$mpg)
+```
+
+This queries DuckDB's function catalog to find compatible functions.
+
+
+## The sql_call() Function
+
+`sql_call()` applies any DuckDB SQL function to a DuckDBDataFrame object:
+
+```{r sql_call}
+# Apply SQL functions
+sql_call(df$mpg, "sqrt")
+sql_call(df$mpg, "round", 1)
+
+# String functions
+df_char <- DuckDBDataFrame(mtcars_path, datacols = "model", keycol = "model")
+sql_call(df_char$model, "upper")
+```
+
+This provides a low-level interface to DuckDB's extensive SQL function library.
+
+
+# Connection Management
+
+## Shared Connection Pool
+
+`r Biocpkg("DuckDBDataFrame")` manages a shared DuckDB connection:
+
+```{r connection-mgmt}
+# Acquire the shared connection
+conn <- acquireDuckDBConn()
+conn
+
+# All DuckDBDataFrame objects use this connection
+identical(dbconn(df), conn)
+
+# Release when done (usually not needed)
+# releaseDuckDBConn()
+```
+
+This design ensures:
+- Single DuckDB process per R session
+- Efficient resource usage
+- Consistent transaction semantics
+
+
+## Direct SQL Access
+
+Advanced users can access the underlying connection for custom SQL:
+
+```{r direct-sql}
+library(DBI)
+
+# Execute custom SQL
+dbGetQuery(conn, "SELECT AVG(mpg) as avg_mpg FROM read_parquet(?)", 
+           params = list(mtcars_path))
+```
+
+
+# Advanced Topics
+
+## Type System
+
+*DuckDBTable* automatically detects and handles DuckDB types:
+
+```{r type-system}
+# Get column types
+coltypes(df)
+
+# Cast types
+df_copy <- df
+coltypes(df_copy)[["mpg"]] <- "integer"
+df_copy$mpg[1:5]
+```
+
+## Dimension Tables
+
+For partitioned data, dimension tables map indices to grid groups:
+
+```{r dimtbls}
+# Create dimension tables (usually from createDimTables)
+dimtbl <- DataFrame(
+    state = rownames(state.x77),
+    region = rep(c("West", "East"), length.out = nrow(state.x77))
+)
+
+# Attach to table
+dimtbls(tbl_2d) <- list(state = dimtbl)
+
+# Now filtering can use region
+dimtbls(tbl_2d)
+```
+
+
+# Use Cases
+
+## Large Metadata Tables
+
+Single-cell experiments with millions of cells generate large metadata tables.
+*DuckDBDataFrame* keeps this on disk:
+
+```{r use-case-metadata, eval=FALSE}
+# Hypothetical: 1 million cell metadata
+cell_metadata <- DuckDBDataFrame("cells.parquet", keycol = "cell_id")
+
+# Efficient filtering
+cd4_cells <- cell_metadata[cell_metadata$cell_type == "CD4+ T cell", ]
+
+# Aggregation
+table(cell_metadata$cell_type)
+```
+
+## Data Integration
+
+Combine data from multiple Parquet files:
+
+```{r use-case-integration, eval=FALSE}
+# Read multiple files as a single table
+multi_path <- "experiment_*/cells.parquet"
+all_cells <- DuckDBDataFrame(multi_path, keycol = "cell_id")
+```
+
+## SQL-Based Transformations
+
+Leverage DuckDB's SQL engine for complex transformations:
+
+```{r use-case-sql}
+# Complex filtering with SQL
+high_perf <- df[df$hp > 100 & df$mpg > 15, ]
+
+# This translates to efficient SQL:
+# SELECT * FROM table WHERE hp > 100 AND mpg > 15
+```
+
+
+# Integration with Bioconductor
+
+## S4Vectors Compatibility
+
+*DuckDBDataFrame* is a full *DataFrame* implementation:
+
+```{r s4vectors-compat}
+library(S4Vectors)
+
+# Works with DataFrame functions
+subset(df, mpg > 20, select = c("mpg", "cyl", "hp"))
+
+# Combines with regular DataFrames
+regular_df <- DataFrame(x = 1:3, y = letters[1:3])
+# Can be used in mixed contexts
+```
+
+## Extension by Other Packages
+
+`r Biocpkg("DuckDBArray")` and `r Biocpkg("DuckDBGRanges")` extend this
+foundation:
+
+- *DuckDBArray* uses *DuckDBTable* with `nkey >= 2` for arrays
+- *DuckDBGRanges* uses *DuckDBDataFrame* for genomic coordinates
+- Both inherit SQL translation and lazy evaluation
+
+
+# Performance Considerations
+
+## When to Use DuckDBDataFrame
+
+**Advantages**:
+- Data larger than RAM
+- Columnar operations (aggregations, filtering)
+- Parquet files already on disk
+- SQL-based transformations
+
+**Limitations**:
+- Random access slower than in-memory
+- Row-wise operations less efficient
+- Overhead for small datasets
+
+
+## Optimization Tips
+
+1. **Use Parquet format**: Columnar storage with compression
+2. **Filter early**: Push predicates to SQL
+3. **Avoid materialization**: Keep operations lazy
+4. **Use column selection**: Only read needed columns
+5. **Leverage indexes**: DuckDB can use Parquet statistics
+
+
+# Session Information
+
+```{r sessioninfo}
+sessionInfo()
+```

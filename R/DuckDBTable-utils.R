@@ -273,7 +273,6 @@ setMethod("sql_call", "DuckDBTable", function(x, fun, ...) {
 ###
 
 #' @export
-#' @importFrom BiocGenerics dbconn
 #' @importFrom DBI dbGetQuery
 #' @importFrom dbplyr sql_render
 setMethod("sql_fun", "DuckDBTable",
@@ -496,13 +495,11 @@ setMethod("is.nan", "DuckDBTable", function(x) {
 })
 
 #' @export
-#' @importFrom BiocGenerics mean
 setMethod("mean", "DuckDBTable", function(x, ...) {
     .pull.aggregagte(x, "mean", na.rm = TRUE)
 })
 
 #' @export
-#' @importFrom BiocGenerics var
 setMethod("var", "DuckDBTable", function(x, y = NULL, na.rm = FALSE, use)  {
     if (!is.null(y)) {
         stop("covariance is not supported")
@@ -511,7 +508,6 @@ setMethod("var", "DuckDBTable", function(x, y = NULL, na.rm = FALSE, use)  {
 })
 
 #' @export
-#' @importFrom BiocGenerics sd
 setMethod("sd", "DuckDBTable", function(x, na.rm = FALSE) {
     .pull.aggregagte(x, "sd", na.rm = TRUE)
 })
@@ -549,14 +545,12 @@ function(x, probs = seq(0, 1, 0.25), na.rm = FALSE, names = TRUE, type = 7, digi
 }
 
 #' @export
-#' @importFrom BiocGenerics mad
 setMethod("mad", "DuckDBTable",
 function(x, center = median(x), constant = 1.4826, na.rm = FALSE, low = FALSE, high = FALSE) {
     constant * .pull.aggregagte(x, "mad")
 })
 
 #' @export
-#' @importFrom BiocGenerics IQR
 setMethod("IQR", "DuckDBTable", function(x, na.rm = FALSE, type = 7) {
     diff(quantile(x, c(0.25, 0.75), na.rm = na.rm, names = FALSE, type = type))
 })
@@ -601,7 +595,6 @@ function(x, MARGIN, STATS, FUN = "/", check.margin = TRUE, ...) {
 ###
 
 #' @export
-#' @importFrom BiocGenerics unique
 #' @importFrom dplyr distinct mutate row_number
 setMethod("unique", "DuckDBTable",
 function (x, incomparables = FALSE, fromLast = FALSE, ...)  {
@@ -619,13 +612,11 @@ function (x, incomparables = FALSE, fromLast = FALSE, ...)  {
 })
 
 #' @export
-#' @importFrom BiocGenerics %in%
 setMethod("%in%", c(x = "DuckDBTable", table = "ANY"), function(x, table) {
     sql_call(x, "%in%", table)
 })
 
 #' @export
-#' @importFrom BiocGenerics table
 #' @importFrom dplyr group_by n summarize
 #' @importFrom stats setNames
 setMethod("table", "DuckDBTable", function(...) {

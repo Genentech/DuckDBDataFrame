@@ -153,7 +153,6 @@ setClass("DuckDBFactorList",
 # names<- method inherited from DuckDBColumn
 
 #' @export
-#' @importFrom BiocGenerics as.vector
 #' @importFrom S4Vectors elementNROWS new2
 #' @importFrom stats setNames
 setMethod("elementNROWS", "DuckDBAtomicList", function(x) {
@@ -187,7 +186,6 @@ setValidity2("DuckDBAtomicList", function(x) {
 ###
 
 #' @importFrom S4Vectors new2
-#' @importFrom BiocGenerics as.vector
 .new_DuckDBAtomicList <- function(table, type, metadata = list()) {
     if (!grepl("^list<.*>$", type)) {
         stop("expected LIST type string like 'list<integer>', got: ", type)
@@ -261,7 +259,6 @@ setMethod("getListElement", "DuckDBAtomicList", function(x, i, exact = TRUE) {
 ###
 
 #' @export
-#' @importFrom BiocGenerics as.list
 #' @importFrom stats setNames
 setMethod("as.list", "DuckDBAtomicList", function(x, use.names = TRUE) {
     df <- as.data.frame(x@table, optional = TRUE)

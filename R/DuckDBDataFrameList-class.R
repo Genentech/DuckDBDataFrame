@@ -183,7 +183,6 @@ setClass("DuckDBDataFrameList", contains = "SplitDataFrameList",
 ###
 
 #' @export
-#' @importFrom BiocGenerics dbconn
 setMethod("dbconn", "DuckDBDataFrameList", function(x) callGeneric(x@unlistData))
 
 #' @export
@@ -231,7 +230,6 @@ setMethod("elementNROWS", "DuckDBDataFrameList", function(x) {
 # nrows method inherited from DataFrameList
 
 #' @export
-#' @importFrom BiocGenerics ncols
 #' @importFrom S4Vectors isTRUEorFALSE
 setMethod("ncols", "DuckDBDataFrameList", function(x, use.names = TRUE) {
     if (!isTRUEorFALSE(use.names)) {
@@ -250,14 +248,12 @@ setMethod("ncols", "DuckDBDataFrameList", function(x, use.names = TRUE) {
 # dimnames method inherited from DataFrameList
 
 #' @export
-#' @importFrom BiocGenerics rownames<-
 setReplaceMethod("rownames", "DuckDBDataFrameList", function(x, value) {
     stop("cannot replace the rownames of a DuckDBDataFrameList object")
 })
 
 #' @export
 #' @importClassesFrom IRanges CharacterList
-#' @importFrom BiocGenerics colnames<-
 setReplaceMethod("colnames", "DuckDBDataFrameList", function(x, value) {
     if (is.null(value) || is.character(value)) {
         colnames(x@unlistData) <- value
@@ -344,7 +340,6 @@ setMethod("split", c("DuckDBDataFrame", "DuckDBColumn"), function(x, f, drop = F
 ###
 
 #' @export
-#' @importFrom BiocGenerics dbconn unlist
 #' @importFrom S4Vectors new2
 setMethod("unlist", "DuckDBDataFrameList",
 function(x, recursive = TRUE, use.names = TRUE) {
@@ -390,7 +385,6 @@ setMethod("extractROWS", "DuckDBDataFrameList", function(x, i) {
 })
 
 #' @export
-#' @importFrom BiocGenerics dbconn
 #' @importFrom S4Vectors getListElement new2 normalizeDoubleBracketSubscript
 setMethod("getListElement", "DuckDBDataFrameList", function(x, i) {
     if ((is.null(dbconn(x@unlistData))) &&

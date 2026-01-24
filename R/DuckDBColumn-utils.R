@@ -310,19 +310,16 @@ setMethod("is.nan", "DuckDBColumn", function(x) {
 })
 
 #' @export
-#' @importFrom BiocGenerics mean
 setMethod("mean", "DuckDBColumn", function(x, ...) {
     callGeneric(x@table)
 })
 
 #' @export
-#' @importFrom BiocGenerics var
 setMethod("var", "DuckDBColumn", function(x, y = NULL, na.rm = FALSE, use)  {
     callGeneric(x@table)
 })
 
 #' @export
-#' @importFrom BiocGenerics sd
 setMethod("sd", "DuckDBColumn", function(x, na.rm = FALSE) {
     callGeneric(x@table)
 })
@@ -341,14 +338,12 @@ function(x, probs = seq(0, 1, 0.25), na.rm = FALSE, names = TRUE, type = 7, digi
 }
 
 #' @export
-#' @importFrom BiocGenerics mad
 setMethod("mad", "DuckDBColumn",
 function(x, center = median(x), constant = 1.4826, na.rm = FALSE, low = FALSE, high = FALSE) {
     callGeneric(x@table, constant = constant)
 })
 
 #' @export
-#' @importFrom BiocGenerics IQR
 setMethod("IQR", "DuckDBColumn", function(x, na.rm = FALSE, type = 7) {
     callGeneric(x@table, type = type)
 })
@@ -358,20 +353,17 @@ setMethod("IQR", "DuckDBColumn", function(x, na.rm = FALSE, type = 7) {
 ###
 
 #' @export
-#' @importFrom BiocGenerics unique
 setMethod("unique", "DuckDBColumn",
 function (x, incomparables = FALSE, fromLast = FALSE, ...)  {
     replaceSlots(x, table = callGeneric(x@table), check = FALSE)
 })
 
 #' @export
-#' @importFrom BiocGenerics %in%
 setMethod("%in%", c(x = "DuckDBColumn", table = "ANY"), function(x, table) {
     replaceSlots(x, table = callGeneric(x@table, table), check = FALSE)
 })
 
 #' @export
-#' @importFrom BiocGenerics table
 setMethod("table", "DuckDBColumn", function(...) {
     callGeneric(cbind.DuckDBDataFrame(...))
 })

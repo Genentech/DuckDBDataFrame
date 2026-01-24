@@ -186,7 +186,7 @@
 #' @name DuckDBTable-class
 NULL
 
-#' @import methods
+#' @import methods BiocGenerics
 setOldClass("tbl_duckdb_connection")
 
 replaceSlots <- BiocGenerics:::replaceSlots
@@ -224,7 +224,6 @@ setClass("DuckDBTable", contains = c("RectangularData", "OutOfMemoryObject"),
 ###
 
 #' @export
-#' @importFrom BiocGenerics dbconn
 setMethod("dbconn", "DuckDBTable", function(x) x@conn$src$con)
 
 #' @importFrom dplyr mutate
@@ -479,7 +478,6 @@ setMethod("nkeydim", "DuckDBTable", function(x) {
 })
 
 #' @export
-#' @importFrom BiocGenerics nrow
 #' @importFrom bit64 as.integer64
 setMethod("nrow", "DuckDBTable", function(x) {
     nr <- prod(as.integer64(nkeydim(x)))
@@ -491,7 +489,6 @@ setMethod("nrow", "DuckDBTable", function(x) {
 })
 
 #' @export
-#' @importFrom BiocGenerics ncol
 setMethod("ncol", "DuckDBTable", function(x) length(x@datacols))
 
 #' @export
@@ -535,7 +532,6 @@ setReplaceMethod("keydimnames", "DuckDBTable", function(x, value) {
 })
 
 #' @export
-#' @importFrom BiocGenerics rownames
 setMethod("rownames", "DuckDBTable", function(x, do.NULL = TRUE, prefix = "row") {
     if (length(x@conn) == 0L) {
         NULL
@@ -547,13 +543,11 @@ setMethod("rownames", "DuckDBTable", function(x, do.NULL = TRUE, prefix = "row")
 })
 
 #' @export
-#' @importFrom BiocGenerics colnames
 setMethod("colnames", "DuckDBTable", function(x, do.NULL = TRUE, prefix = "col") {
     names(x@datacols)
 })
 
 #' @export
-#' @importFrom BiocGenerics colnames<-
 setReplaceMethod("colnames", "DuckDBTable", function(x, value) {
     datacols <- x@datacols
     names(datacols) <- value
@@ -867,7 +861,6 @@ setValidity2("DuckDBTable", function(x) {
 #' @export
 #' @importClassesFrom IRanges DataFrameList
 #' @importFrom arrow open_dataset
-#' @importFrom BiocGenerics nrows
 #' @importFrom DBI dbQuoteIdentifier
 #' @importFrom dplyr distinct mutate pull row_number select sql tbl
 #' @importFrom IRanges DataFrameList
@@ -1192,7 +1185,6 @@ function(x, objects = list(), use.names = TRUE, ignore.mcols = FALSE, check = TR
 ###
 
 #' @export
-#' @importFrom BiocGenerics as.data.frame
 setMethod("as.data.frame", "DuckDBTable",
 function(x, row.names = NULL, optional = FALSE, ..., limit.rows = TRUE) {
     conn <- tblconn(x)
