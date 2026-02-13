@@ -147,6 +147,11 @@ test_that("Special spatial functions work as expected for a DuckDBColumn", {
     checkDuckDBColumn(st_as_text(st_normalize(x)), st_as_text(st_normalize(sfc)))
     checkDuckDBColumn(st_as_text(st_point_on_surface(x)), st_as_text(st_point_on_surface(sfc)))
     checkDuckDBColumn(st_as_text(st_reverse(x)), st_as_text(st_reverse(sfc)))
+
+    ## WKT -> geometry via st_as_sfc (round-trip)
+    wkt <- st_as_text(x)
+    checkDuckDBColumn(st_as_text(st_as_sfc(wkt)), st_as_text(sfc))
+    checkDuckDBColumn(st_as_binary(st_as_sfc(wkt), hex = TRUE), st_as_binary(sfc, hex = TRUE))
 })
 
 test_that("Summary methods work as expected for a DuckDBColumn", {

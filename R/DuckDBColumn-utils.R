@@ -127,6 +127,10 @@
 #'     Returns the DuckDBColumn containing either WKB if \code{hex = FALSE} or
 #'     HEXWKB if \code{hex = TRUE} representations of geometries.
 #'   }
+#'   \item{\code{st_as_sfc(x, ..., crs = NA_integer_, GeoJSON = FALSE, WKB = FALSE)}:}{
+#'     Returns a DuckDBColumn of geometry type by parsing WKT (or GeoJSON if
+#'     \code{GeoJSON = TRUE}, or WKB if \code{WKB = TRUE}).
+#'   }
 #'   \item{\code{st_as_text(x, geojson = FALSE)}:}{
 #'     Returns the DuckDBColumn containing either WKT if \code{geojson = FALSE} or
 #'     GeoJSON if \code{geojson = TRUE} representations of geometries.
@@ -201,6 +205,7 @@
 #'
 #' st_area.DuckDBColumn
 #' st_as_binary.DuckDBColumn
+#' st_as_sfc.DuckDBColumn
 #' st_as_text.DuckDBColumn
 #' st_boundary.DuckDBColumn
 #' st_centroid.DuckDBColumn
@@ -405,6 +410,14 @@ st_as_binary.DuckDBColumn <- function(x, ..., hex = FALSE) {
 #' @importFrom sf st_as_text
 st_as_text.DuckDBColumn <- function(x, ..., geojson = FALSE) {
     replaceSlots(x, table = st_as_text(x@table, geojson = geojson), check = FALSE)
+}
+
+#' @exportS3Method sf::st_as_sfc
+#' @importFrom sf st_as_sfc
+st_as_sfc.DuckDBColumn <-
+function(x, ..., crs = NA_integer_, GeoJSON = FALSE, WKB = FALSE) {
+    replaceSlots(x, table = st_as_sfc(x@table, GeoJSON = GeoJSON, WKB = WKB),
+                 check = FALSE)
 }
 
 #' @exportS3Method sf::st_boundary

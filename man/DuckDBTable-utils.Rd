@@ -31,6 +31,7 @@
 \alias{is_sparse,DuckDBTable-method}
 \alias{st_area.DuckDBTable}
 \alias{st_as_binary.DuckDBTable}
+\alias{st_as_sfc.DuckDBTable}
 \alias{st_as_text.DuckDBTable}
 \alias{st_boundary.DuckDBTable}
 \alias{st_centroid.DuckDBTable}
@@ -206,6 +207,10 @@ In the code snippets below, \code{x} is a DuckDBTable object:
   \item{\code{st_as_binary(x, hex = FALSE)}:}{
     Returns the DuckDBTable containing either WKB if \code{hex = FALSE} or
     HEXWKB if \code{hex = TRUE} representations of geometries.
+  }
+  \item{\code{st_as_sfc(x, ..., crs = NA_integer_, GeoJSON = FALSE, WKB = FALSE)}:}{
+    Returns the DuckDBTable containing geometry types by parsing WKT
+    (or GeoJSON if \code{GeoJSON = TRUE}, or WKB if \code{WKB = TRUE}).
   }
   \item{\code{st_as_text(x, geojson = FALSE)}:}{
     Returns the DuckDBTable containing either WKT if \code{geojson = FALSE} or

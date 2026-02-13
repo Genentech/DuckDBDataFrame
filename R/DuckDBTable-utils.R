@@ -151,6 +151,10 @@
 #'     Returns the DuckDBTable containing either WKB if \code{hex = FALSE} or
 #'     HEXWKB if \code{hex = TRUE} representations of geometries.
 #'   }
+#'   \item{\code{st_as_sfc(x, ..., crs = NA_integer_, GeoJSON = FALSE, WKB = FALSE)}:}{
+#'     Returns the DuckDBTable containing geometry types by parsing WKT
+#'     (or GeoJSON if \code{GeoJSON = TRUE}, or WKB if \code{WKB = TRUE}).
+#'   }
 #'   \item{\code{st_as_text(x, geojson = FALSE)}:}{
 #'     Returns the DuckDBTable containing either WKT if \code{geojson = FALSE} or
 #'     GeoJSON if \code{geojson = TRUE} representations of geometries.
@@ -235,6 +239,7 @@
 #'
 #' st_area.DuckDBTable
 #' st_as_binary.DuckDBTable
+#' st_as_sfc.DuckDBTable
 #' st_as_text.DuckDBTable
 #' st_boundary.DuckDBTable
 #' st_centroid.DuckDBTable
@@ -710,6 +715,15 @@ st_area.DuckDBTable <- function(x, ...) {
 #' @importFrom sf st_as_binary
 st_as_binary.DuckDBTable <- function(x, ..., hex = FALSE) {
     fun <- if (isTRUE(hex)) "ST_AsHEXWKB" else "ST_AsWKB"
+    sql_call(x, fun)
+}
+
+#' @exportS3Method sf::st_as_sfc
+#' @importFrom sf st_as_sfc
+st_as_sfc.DuckDBTable <-
+function(x, ..., crs = NA_integer_, GeoJSON = FALSE, WKB = FALSE) {
+    fun <- if (isTRUE(WKB)) "ST_GeomFromWKB" else if (isTRUE(GeoJSON))
+        "ST_GeomFromGeoJSON" else "ST_GeomFromText"
     sql_call(x, fun)
 }
 

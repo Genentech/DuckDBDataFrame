@@ -28,6 +28,7 @@
 \alias{nzcount,DuckDBColumn-method}
 \alias{st_area.DuckDBColumn}
 \alias{st_as_binary.DuckDBColumn}
+\alias{st_as_sfc.DuckDBColumn}
 \alias{st_as_text.DuckDBColumn}
 \alias{st_boundary.DuckDBColumn}
 \alias{st_centroid.DuckDBColumn}
@@ -177,6 +178,10 @@ In the code snippets below, \code{x} is a DuckDBColumn object:
   \item{\code{st_as_binary(x, hex = FALSE)}:}{
     Returns the DuckDBColumn containing either WKB if \code{hex = FALSE} or
     HEXWKB if \code{hex = TRUE} representations of geometries.
+  }
+  \item{\code{st_as_sfc(x, ..., crs = NA_integer_, GeoJSON = FALSE, WKB = FALSE)}:}{
+    Returns a DuckDBColumn of geometry type by parsing WKT (or GeoJSON if
+    \code{GeoJSON = TRUE}, or WKB if \code{WKB = TRUE}).
   }
   \item{\code{st_as_text(x, geojson = FALSE)}:}{
     Returns the DuckDBColumn containing either WKT if \code{geojson = FALSE} or
