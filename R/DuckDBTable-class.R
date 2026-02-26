@@ -574,16 +574,11 @@ setReplaceMethod("colnames", "DuckDBTable", function(x, value) {
 }
 
 .duckdb_type_to_r <- function(duckdb_type) {
-    # Handle complex types first
     type <- tolower(duckdb_type)
     if (grepl("^(list<.*>|struct[<(].*[>)]|map<.*,.*>)$", type)) {
         "list"
     } else if (grepl("^array<.*,\\d+>$", type)) {
         "matrix"
-    } else if (type %in%
-               c("geometry", "point", "linestring", "polygon", "multipoint",
-                 "multilinestring", "multipolygon", "geometrycollection")) {
-        "raw"
     } else {
         switch(type,
                "boolean" = "logical",
@@ -592,13 +587,15 @@ setReplaceMethod("colnames", "DuckDBTable", function(x, value) {
                "integer" =,
                "utinyint" =,
                "usmallint" = "integer",
-               "bigint" =,
                "uinteger" =,
+               "bigint" =,
                "ubigint" = "integer64",
                "float" =,
                "double" =,
                "real" =,
-               "decimal" = "double",
+               "decimal" =,
+               "hugeint" =,
+               "uhugeint" = "double",
                "varchar" =,
                "char" =,
                "bpchar" =,
@@ -609,6 +606,8 @@ setReplaceMethod("colnames", "DuckDBTable", function(x, value) {
                "time" = "POSIXct",
                "interval" = "difftime",
                "blob" = "raw",
+               "geometry" = "geometry",
+               "geometry_type" = "character",
                stop("unsupported DuckDB type: ", duckdb_type))
     }
 }
@@ -653,8 +652,12 @@ setReplaceMethod("colnames", "DuckDBTable", function(x, value) {
         sub("^list<(.*)>$", "\\1", type)
     } else if (grepl("\\[\\d+\\]$", type)) {
         sub("\\[\\d+\\]$", "", type)
+    } else if (grepl("\\[any\\]$", type)) {
+        sub("\\[any\\]$", "", type)
     } else if (grepl("\\[\\]$", type)) {
         sub("\\[\\]$", "", type)
+    } else if (grepl("\\[.*\\]$", type)) {
+        sub("\\[.*\\]$", "", type)
     } else {
         type
     }
@@ -666,15 +669,16 @@ setReplaceMethod("colnames", "DuckDBTable", function(x, value) {
     } else {
         type <- tolower(gsub("\\s+", " ", trimws(type)))
         if (grepl("\\[\\]$", type)) {
-            # LIST type: ends with []
             element_type <- .duckdb_element_type(type)
             sprintf("list<%s>", element_type)
         } else if (grepl("\\[\\d+\\]$", type)) {
-            # ARRAY type: ends with [n]
             element_type <- .duckdb_element_type(type)
             array_size <- sub(".*\\[(\\d+)\\]$", "\\1", type)
             sprintf("array<%s,%s>", element_type, array_size)
-        } else if (grepl("^geometry", type)) {
+        } else if (grepl("\\[any\\]$", type)) {
+            element_type <- .duckdb_element_type(type)
+            sprintf("array<%s,0>", element_type)
+        } else if (type == "geometry") {
             "geometry"
         } else if (grepl("^map\\(", type)) {
             "map"
@@ -1187,15 +1191,22 @@ function(x, objects = list(), use.names = TRUE, ignore.mcols = FALSE, check = TR
 #' @export
 setMethod("as.data.frame", "DuckDBTable",
 function(x, row.names = NULL, optional = FALSE, ..., limit.rows = TRUE) {
-    conn <- tblconn(x)
-    keycols <- x@keycols
     datacols <- as.list(x@datacols)
-
-    if (length(conn) == 0L) {
-        df <- datacols
+    if (length(x@conn) == 0L) {
+        df <- lapply(datacols, function(j) NULL)
         class(df) <- "data.frame"
         attr(df, "row.names") <- integer()
     } else {
+        ## Convert DuckDB GEOMETRY columns to WKT
+        geoms <- which(coltypes(x) == "geometry")
+        if (length(geoms) > 0L) {
+            for (col in geoms) {
+                datacols[[col]] <- call("ST_AsText", datacols[[col]])
+            }
+            x <- replaceSlots(x, datacols = datacols, check = FALSE)
+        }
+        conn <- tblconn(x)
+
         if (limit.rows) {
             n <- as.integer(min(nrow(x), .Machine$integer.max))
             conn <- head(conn, n = n)

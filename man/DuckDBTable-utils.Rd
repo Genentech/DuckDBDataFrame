@@ -29,20 +29,6 @@
 \alias{is_nonzero,DuckDBTable-method}
 \alias{nzcount,DuckDBTable-method}
 \alias{is_sparse,DuckDBTable-method}
-\alias{st_area.DuckDBTable}
-\alias{st_as_binary.DuckDBTable}
-\alias{st_as_sfc.DuckDBTable}
-\alias{st_as_text.DuckDBTable}
-\alias{st_boundary.DuckDBTable}
-\alias{st_centroid.DuckDBTable}
-\alias{st_convex_hull.DuckDBTable}
-\alias{st_exterior_ring.DuckDBTable}
-\alias{st_is_valid.DuckDBTable}
-\alias{st_line_merge.DuckDBTable}
-\alias{st_make_valid.DuckDBTable}
-\alias{st_normalize.DuckDBTable}
-\alias{st_point_on_surface.DuckDBTable}
-\alias{st_reverse.DuckDBTable}
 \title{Common operations on DuckDBTable objects}
 \description{
 Common operations on \linkS4class{DuckDBTable} objects.

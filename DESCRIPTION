@@ -1,6 +1,6 @@
 Package: DuckDBDataFrame
-Version: 0.9.1
-Date: 2026-02-13
+Version: 0.9.2
+Date: 2026-02-26
 Title: DuckDB-Backed DataFrame and Table Structures
 Description:
     Provides DuckDB-backed implementations of core tabular data structures
@@ -59,6 +59,8 @@ Collate:
     'DuckDBTable-utils.R'
     'DuckDBColumn-class.R'
     'DuckDBAtomicList-class.R'
+    'DuckDBTable-spatial.R'
+    'DuckDBColumn-spatial.R'
     'DuckDBColumn-utils.R'
     'DuckDBEmbeddings-class.R'
     'DuckDBDataFrame-class.R'
