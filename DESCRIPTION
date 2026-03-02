@@ -39,7 +39,8 @@ Suggests:
     knitr,
     rmarkdown,
     BiocStyle,
-    testthat
+    testthat,
+    matrixStats
 biocViews:
     DataImport,
     DataRepresentation,
