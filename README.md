@@ -247,7 +247,6 @@ DuckDBDataFrame depends on:
 - **Bioconductor**: S4Vectors, IRanges, BiocGenerics, DelayedArray, SparseArray, S4Arrays, MatrixGenerics
 - **DuckDB ecosystem**: duckdb, arrow, DBI
 - **Tidyverse**: dplyr, dbplyr, tibble, rlang
-- **Spatial**: sf (for spatial types)
 - **Numeric**: bit64 (for large integers)
 
 ## Contributing
