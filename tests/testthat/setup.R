@@ -93,6 +93,24 @@ embeddings_parquet <- tempfile(fileext = ".parquet")
 arrow::write_parquet(embeddings_df, embeddings_parquet)
 
 
+# SelfHits dataset (simple KNN-like graph)
+selfhits_df <- data.frame(
+    id = sprintf("edge%02d", 1:7),
+    from = c(1L, 1L, 2L, 3L, 4L, 4L, 5L),
+    to = c(2L, 5L, 3L, 4L, 2L, 5L, 1L),
+    weight = c(0.8, 0.6, 0.9, 0.7, 0.85, 0.75, 0.65),
+    distance = c(1.2, 2.3, 1.5, 1.8, 1.4, 2.1, 2.5)
+)
+selfhits_parquet <- tempfile(fileext = ".parquet")
+arrow::write_parquet(selfhits_df, selfhits_parquet)
+
+selfhits_sh <- SelfHits(from = selfhits_df$from,
+                        to = selfhits_df$to,
+                        nnode = 5L)
+mcols(selfhits_sh) <- DataFrame(weight = selfhits_df$weight,
+                                distance = selfhits_df$distance)
+
+
 # Helper functions
 checkDuckDBTable <- function(object, expected) {
     expect_true(validObject(object))
@@ -236,4 +254,30 @@ checkDuckDBDataFrameList <- function(object, expected) {
     expect_identical(columnMetadata(object), columnMetadata(expected))
     expect_identical(commonColnames(object), commonColnames(expected))
     checkDuckDBDataFrame(unlist(object), as.data.frame(unlist(expected, use.names = FALSE)))
+}
+
+checkDuckDBSelfHits <- function(object, expected) {
+    expect_s4_class(object, "DuckDBSelfHits")
+    expect_true(length(capture.output(show(object))) > 0L)
+    expect_identical(length(object), length(expected))
+    expect_identical(nnode(object), nnode(expected))
+    expect_identical(nLnode(object), nLnode(expected))
+    expect_identical(nRnode(object), nRnode(expected))
+    expect_identical(countLnodeHits(object), countLnodeHits(expected))
+    expect_identical(countRnodeHits(object), countRnodeHits(expected))
+    if (length(object) > 0L) {
+        expect_identical(dbconn(object), acquireDuckDBConn())
+        expect_s3_class(tblconn(object), "tbl_duckdb_connection")
+    }
+    if (nkey(object@frame) > 0L) {
+        expect_identical(unname(as.integer(from(object))), as.integer(from(expected)))
+        expect_identical(unname(as.integer(to(object))), as.integer(to(expected)))
+        expect_identical(as(object, "SelfHits"), expected)
+        DF <- as(object, "DFrame")
+        rownames(DF) <- NULL
+        expect_identical(DF, as(expected, "DFrame"))
+        df <- as.data.frame(expected)
+        rownames(df) <- NULL
+        expect_identical(df, as.data.frame(expected))
+    }
 }
