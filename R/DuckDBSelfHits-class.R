@@ -17,7 +17,7 @@
 #' @section Constructor:
 #' \describe{
 #'   \item{\code{DuckDBSelfHits(conn, from, to, nnode, mcols = NULL,
-#'     keycol = NULL, dimtbl = NULL)}:}{
+#'     keycol = NULL, dimtbl = NULL, nodes = NULL)}:}{
 #'     Creates a DuckDBSelfHits object.
 #'     \describe{
 #'       \item{\code{conn}}{
@@ -57,6 +57,12 @@
 #'         the \code{DataFrame} object must have row names that match the
 #'         distinct values of the \code{keycol} list element.
 #'       }
+#'       \item{\code{nodes}}{
+#'         An optional integer vector specifying the node ids. If \code{NULL}
+#'         (default), uses implicit encoding \code{c(NA_integer_, -nnode)}
+#'         representing 1:nnode. Can be an explicit integer vector for
+#'         non-contiguous node subsets, optionally named for node aliases.
+#'       }
 #'     }
 #'   }
 #' }
@@ -82,13 +88,17 @@
 #'   }
 #'   \item{\code{countLnodeHits(x)}, \code{countQueryHits(x)}:}{
 #'     Count the number of hits for each left/query node. Returns an integer
-#'     vector of length \code{nLnode(x)}. This operation materializes the
-#'     \code{from} column.
+#'     vector of length \code{nLnode(x)}. When nodes are implicit (1:nnode),
+#'     returns an unnamed vector with positional indexing. When nodes are
+#'     explicit, returns a named vector where names are the node IDs as
+#'     characters. This operation materializes the \code{from} column.
 #'   }
 #'   \item{\code{countRnodeHits(x)}, \code{countSubjectHits(x)}:}{
 #'     Count the number of hits for each right/subject node. Returns an integer
-#'     vector of length \code{nRnode(x)}. This operation materializes the
-#'     \code{to} column.
+#'     vector of length \code{nRnode(x)}. When nodes are implicit (1:nnode),
+#'     returns an unnamed vector with positional indexing. When nodes are
+#'     explicit, returns a named vector where names are the node IDs as
+#'     characters. This operation materializes the \code{to} column.
 #'   }
 #'   \item{\code{mcols(x)}, \code{mcols(x) <- value}:}{
 #'     Get or set the edge metadata columns.
@@ -120,9 +130,16 @@
 #' @section Subsetting:
 #' In the code snippets below, \code{x} is a DuckDBSelfHits object:
 #' \describe{
-#'   \item{\code{x[i]}:}{
-#'     Returns a DuckDBSelfHits object containing edges where both from and to
-#'     nodes are in the subset. Node indices are automatically remapped.
+#'   \item{\code{x[i]} or \code{extractROWS(x, i)}:}{
+#'     Returns a DuckDBSelfHits object with edge-based subsetting (subsets
+#'     edges directly by index, does NOT filter by nodes).
+#'   }
+#'   \item{\code{extractNODES(x, i)}:}{
+#'     Returns a DuckDBSelfHits object with node-based subsetting. Updates
+#'     the \code{nodes} slot to track the subset, and filters edges lazily
+#'     via SQL to include only edges where BOTH from and to are in the node
+#'     subset. Filtering is applied when data is materialized via
+#'     \code{tblconn()}, \code{as.data.frame()}, or coercion methods.
 #'   }
 #'   \item{\code{head(x, n = 6L)}:}{
 #'     If \code{n} is non-negative, returns the first n edges.
@@ -201,6 +218,8 @@
 #'
 #' extractROWS,DuckDBSelfHits,ANY-method
 #' [,DuckDBSelfHits,ANY,ANY,ANY-method
+#' extractNODES
+#' extractNODES,DuckDBSelfHits-method
 #' head,DuckDBSelfHits-method
 #' tail,DuckDBSelfHits-method
 #'
@@ -232,9 +251,10 @@ NULL
 #' @importClassesFrom S4Vectors SelfHits
 #' @importFrom S4Vectors new2
 setClass("DuckDBSelfHits", contains = "SelfHits",
-         slots = c(frame = "DuckDBDataFrame"),
+         slots = c(frame = "DuckDBDataFrame", nodes = "integer"),
          prototype = prototype(
              frame = new2("DuckDBDataFrame", datacols = .datacols_selfhits, check = FALSE),
+             nodes = integer(0L),
              nLnode = 0L,
              nRnode = 0L
          ))
@@ -247,15 +267,49 @@ setClass("DuckDBSelfHits", contains = "SelfHits",
 setMethod("dbconn", "DuckDBSelfHits", function(x) callGeneric(x@frame))
 
 #' @export
+#' @importFrom dplyr filter
 setMethod("tblconn", "DuckDBSelfHits", function(x, select = TRUE, filter = TRUE) {
-    callGeneric(x@frame, select = select, filter = filter)
+    conn <- callGeneric(x@frame, select = select, filter = filter)
+
+    if (filter && !.has_implicit_nodes(x) && length(conn) > 0L) {
+        nodes <- .nodes(x)
+        dcnms <- names(.datacols_selfhits)
+        from <- as.name(dcnms[1L])
+        to <- as.name(dcnms[2L])
+
+        conn <- filter(conn, !!from %in% !!nodes & !!to %in% !!nodes)
+    }
+
+    conn
 })
 
 #' @export
-setMethod(".keycols", "DuckDBSelfHits", function(x) callGeneric(x@frame))
+setMethod(".keycols", "DuckDBSelfHits", function(x) {
+    frame <- as(x, "DuckDBDataFrame")
+    callGeneric(frame)
+})
 
 #' @export
 setMethod(".has_row_number", "DuckDBSelfHits", function(x) callGeneric(x@frame))
+
+setGeneric(".has_implicit_nodes", function(x) {
+    standardGeneric(".has_implicit_nodes")
+})
+
+setMethod(".has_implicit_nodes", "DuckDBSelfHits", function(x) {
+    length(x@nodes) == 2L && is.na(x@nodes[1L]) && x@nodes[2L] < 0L
+})
+
+setGeneric(".nodes", function(x) standardGeneric(".nodes"))
+
+#' @importFrom S4Vectors nnode
+setMethod(".nodes", "DuckDBSelfHits", function(x) {
+    if (.has_implicit_nodes(x)) {
+        seq_len(nnode(x))
+    } else {
+        x@nodes
+    }
+})
 
 #' @export
 setMethod("dimtbls", "DuckDBSelfHits", function(x, drop = TRUE) {
@@ -268,15 +322,24 @@ setReplaceMethod("dimtbls", "DuckDBSelfHits", function(x, value) {
 })
 
 #' @export
-setMethod("length", "DuckDBSelfHits", function(x) nrow(x@frame))
+setMethod("length", "DuckDBSelfHits", function(x) {
+    frame <- as(x, "DuckDBDataFrame")
+    nrow(frame)
+})
 
 #' @export
 #' @importFrom S4Vectors from
-setMethod("from", "DuckDBSelfHits", function(x) x@frame[[names(.datacols_selfhits)[1L]]])
+setMethod("from", "DuckDBSelfHits", function(x) {
+    frame <- as(x, "DuckDBDataFrame")
+    frame[[names(.datacols_selfhits)[1L]]]
+})
 
 #' @export
 #' @importFrom S4Vectors to
-setMethod("to", "DuckDBSelfHits", function(x) x@frame[[names(.datacols_selfhits)[2L]]])
+setMethod("to", "DuckDBSelfHits", function(x) {
+    frame <- as(x, "DuckDBDataFrame")
+    frame[[names(.datacols_selfhits)[2L]]]
+})
 
 # nLnode is inherited from Hits
 
@@ -287,7 +350,12 @@ setMethod("to", "DuckDBSelfHits", function(x) x@frame[[names(.datacols_selfhits)
 setMethod("countLnodeHits", "DuckDBSelfHits", function(x) {
     tbl <- table(from(x))
     counts <- integer(nLnode(x))
-    counts[as.integer(names(tbl))] <- as.integer(tbl)
+    if (.has_implicit_nodes(x)) {
+        counts[as.integer(names(tbl))] <- as.integer(tbl)
+    } else {
+        names(counts) <- as.character(.nodes(x))
+        counts[names(tbl)] <- as.integer(tbl)
+    }
     counts
 })
 
@@ -296,23 +364,30 @@ setMethod("countLnodeHits", "DuckDBSelfHits", function(x) {
 setMethod("countRnodeHits", "DuckDBSelfHits", function(x) {
     tbl <- table(to(x))
     counts <- integer(nRnode(x))
-    counts[as.integer(names(tbl))] <- as.integer(tbl)
+    if (.has_implicit_nodes(x)) {
+        counts[as.integer(names(tbl))] <- as.integer(tbl)
+    } else {
+        names(counts) <- as.character(.nodes(x))
+        counts[names(tbl)] <- as.integer(tbl)
+    }
     counts
 })
 
 #' @export
 #' @importFrom S4Vectors elementMetadata
 setMethod("elementMetadata", "DuckDBSelfHits", function(x) {
-    nms <- setdiff(colnames(x@frame), names(.datacols_selfhits))
+    frame <- as(x, "DuckDBDataFrame")
+    nms <- setdiff(colnames(frame), names(.datacols_selfhits))
     if (length(nms) == 0L) {
         return(NULL)
     }
-    x@frame[, nms, drop = FALSE]
+    frame[, nms, drop = FALSE]
 })
 
 #' @export
 #' @importFrom S4Vectors elementMetadata<-
 setReplaceMethod("elementMetadata", "DuckDBSelfHits", function(x, ..., value) {
+    frame <- as(x, "DuckDBDataFrame")
     if (!is.null(value)) {
         if (!is(value, "DuckDBDataFrame")) {
             stop("'elementMetadata' must be a DuckDBDataFrame object or NULL")
@@ -321,10 +396,10 @@ setReplaceMethod("elementMetadata", "DuckDBSelfHits", function(x, ..., value) {
             stop("'nrow(value)' must equal 'length(x)'")
         }
         # Combine from/to with new mcols
-        frame <- cbind(x@frame[, names(.datacols_selfhits), drop = FALSE], value)
+        frame <- cbind(frame[, names(.datacols_selfhits), drop = FALSE], value)
     } else {
         # Remove all mcols, keep only from/to
-        frame <- x@frame[, names(.datacols_selfhits), drop = FALSE]
+        frame <- frame[, names(.datacols_selfhits), drop = FALSE]
     }
     replaceSlots(x, frame = frame, check = FALSE)
 })
@@ -365,7 +440,7 @@ setValidity2("DuckDBSelfHits", function(x) {
 #' @importFrom dplyr mutate select
 #' @importFrom S4Vectors isSingleNumber isSingleString new2
 DuckDBSelfHits <-
-function(conn, from, to, nnode, mcols = NULL, keycol = NULL, dimtbl = NULL)
+function(conn, from, to, nnode, mcols = NULL, keycol = NULL, dimtbl = NULL, nodes = NULL)
 {
 
     if (!isSingleNumber(nnode) || nnode < 0L) {
@@ -376,21 +451,34 @@ function(conn, from, to, nnode, mcols = NULL, keycol = NULL, dimtbl = NULL)
         nnode <- as.integer(nnode)
     }
 
+    if (is.null(nodes)) {
+        nodes <- c(NA_integer_, - nnode)
+    } else if (!is.numeric(nodes)) {
+        stop("'nodes' must be a numeric vector")
+    } else {
+        if (!is.integer(nodes)) {
+            nodes <- as.integer(nodes)
+        }
+        if (anyDuplicated(nodes)) {
+            stop("'nodes' must contain unique values")
+        }
+    }
+
     datacols <- .datacols_selfhits
-    datacol_names <- names(.datacols_selfhits)
+    dcnms <- names(.datacols_selfhits)
 
     stringAsName <- function(x) if (isSingleString(x)) as.name(x) else x
 
-    datacols[[datacol_names[1L]]] <- stringAsName(from)
-    datacols[[datacol_names[2L]]] <- stringAsName(to)
+    datacols[[dcnms[1L]]] <- stringAsName(from)
+    datacols[[dcnms[2L]]] <- stringAsName(to)
 
-    if (is.null(datacols[[datacol_names[1L]]]) ||
-        is.null(datacols[[datacol_names[2L]]])) {
+    if (is.null(datacols[[dcnms[1L]]]) ||
+        is.null(datacols[[dcnms[2L]]])) {
         stop(sprintf("'%s' and '%s' must be specified",
-                     datacol_names[1L], datacol_names[2L]))
+                     dcnms[1L], dcnms[2L]))
     }
 
-    datacols <- datacols[datacol_names]
+    datacols <- datacols[dcnms]
     if (length(mcols) > 0L) {
         if (is.character(mcols)) {
             mcols <- sapply(mcols, as.name, simplify = FALSE)
@@ -402,8 +490,8 @@ function(conn, from, to, nnode, mcols = NULL, keycol = NULL, dimtbl = NULL)
     frame <- DuckDBDataFrame(conn, datacols = datacols, keycol = keycol,
                              dimtbl = dimtbl)
 
-    new2("DuckDBSelfHits", frame = frame, nLnode = nnode, nRnode = nnode,
-         check = FALSE)
+    new2("DuckDBSelfHits", frame = frame, nodes = nodes, nLnode = nnode,
+         nRnode = nnode, check = FALSE)
 }
 
 ### - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -416,7 +504,8 @@ setMethod("extractROWS", "DuckDBSelfHits", function(x, i) {
     if (missing(i)) {
         return(x)
     }
-    replaceSlots(x, frame = callGeneric(x@frame, i = i), check = FALSE)
+    frame <- as(x, "DuckDBDataFrame")
+    replaceSlots(x, frame = callGeneric(frame, i = i), check = FALSE)
 })
 
 #' @export
@@ -429,15 +518,29 @@ setMethod("[", "DuckDBSelfHits", function(x, i, j, ..., drop = TRUE) {
 })
 
 #' @export
+setGeneric("extractNODES", function(x, i) standardGeneric("extractNODES"))
+
+#' @export
+#' @importFrom S4Vectors extractROWS nnode
+setMethod("extractNODES", "DuckDBSelfHits", function(x, i) {
+    nodes <- extractROWS(.nodes(x), i)
+    nnode <- length(nodes)
+    replaceSlots(x, nodes = nodes, nLnode = nnode, nRnode = nnode,
+                 check = FALSE)
+})
+
+#' @export
 #' @importFrom S4Vectors head
 setMethod("head", "DuckDBSelfHits", function(x, n = 6L, ...) {
-    replaceSlots(x, frame = callGeneric(x@frame, n = n, ...), check = FALSE)
+    frame <- as(x, "DuckDBDataFrame")
+    replaceSlots(x, frame = callGeneric(frame, n = n, ...), check = FALSE)
 })
 
 #' @export
 #' @importFrom S4Vectors tail
 setMethod("tail", "DuckDBSelfHits", function(x, n = 6L, ...) {
-    replaceSlots(x, frame = callGeneric(x@frame, n = n, ...), check = FALSE)
+    frame <- as(x, "DuckDBDataFrame")
+    replaceSlots(x, frame = callGeneric(frame, n = n, ...), check = FALSE)
 })
 
 ### - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -445,19 +548,30 @@ setMethod("tail", "DuckDBSelfHits", function(x, n = 6L, ...) {
 ###
 
 #' @export
+#' @importFrom dplyr pull select
 setAs("DuckDBSelfHits", "DuckDBDataFrame", function(from) {
-    from@frame
+    conn <- tblconn(from, select = TRUE, filter = TRUE)
+
+    keycols <- from@frame@keycols
+    if (!.has_implicit_nodes(from)) {
+        keys <- pull(select(conn, !!as.name(names(keycols)[1L])))
+        keycols[[1L]] <- intersect(keycols[[1L]], keys)
+    }
+
+    replaceSlots(from@frame, conn = conn, keycols = keycols, check = FALSE)
 })
 
 #' @export
+#' @importFrom S4Vectors DataFrame
 setAs("DuckDBSelfHits", "DFrame", function(from) {
-    as(from@frame, "DFrame")
+    as(as(from, "DuckDBDataFrame"), "DFrame")
 })
 
 #' @export
 setMethod("as.data.frame", "DuckDBSelfHits",
 function(x, row.names = NULL, optional = FALSE, ...) {
-    callGeneric(x@frame, row.names = row.names, optional = optional, ...)
+    df <- as(x, "DuckDBDataFrame")
+    as.data.frame(df, row.names = row.names, optional = optional, ...)
 })
 
 #' @export
@@ -465,23 +579,34 @@ function(x, row.names = NULL, optional = FALSE, ...) {
 #' @importFrom S4Vectors SelfHits mcols<- nnode
 setAs("DuckDBSelfHits", "SelfHits", function(from) {
     df <- as.data.frame(from, optional = TRUE)
-    datacol_names <- names(.datacols_selfhits)
+    dcnms <- names(.datacols_selfhits)
 
-    # Validate from/to indices are within bounds
+    # Perform node remapping if nodes are explicit
+    if (!.has_implicit_nodes(from)) {
+        node_ids <- .nodes(from)
+        node_map <- setNames(seq_along(node_ids), as.character(node_ids))
+
+        df[[dcnms[1L]]] <- node_map[as.character(df[[dcnms[1L]]])]
+        df[[dcnms[2L]]] <- node_map[as.character(df[[dcnms[2L]]])]
+    }
+
+    # Validate from/to indices are within bounds (after remapping)
     nnode_val <- nnode(from)
-    if (any(df[[datacol_names[1L]]] < 1L | df[[datacol_names[1L]]] > nnode_val)) {
-        stop(sprintf("'%s' indices out of bounds [1, nnode]", datacol_names[1L]))
-    }
-    if (any(df[[datacol_names[2L]]] < 1L | df[[datacol_names[2L]]] > nnode_val)) {
-        stop(sprintf("'%s' indices out of bounds [1, nnode]", datacol_names[2L]))
+    if (nrow(df) > 0L) {
+        if (any(df[[dcnms[1L]]] < 1L | df[[dcnms[1L]]] > nnode_val)) {
+            stop(sprintf("'%s' indices out of bounds [1, nnode]", dcnms[1L]))
+        }
+        if (any(df[[dcnms[2L]]] < 1L | df[[dcnms[2L]]] > nnode_val)) {
+            stop(sprintf("'%s' indices out of bounds [1, nnode]", dcnms[2L]))
+        }
     }
 
-    hits <- SelfHits(df[[datacol_names[1L]]], df[[datacol_names[2L]]], nnode = nnode_val)
+    hits <- SelfHits(df[[dcnms[1L]]], df[[dcnms[2L]]], nnode = nnode_val)
 
     # Add mcols if present
-    mcol_names <- setdiff(colnames(df), datacol_names)
-    if (length(mcol_names) > 0L) {
-        mcols(hits) <- df[, mcol_names, drop = FALSE]
+    mcnms <- setdiff(colnames(df), dcnms)
+    if (length(mcnms) > 0L) {
+        mcols(hits) <- df[, mcnms, drop = FALSE]
     }
 
     hits
@@ -493,16 +618,15 @@ setAs("DuckDBSelfHits", "SelfHits", function(from) {
 #' @importFrom Matrix sparseMatrix
 #' @importFrom S4Vectors nnode
 setAs("DuckDBSelfHits", "dgCMatrix", function(from) {
-    hits <- as(from, "SelfHits")
     df <- as.data.frame(from, optional = TRUE)
-    datacol_names <- names(.datacols_selfhits)
-    mcol_names <- setdiff(colnames(df), datacol_names)
-    if (length(mcol_names) > 0L) {
-        x <- df[[mcol_names[1L]]]
+    dcnms <- names(.datacols_selfhits)
+    mcnms <- setdiff(colnames(df), dcnms)
+    if (length(mcnms) > 0L) {
+        x <- df[[mcnms[1L]]]
     } else {
         x <- rep.int(TRUE, nrow(df))
     }
-    sparseMatrix(i = df[[datacol_names[1L]]], j = df[[datacol_names[2L]]],
+    sparseMatrix(i = df[[dcnms[1L]]], j = df[[dcnms[2L]]],
                  x = x, dims = rep(nnode(from), 2L), use.last.ij = TRUE)
 })
 
