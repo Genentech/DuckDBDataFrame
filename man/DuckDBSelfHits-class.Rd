@@ -18,6 +18,8 @@
 \alias{DuckDBSelfHits}
 \alias{extractROWS,DuckDBSelfHits,ANY-method}
 \alias{[,DuckDBSelfHits,ANY,ANY,ANY-method}
+\alias{extractNODES}
+\alias{extractNODES,DuckDBSelfHits-method}
 \alias{head,DuckDBSelfHits-method}
 \alias{tail,DuckDBSelfHits-method}
 \alias{coerce,DuckDBSelfHits,DuckDBDataFrame-method}
@@ -46,7 +48,7 @@ in a \linkS4class{DuckDBDataFrame}, while keeping the scalar `nLnode` and
 
 \describe{
   \item{\code{DuckDBSelfHits(conn, from, to, nnode, mcols = NULL,
-    keycol = NULL, dimtbl = NULL)}:}{
+    keycol = NULL, dimtbl = NULL, nodes = NULL)}:}{
     Creates a DuckDBSelfHits object.
     \describe{
       \item{\code{conn}}{
@@ -86,6 +88,12 @@ in a \linkS4class{DuckDBDataFrame}, while keeping the scalar `nLnode` and
         the \code{DataFrame} object must have row names that match the
         distinct values of the \code{keycol} list element.
       }
+      \item{\code{nodes}}{
+        An optional integer vector specifying the node ids. If \code{NULL}
+        (default), uses implicit encoding \code{c(NA_integer_, -nnode)}
+        representing 1:nnode. Can be an explicit integer vector for
+        non-contiguous node subsets, optionally named for node aliases.
+      }
     }
   }
 }
@@ -113,13 +121,17 @@ In the code snippets below, \code{x} is a DuckDBSelfHits object:
   }
   \item{\code{countLnodeHits(x)}, \code{countQueryHits(x)}:}{
     Count the number of hits for each left/query node. Returns an integer
-    vector of length \code{nLnode(x)}. This operation materializes the
-    \code{from} column.
+    vector of length \code{nLnode(x)}. When nodes are implicit (1:nnode),
+    returns an unnamed vector with positional indexing. When nodes are
+    explicit, returns a named vector where names are the node IDs as
+    characters. This operation materializes the \code{from} column.
   }
   \item{\code{countRnodeHits(x)}, \code{countSubjectHits(x)}:}{
     Count the number of hits for each right/subject node. Returns an integer
-    vector of length \code{nRnode(x)}. This operation materializes the
-    \code{to} column.
+    vector of length \code{nRnode(x)}. When nodes are implicit (1:nnode),
+    returns an unnamed vector with positional indexing. When nodes are
+    explicit, returns a named vector where names are the node IDs as
+    characters. This operation materializes the \code{to} column.
   }
   \item{\code{mcols(x)}, \code{mcols(x) <- value}:}{
     Get or set the edge metadata columns.
@@ -155,9 +167,16 @@ In the code snippets below, \code{x} is a DuckDBSelfHits object:
 
 In the code snippets below, \code{x} is a DuckDBSelfHits object:
 \describe{
-  \item{\code{x[i]}:}{
-    Returns a DuckDBSelfHits object containing edges where both from and to
-    nodes are in the subset. Node indices are automatically remapped.
+  \item{\code{x[i]} or \code{extractROWS(x, i)}:}{
+    Returns a DuckDBSelfHits object with edge-based subsetting (subsets
+    edges directly by index, does NOT filter by nodes).
+  }
+  \item{\code{extractNODES(x, i)}:}{
+    Returns a DuckDBSelfHits object with node-based subsetting. Updates
+    the \code{nodes} slot to track the subset, and filters edges lazily
+    via SQL to include only edges where BOTH from and to are in the node
+    subset. Filtering is applied when data is materialized via
+    \code{tblconn()}, \code{as.data.frame()}, or coercion methods.
   }
   \item{\code{head(x, n = 6L)}:}{
     If \code{n} is non-negative, returns the first n edges.
