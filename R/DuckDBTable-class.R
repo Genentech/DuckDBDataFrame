@@ -579,6 +579,8 @@ setReplaceMethod("colnames", "DuckDBTable", function(x, value) {
         "list"
     } else if (grepl("^array<.*,\\d+>$", type)) {
         "matrix"
+    } else if (grepl("^geometry(\\(.*\\))?$", type)) {
+        "geometry"
     } else {
         switch(type,
                "boolean" = "logical",
@@ -606,7 +608,6 @@ setReplaceMethod("colnames", "DuckDBTable", function(x, value) {
                "time" = "POSIXct",
                "interval" = "difftime",
                "blob" = "raw",
-               "geometry" = "geometry",
                "geometry_type" = "character",
                stop("unsupported DuckDB type: ", duckdb_type))
     }
@@ -678,7 +679,7 @@ setReplaceMethod("colnames", "DuckDBTable", function(x, value) {
         } else if (grepl("\\[any\\]$", type)) {
             element_type <- .duckdb_element_type(type)
             sprintf("array<%s,0>", element_type)
-        } else if (type == "geometry") {
+        } else if (grepl("^geometry(\\(.*\\))?$", type)) {
             "geometry"
         } else if (grepl("^map\\(", type)) {
             "map"
