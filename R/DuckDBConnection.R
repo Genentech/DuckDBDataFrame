@@ -40,7 +40,7 @@ reg.finalizer(.duckdb, function(env) {
 NULL
 
 #' @importFrom DBI dbExecute dbGetQuery
-loadExtension <- function(conn, extension) {
+loadExtension <- function(conn, extension, optional = FALSE) {
     qry <-
       sprintf("SELECT * FROM duckdb_extensions() WHERE extension_name = '%s';",
               extension)
@@ -49,17 +49,44 @@ loadExtension <- function(conn, extension) {
         stop(sprintf("Extension '%s' not found in DuckDB.", extension))
     }
     if (!tbl[["installed"]]) {
-        dbExecute(conn, sprintf("INSTALL '%s';", extension))
+        tryCatch({
+            dbExecute(conn, sprintf("INSTALL '%s';", extension))
+        }, error = function(e) {
+            err_msg <- conditionMessage(e)
+            if (grepl("SSL|certificate|TLS", err_msg, ignore.case = TRUE)) {
+                if (optional) {
+                    warning(sprintf(
+                        "Could not install optional '%s' extension due to SSL certificate issues.\n",
+                        "Some functionality may be limited.\n",
+                        "To fix: manually download from http://extensions.duckdb.org"
+                    ), extension, call. = FALSE)
+                    return(invisible(0L))
+                } else {
+                    stop(sprintf(
+                        paste0(
+                            "Failed to install '%s' extension due to SSL certificate error.\n\n",
+                            "To fix: manually download the extension from http://extensions.duckdb.org\n",
+                            "and place it in the DuckDB extensions directory.\n\n",
+                            "Original error: %s"
+                        ),
+                        extension, err_msg
+                    ), call. = FALSE)
+                }
+            } else {
+                stop(e)
+            }
+        })
     }
     status <- 0L
-    if (!tbl[["loaded"]]) {
+    tbl_final <- dbGetQuery(conn, qry)
+    if (!tbl_final[["loaded"]]) {
         status <- dbExecute(conn, sprintf("LOAD '%s';", extension))
     }
     invisible(status)
 }
 
 #' @export
-#' @importFrom DBI dbConnect dbDisconnect
+#' @importFrom DBI dbConnect
 #' @importFrom duckdb duckdb
 #' @rdname DuckDBConnection
 acquireDuckDBConn <- function(conn = dbConnect(duckdb(), bigint = "integer64", array = "matrix")) {
@@ -67,8 +94,8 @@ acquireDuckDBConn <- function(conn = dbConnect(duckdb(), bigint = "integer64", a
         if (!inherits(conn, "duckdb_connection")) {
             stop("'conn' must be a DuckDB connection")
         }
-        loadExtension(conn, "httpfs")
-        loadExtension(conn, "spatial")
+        loadExtension(conn, "httpfs", optional = FALSE)
+        loadExtension(conn, "spatial", optional = TRUE)
         .duckdb$drv <- conn
     }
     .duckdb$drv
