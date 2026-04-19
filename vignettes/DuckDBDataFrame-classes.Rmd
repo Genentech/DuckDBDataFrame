@@ -228,37 +228,6 @@ tbl_no_keys <- DuckDBTable(mtcars_path, datacols = colnames(mtcars))
 This encoding `c(NA_integer64_, -n)` indicates row numbers from 1 to n.
 
 
-## Matrix Statistics on Tables
-
-Because *DuckDBTable* is n-dimensional, it supports `r CRANpkg("matrixStats")`
-operations when `nkey(x) >= 2`:
-
-```{r DuckDBTable-matrixStats}
-# Create a 2D table (matrix-like) in long format
-state_path <- tempfile(fileext = ".parquet")
-state_df <- data.frame(
-  state = rep(rownames(state.x77), times = ncol(state.x77)),
-  metric = rep(colnames(state.x77), each = nrow(state.x77)),
-  value = as.vector(state.x77)
-)
-arrow::write_parquet(state_df, state_path)
-
-tbl_2d <- DuckDBTable(state_path,
-                      datacols = "value",
-                      keycols = list(state = rownames(state.x77),
-                                     metric = colnames(state.x77)))
-
-# Matrix statistics work directly
-colMeans(tbl_2d)
-rowSums(tbl_2d)
-```
-
-This is a key architectural decision: *DuckDBTable* implements matrixStats
-methods because it's fundamentally n-dimensional, not because it's trying to
-be a matrix. This enables both *DuckDBDataFrame* and *DuckDBArray* to inherit
-efficient statistical operations.
-
-
 # The DuckDBDataFrame Class
 
 ## Class Structure
@@ -606,6 +575,20 @@ df_copy$mpg[1:5]
 For partitioned data, dimension tables map indices to grid groups:
 
 ```{r dimtbls}
+# Create a 2D table (matrix-like) in long format
+state_path <- tempfile(fileext = ".parquet")
+state_df <- data.frame(
+    state = rep(rownames(state.x77), times = ncol(state.x77)),
+    metric = rep(colnames(state.x77), each = nrow(state.x77)),
+    value = as.vector(state.x77)
+)
+arrow::write_parquet(state_df, state_path)
+
+tbl_2d <- DuckDBTable(state_path,
+                      datacols = "value",
+                      keycols = list(state = rownames(state.x77),
+                                     metric = colnames(state.x77)))
+
 # Create dimension tables (usually from createDimTables)
 dimtbl <- DataFrame(
     state = rownames(state.x77),

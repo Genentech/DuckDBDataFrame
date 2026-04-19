@@ -1,6 +1,6 @@
 Package: DuckDBDataFrame
-Version: 0.9.7
-Date: 2026-04-16
+Version: 0.9.8
+Date: 2026-04-19
 Title: DuckDB-Backed DataFrame and Table Structures
 Description:
     Provides DuckDB-backed implementations of core tabular data structures
@@ -28,7 +28,6 @@ Imports:
     SparseArray,
     DelayedArray,
     Matrix,
-    MatrixGenerics,
     DBI,
     rlang,
     dplyr,
@@ -64,5 +63,4 @@ Collate:
     'DuckDBDataFrame-class.R'
     'DuckDBDataFrameList-class.R'
     'DuckDBSelfHits-class.R'
-    'DuckDBTable-matrixStats.R'
     'DuckDBTransposedDataFrame-class.R'
