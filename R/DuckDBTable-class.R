@@ -307,6 +307,7 @@ setMethod("dbconn", "DuckDBTable", function(x) x@conn$src$con)
 # Build a filter expression using BETWEEN for contiguous ranges
 # More efficient than IN lists for DuckDB row group pruning
 #' @importFrom DBI dbQuoteLiteral
+#' @importFrom dplyr between
 .build_range_filter <- function(conn, col_name, ranges) {
     if (length(ranges) == 0L) return(NULL)
 
@@ -334,6 +335,44 @@ setMethod("dbconn", "DuckDBTable", function(x) x@conn$src$con)
     }
 }
 
+# Apply key filter using best strategy based on set size
+# For large sets (>10K elements), use temp table join instead of IN list
+#' @importFrom dplyr anti_join filter inner_join tbl
+#' @importFrom duckdb duckdb_register
+.apply_key_filter <- function(conn, col_name, set, complement = FALSE) {
+    k <- length(set)
+
+    if (k > 10000L) {
+        # Large set: use temp table join for better performance
+        db_con <- conn$src$con
+        temp_name <- sprintf("temp_filter_%s_%d", col_name,
+                             as.integer(Sys.time() * 1000) %% 1e9)
+
+        # Register temp table
+        temp_df <- data.frame(key = set)
+        names(temp_df) <- col_name
+        duckdb_register(db_con, temp_name, temp_df)
+
+        if (complement) {
+            # Anti-join for complement
+            conn <- anti_join(conn, tbl(db_con, temp_name), by = col_name)
+        } else {
+            # Inner join for membership
+            conn <- inner_join(conn, tbl(db_con, temp_name), by = col_name)
+        }
+    } else {
+        # Small-to-medium set: use IN list
+        col_sym <- as.name(col_name)
+        if (complement) {
+            conn <- filter(conn, !(!!col_sym %in% set))
+        } else {
+            conn <- filter(conn, !!col_sym %in% set)
+        }
+    }
+
+    conn
+}
+
 # Map database keycol values to potentially aliased R rownames
 #' @importFrom stats setNames
 .map_keycol_names <- function(keycol, values) {
@@ -345,7 +384,7 @@ setMethod("dbconn", "DuckDBTable", function(x) x@conn$src$con)
     }
 }
 
-#' @importFrom dplyr between filter
+#' @importFrom dplyr filter
 .filter_tblconn <- function(conn, keycols, dimtbls) {
     for (i in names(keycols)) {
         set <- unique(keycols[[i]])
@@ -387,9 +426,9 @@ setMethod("dbconn", "DuckDBTable", function(x) x@conn$src$con)
                 if (!is.null(range_filter)) {
                     conn <- filter(conn, !!range_filter)
                 } else if (ncomp >= k) {
-                    conn <- filter(conn, !!as.name(i) %in% set)
+                    conn <- .apply_key_filter(conn, i, set)
                 } else {
-                    conn <- filter(conn, !(!!as.name(i) %in% comp))
+                    conn <- .apply_key_filter(conn, i, comp, complement = TRUE)
                 }
             }
         } else {
@@ -397,7 +436,7 @@ setMethod("dbconn", "DuckDBTable", function(x) x@conn$src$con)
             if (!is.null(range_filter)) {
                 conn <- filter(conn, !!range_filter)
             } else {
-                conn <- filter(conn, !!as.name(i) %in% set)
+                conn <- .apply_key_filter(conn, i, set)
             }
         }
     }
