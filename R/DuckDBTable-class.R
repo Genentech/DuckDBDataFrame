@@ -345,8 +345,9 @@ setMethod("dbconn", "DuckDBTable", function(x) x@conn$src$con)
     if (k > 10000L) {
         # Large set: use temp table join for better performance
         db_con <- conn$src$con
-        temp_name <- sprintf("temp_filter_%s_%d", col_name,
-                             as.integer(Sys.time() * 1000) %% 1e9)
+
+        temp_suffix <- basename(tempfile(pattern = ""))
+        temp_name <- sprintf("temp_filter_%s_%s", col_name, temp_suffix)
 
         # Register temp table
         temp_df <- data.frame(key = set)
