@@ -22,6 +22,17 @@
 \alias{mad,DuckDBTable-method}
 \alias{IQR,DuckDBTable-method}
 \alias{sweep,DuckDBTable-method}
+\alias{nchar,DuckDBTable-method}
+\alias{tolower,DuckDBTable-method}
+\alias{toupper,DuckDBTable-method}
+\alias{chartr,ANY,ANY,DuckDBTable-method}
+\alias{substr,DuckDBTable-method}
+\alias{substring,DuckDBTable-method}
+\alias{grepl,ANY,DuckDBTable-method}
+\alias{sub,ANY,ANY,DuckDBTable-method}
+\alias{gsub,ANY,ANY,DuckDBTable-method}
+\alias{startsWith,DuckDBTable-method}
+\alias{endsWith,DuckDBTable-method}
 \alias{unique,DuckDBTable-method}
 \alias{\%in\%,DuckDBTable,ANY-method}
 \alias{table,DuckDBTable-method}
@@ -134,6 +145,78 @@ In the code snippets below, \code{x} is a DuckDBTable object:
         of dimension \code{MARGIN}}
       \item{\code{FUN}}{function to be used to carry out the sweep}
     }
+  }
+}
+}
+
+\section{Character Methods}{
+
+In the code snippets below, \code{x} is a DuckDBTable object:
+\describe{
+  \item{\code{nchar(x)}:}{
+    Returns a DuckDBTable containing the number of characters in each
+    string.
+  }
+  \item{\code{tolower(x)}:}{
+    Returns a DuckDBTable with all strings converted to lowercase.
+  }
+  \item{\code{toupper(x)}:}{
+    Returns a DuckDBTable with all strings converted to uppercase.
+  }
+  \item{\code{chartr(old, new, x)}:}{
+    Returns a DuckDBTable with characters translated.
+    \describe{
+      \item{\code{old}}{Characters to be translated.}
+      \item{\code{new}}{Characters to translate to.}
+    }
+  }
+  \item{\code{substr(x, start, stop)}:}{
+    Returns a DuckDBTable containing substrings extracted by position.
+    \describe{
+      \item{\code{start}}{Integer starting position (1-indexed).}
+      \item{\code{stop}}{Integer ending position (inclusive).}
+    }
+  }
+  \item{\code{substring(x, first, last = 1000000L)}:}{
+    Returns a DuckDBTable containing substrings extracted by position.
+    \describe{
+      \item{\code{first}}{Integer starting position (1-indexed).}
+      \item{\code{last}}{Integer ending position (inclusive).}
+    }
+  }
+  \item{\code{grepl(pattern, x, ignore.case = FALSE, fixed = FALSE)}:}{
+    Returns a DuckDBTable containing logicals indicating pattern matches.
+    \describe{
+      \item{\code{pattern}}{Character string containing a regular expression.}
+      \item{\code{ignore.case}}{If \code{TRUE}, case-insensitive matching.}
+      \item{\code{fixed}}{If \code{TRUE}, pattern is a fixed string not regex.}
+    }
+  }
+  \item{\code{sub(pattern, replacement, x, ignore.case = FALSE, fixed = FALSE)}:}{
+    Returns a DuckDBTable with first match of pattern replaced.
+    \describe{
+      \item{\code{pattern}}{Character string containing a regular expression.}
+      \item{\code{replacement}}{Replacement string.}
+      \item{\code{ignore.case}}{If \code{TRUE}, case-insensitive matching.}
+      \item{\code{fixed}}{If \code{TRUE}, pattern is a fixed string not regex.}
+    }
+  }
+  \item{\code{gsub(pattern, replacement, x, ignore.case = FALSE, fixed = FALSE)}:}{
+    Returns a DuckDBTable with all matches of pattern replaced.
+    \describe{
+      \item{\code{pattern}}{Character string containing a regular expression.}
+      \item{\code{replacement}}{Replacement string.}
+      \item{\code{ignore.case}}{If \code{TRUE}, case-insensitive matching.}
+      \item{\code{fixed}}{If \code{TRUE}, pattern is a fixed string not regex.}
+    }
+  }
+  \item{\code{startsWith(x, prefix)}:}{
+    Returns a DuckDBTable containing logicals indicating if strings start
+    with the specified prefix.
+  }
+  \item{\code{endsWith(x, suffix)}:}{
+    Returns a DuckDBTable containing logicals indicating if strings end
+    with the specified suffix.
   }
 }
 }

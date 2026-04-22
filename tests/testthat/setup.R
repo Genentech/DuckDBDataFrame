@@ -53,6 +53,12 @@ titanic_parquet <- tempfile(fileext = ".parquet")
 arrow::write_parquet(titanic_df, titanic_parquet)
 
 
+#  penguins_raw dataset
+penguins_raw_df <- penguins_raw
+penguins_raw_path <- tempfile(fileext = ".parquet")
+arrow::write_parquet(penguins_raw_df, penguins_raw_path)
+
+
 # Case-sensitive characters
 case_sensitive_df <- data.frame(id = letters, ID = LETTERS)
 case_sensitive_path <- tempfile(fileext = ".parquet")

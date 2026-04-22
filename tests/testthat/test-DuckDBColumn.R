@@ -156,3 +156,21 @@ test_that("Other aggregate methods work as expected for a DuckDBColumn", {
     carb <- df[["carb"]]
     expect_equal(table(gear, carb), table(gear = as.vector(gear), carb = as.vector(carb)))
 })
+
+test_that("Character methods work as expected for a DuckDBColumn", {
+    df <- DuckDBDataFrame(penguins_raw_path, datacols = colnames(penguins_raw))
+    species <- df[["Species"]]
+
+    checkDuckDBColumn(nchar(species), nchar(as.vector(species)))
+    checkDuckDBColumn(tolower(species), tolower(as.vector(species)))
+    checkDuckDBColumn(toupper(species), toupper(as.vector(species)))
+    checkDuckDBColumn(chartr("aeiou", "12345", species), chartr("aeiou", "12345", as.vector(species)))
+    checkDuckDBColumn(substr(species, 1, 1), substr(as.vector(species), 1, 1))
+    checkDuckDBColumn(substring(species, 1, 1), substring(as.vector(species), 1, 1))
+    checkDuckDBColumn(grepl("a", species), grepl("a", as.vector(species)))
+    checkDuckDBColumn(grepl("a", species, fixed = TRUE), grepl("a", as.vector(species), fixed = TRUE))
+    checkDuckDBColumn(sub("a", "X", species), sub("a", "X", as.vector(species)))
+    checkDuckDBColumn(gsub("a", "X", species), gsub("a", "X", as.vector(species)))
+    checkDuckDBColumn(startsWith(species, "a"), startsWith(as.vector(species), "a"))
+    checkDuckDBColumn(endsWith(species, "z"), endsWith(as.vector(species), "z"))
+})

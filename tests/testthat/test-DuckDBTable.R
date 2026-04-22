@@ -208,3 +208,50 @@ test_that("Other aggregate methods work as expected for a DuckDBTable", {
     tbl <- DuckDBTable(mtcars_parquet, datacols = c("cyl", "vs", "am", "gear", "carb"), keycols = "model")
     expect_equal(table(tbl), table(as.data.frame(tbl)[-ncol(as.data.frame(tbl))]))
 })
+
+test_that("table method handles NA values correctly", {
+    # Create test data with NA values
+    test_df <- data.frame(
+        id = 1:10,
+        category = c("A", "B", NA, "A", "B", "C", NA, "A", "B", "C"),
+        value = c(1, 2, 3, 1, 2, 1, 2, 3, 1, NA)
+    )
+    test_path <- tempfile(fileext = ".parquet")
+    arrow::write_parquet(test_df, test_path)
+    on.exit(unlink(test_path), add = TRUE)
+
+    # Test single column with NAs
+    tbl <- DuckDBTable(test_path, datacols = "category", keycols = "id")
+    result <- table(tbl)
+
+    # Verify NA values are represented as "<NA>" string
+    expect_true("<NA>" %in% names(result))
+
+    # Test that the table counts are correct
+    expect_equal(sum(result), nrow(test_df))
+    expect_equal(result[["<NA>"]], 2L)
+    expect_equal(result[["A"]], 3L)
+    expect_equal(result[["B"]], 3L)
+    expect_equal(result[["C"]], 2L)
+
+    # Verify all unique values are present
+    expect_setequal(names(result), c("<NA>", "A", "B", "C"))
+})
+
+test_that("Character methods work as expected for a DuckDBTable", {
+    tbl <- DuckDBTable(penguins_raw_path, datacols = c("studyName", "Species", "Region"))
+    penguins <- penguins_raw[, c("studyName", "Species", "Region")]
+
+    checkDuckDBTable(nchar(tbl), endoapply(penguins, nchar))
+    checkDuckDBTable(tolower(tbl), endoapply(penguins, tolower))
+    checkDuckDBTable(toupper(tbl), endoapply(penguins, toupper))
+    checkDuckDBTable(chartr("aeiou", "12345", tbl), endoapply(penguins, chartr, old = "aeiou", new = "12345"))
+    checkDuckDBTable(substr(tbl, 1, 1), endoapply(penguins, substr, 1, 1))
+    checkDuckDBTable(substring(tbl, 1, 1), endoapply(penguins, substring, 1, 1))
+    checkDuckDBTable(grepl("a", tbl), endoapply(penguins, grepl, pattern = "a"))
+    checkDuckDBTable(grepl("a", tbl, fixed = TRUE), endoapply(penguins, grepl, pattern = "a", fixed = TRUE))
+    checkDuckDBTable(sub("a", "X", tbl), endoapply(penguins, sub, pattern = "a", replacement = "X"))
+    checkDuckDBTable(gsub("a", "X", tbl), endoapply(penguins, gsub, pattern = "a", replacement = "X"))
+    checkDuckDBTable(startsWith(tbl, "a"), endoapply(penguins, startsWith, prefix = "a"))
+    checkDuckDBTable(endsWith(tbl, "z"), endoapply(penguins, endsWith, suffix = "z"))
+})

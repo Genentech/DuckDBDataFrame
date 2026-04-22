@@ -102,6 +102,76 @@
 #'   }
 #' }
 #'
+#' @section Character Methods:
+#' In the code snippets below, \code{x} is a DuckDBTable object:
+#' \describe{
+#'   \item{\code{nchar(x)}:}{
+#'     Returns a DuckDBTable containing the number of characters in each
+#'     string.
+#'   }
+#'   \item{\code{tolower(x)}:}{
+#'     Returns a DuckDBTable with all strings converted to lowercase.
+#'   }
+#'   \item{\code{toupper(x)}:}{
+#'     Returns a DuckDBTable with all strings converted to uppercase.
+#'   }
+#'   \item{\code{chartr(old, new, x)}:}{
+#'     Returns a DuckDBTable with characters translated.
+#'     \describe{
+#'       \item{\code{old}}{Characters to be translated.}
+#'       \item{\code{new}}{Characters to translate to.}
+#'     }
+#'   }
+#'   \item{\code{substr(x, start, stop)}:}{
+#'     Returns a DuckDBTable containing substrings extracted by position.
+#'     \describe{
+#'       \item{\code{start}}{Integer starting position (1-indexed).}
+#'       \item{\code{stop}}{Integer ending position (inclusive).}
+#'     }
+#'   }
+#'   \item{\code{substring(x, first, last = 1000000L)}:}{
+#'     Returns a DuckDBTable containing substrings extracted by position.
+#'     \describe{
+#'       \item{\code{first}}{Integer starting position (1-indexed).}
+#'       \item{\code{last}}{Integer ending position (inclusive).}
+#'     }
+#'   }
+#'   \item{\code{grepl(pattern, x, ignore.case = FALSE, fixed = FALSE)}:}{
+#'     Returns a DuckDBTable containing logicals indicating pattern matches.
+#'     \describe{
+#'       \item{\code{pattern}}{Character string containing a regular expression.}
+#'       \item{\code{ignore.case}}{If \code{TRUE}, case-insensitive matching.}
+#'       \item{\code{fixed}}{If \code{TRUE}, pattern is a fixed string not regex.}
+#'     }
+#'   }
+#'   \item{\code{sub(pattern, replacement, x, ignore.case = FALSE, fixed = FALSE)}:}{
+#'     Returns a DuckDBTable with first match of pattern replaced.
+#'     \describe{
+#'       \item{\code{pattern}}{Character string containing a regular expression.}
+#'       \item{\code{replacement}}{Replacement string.}
+#'       \item{\code{ignore.case}}{If \code{TRUE}, case-insensitive matching.}
+#'       \item{\code{fixed}}{If \code{TRUE}, pattern is a fixed string not regex.}
+#'     }
+#'   }
+#'   \item{\code{gsub(pattern, replacement, x, ignore.case = FALSE, fixed = FALSE)}:}{
+#'     Returns a DuckDBTable with all matches of pattern replaced.
+#'     \describe{
+#'       \item{\code{pattern}}{Character string containing a regular expression.}
+#'       \item{\code{replacement}}{Replacement string.}
+#'       \item{\code{ignore.case}}{If \code{TRUE}, case-insensitive matching.}
+#'       \item{\code{fixed}}{If \code{TRUE}, pattern is a fixed string not regex.}
+#'     }
+#'   }
+#'   \item{\code{startsWith(x, prefix)}:}{
+#'     Returns a DuckDBTable containing logicals indicating if strings start
+#'     with the specified prefix.
+#'   }
+#'   \item{\code{endsWith(x, suffix)}:}{
+#'     Returns a DuckDBTable containing logicals indicating if strings end
+#'     with the specified suffix.
+#'   }
+#' }
+#'
 #' @section General Methods:
 #' In the code snippets below, \code{x} is a DuckDBTable object:
 #' \describe{
@@ -226,6 +296,18 @@
 #' mad,DuckDBTable-method
 #' IQR,DuckDBTable-method
 #' sweep,DuckDBTable-method
+#'
+#' nchar,DuckDBTable-method
+#' tolower,DuckDBTable-method
+#' toupper,DuckDBTable-method
+#' chartr,ANY,ANY,DuckDBTable-method
+#' substr,DuckDBTable-method
+#' substring,DuckDBTable-method
+#' grepl,ANY,DuckDBTable-method
+#' sub,ANY,ANY,DuckDBTable-method
+#' gsub,ANY,ANY,DuckDBTable-method
+#' startsWith,DuckDBTable-method
+#' endsWith,DuckDBTable-method
 #'
 #' unique,DuckDBTable-method
 #' %in%,DuckDBTable,ANY-method
@@ -581,6 +663,129 @@ function(x, MARGIN, STATS, FUN = "/", check.margin = TRUE, ...) {
 })
 
 ### - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+### Character methods
+###
+
+#' @export
+#' @importMethodsFrom S4Vectors nchar
+setMethod("nchar", "DuckDBTable", function(x, type = "chars", allowNA = FALSE, keepNA = NA) {
+    sql_call(x, "length")
+})
+
+#' @export
+#' @importMethodsFrom IRanges tolower
+setMethod("tolower", "DuckDBTable", function(x) {
+    sql_call(x, "lower")
+})
+
+#' @export
+#' @importMethodsFrom IRanges toupper
+setMethod("toupper", "DuckDBTable", function(x) {
+    sql_call(x, "upper")
+})
+
+#' @export
+#' @importMethodsFrom IRanges chartr
+setMethod("chartr", signature(x = "DuckDBTable"), function(old, new, x) {
+    if (missing(old) || missing(new)) {
+        stop("'old' and 'new' are required")
+    }
+    sql_call(x, "translate", as.character(old), as.character(new))
+})
+
+#' @export
+#' @importMethodsFrom S4Vectors substr
+setMethod("substr", "DuckDBTable", function(x, start, stop) {
+    if (missing(start) || missing(stop)) {
+        stop("'start' and 'stop' are required")
+    }
+    sql_call(x, "substr", as.integer(start), as.integer(stop))
+})
+
+#' @export
+#' @importMethodsFrom S4Vectors substring
+setMethod("substring", "DuckDBTable", function(text, first, last = 1000000L) {
+    if (missing(first)) {
+        stop("'first' is required")
+    }
+    sql_call(text, "substr", as.integer(first), as.integer(last))
+})
+
+#' @export
+setMethod("grepl", signature(x = "DuckDBTable"), function(pattern, x, ignore.case = FALSE, perl = FALSE, fixed = FALSE, useBytes = FALSE) {
+    if (fixed) {
+        if (ignore.case) {
+            pattern_lower <- tolower(as.character(pattern))
+            tbl <- sql_call(sql_call(x, "lower"), "contains", pattern_lower)
+        } else {
+            tbl <- sql_call(x, "contains", pattern)
+        }
+    } else {
+        if (ignore.case) {
+            tbl <- sql_call(x, "regexp_matches", paste0("(?i)", pattern))
+        } else {
+            tbl <- sql_call(x, "regexp_matches", pattern)
+        }
+    }
+    coltypes(tbl) <- rep.int("logical", ncol(tbl))
+    tbl
+})
+
+#' @export
+#' @importMethodsFrom IRanges sub
+setMethod("sub", signature(x = "DuckDBTable"), function(pattern, replacement, x, ignore.case = FALSE, perl = FALSE, fixed = FALSE, useBytes = FALSE) {
+    if (fixed) {
+        escaped_pattern <- base::gsub("([.*+?^${}()|[\\]\\\\])", "\\\\\\1", pattern)
+        if (ignore.case) {
+            sql_call(x, "regexp_replace", paste0("(?i)", escaped_pattern), replacement)
+        } else {
+            sql_call(x, "regexp_replace", escaped_pattern, replacement)
+        }
+    } else {
+        if (ignore.case) {
+            sql_call(x, "regexp_replace", paste0("(?i)", pattern), replacement)
+        } else {
+            sql_call(x, "regexp_replace", pattern, replacement)
+        }
+    }
+})
+
+#' @export
+#' @importMethodsFrom IRanges gsub
+setMethod("gsub", signature(x = "DuckDBTable"), function(pattern, replacement, x, ignore.case = FALSE, perl = FALSE, fixed = FALSE, useBytes = FALSE) {
+    if (fixed) {
+        if (ignore.case) {
+            escaped_pattern <- base::gsub("([.*+?^${}()|[\\]\\\\])", "\\\\\\1", pattern)
+            sql_call(x, "regexp_replace", paste0("(?i)", escaped_pattern), replacement, "g")
+        } else {
+            sql_call(x, "replace", pattern, replacement)
+        }
+    } else {
+        if (ignore.case) {
+            sql_call(x, "regexp_replace", paste0("(?i)", pattern), replacement, "g")
+        } else {
+            sql_call(x, "regexp_replace", pattern, replacement, "g")
+        }
+    }
+})
+
+#' @export
+#' @importMethodsFrom IRanges startsWith
+setMethod("startsWith", "DuckDBTable", function(x, prefix) {
+    tbl <- sql_call(x, "starts_with", prefix)
+    coltypes(tbl) <- rep.int("logical", ncol(tbl))
+    tbl
+})
+
+#' @export
+#' @importMethodsFrom IRanges endsWith
+setMethod("endsWith", "DuckDBTable", function(x, suffix) {
+    tbl <- sql_call(x, "suffix", suffix)
+    coltypes(tbl) <- rep.int("logical", ncol(tbl))
+    tbl
+})
+
+### - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 ### Set methods
 ###
 
@@ -618,9 +823,12 @@ setMethod("table", "DuckDBTable", function(...) {
     conn <- tblconn(x, select = FALSE)
     groups <- as.list(x@datacols)
     counts <- as.data.frame(summarize(group_by(conn, !!!groups), count = n(), .groups = "drop"))
+    counts[seq_along(groups)] <- lapply(counts[seq_along(groups)], function(j) {
+        ifelse(is.na(j), "<NA>", as.character(j))
+    })
     dnames <- lapply(counts[seq_along(groups)], function(j) as.character(sort(unique(j))))
     ans <- array(0L, dim = lengths(dnames, use.names = FALSE), dimnames = dnames)
-    ans[do.call(cbind, lapply(counts[seq_along(groups)], as.character))] <- as.integer(counts[["count"]])
+    ans[do.call(cbind, counts[seq_along(groups)])] <- as.integer(counts[["count"]])
     class(ans) <- "table"
     ans
 })

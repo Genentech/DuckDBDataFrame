@@ -90,6 +90,76 @@
 #'   }
 #' }
 #'
+#' @section Character Methods:
+#' In the code snippets below, \code{x} is a DuckDBColumn object:
+#' \describe{
+#'   \item{\code{nchar(x)}:}{
+#'     Returns a DuckDBColumn containing the number of characters in each
+#'     string.
+#'   }
+#'   \item{\code{tolower(x)}:}{
+#'     Returns a DuckDBColumn with all strings converted to lowercase.
+#'   }
+#'   \item{\code{toupper(x)}:}{
+#'     Returns a DuckDBColumn with all strings converted to uppercase.
+#'   }
+#'   \item{\code{chartr(old, new, x)}:}{
+#'     Returns a DuckDBColumn with characters translated.
+#'     \describe{
+#'       \item{\code{old}}{Characters to be translated.}
+#'       \item{\code{new}}{Characters to translate to.}
+#'     }
+#'   }
+#'   \item{\code{substr(x, start, stop)}:}{
+#'     Returns a DuckDBColumn containing substrings extracted by position.
+#'     \describe{
+#'       \item{\code{start}}{Integer starting position (1-indexed).}
+#'       \item{\code{stop}}{Integer ending position (inclusive).}
+#'     }
+#'   }
+#'   \item{\code{substring(x, first, last = 1000000L)}:}{
+#'     Returns a DuckDBColumn containing substrings extracted by position.
+#'     \describe{
+#'       \item{\code{first}}{Integer starting position (1-indexed).}
+#'       \item{\code{last}}{Integer ending position (inclusive).}
+#'     }
+#'   }
+#'   \item{\code{grepl(pattern, x, ignore.case = FALSE, fixed = FALSE)}:}{
+#'     Returns a DuckDBColumn containing logicals indicating pattern matches.
+#'     \describe{
+#'       \item{\code{pattern}}{Character string containing a regular expression.}
+#'       \item{\code{ignore.case}}{If \code{TRUE}, case-insensitive matching.}
+#'       \item{\code{fixed}}{If \code{TRUE}, pattern is a fixed string not regex.}
+#'     }
+#'   }
+#'   \item{\code{sub(pattern, replacement, x, ignore.case = FALSE, fixed = FALSE)}:}{
+#'     Returns a DuckDBColumn with first match of pattern replaced.
+#'     \describe{
+#'       \item{\code{pattern}}{Character string containing a regular expression.}
+#'       \item{\code{replacement}}{Replacement string.}
+#'       \item{\code{ignore.case}}{If \code{TRUE}, case-insensitive matching.}
+#'       \item{\code{fixed}}{If \code{TRUE}, pattern is a fixed string not regex.}
+#'     }
+#'   }
+#'   \item{\code{gsub(pattern, replacement, x, ignore.case = FALSE, fixed = FALSE)}:}{
+#'     Returns a DuckDBColumn with all matches of pattern replaced.
+#'     \describe{
+#'       \item{\code{pattern}}{Character string containing a regular expression.}
+#'       \item{\code{replacement}}{Replacement string.}
+#'       \item{\code{ignore.case}}{If \code{TRUE}, case-insensitive matching.}
+#'       \item{\code{fixed}}{If \code{TRUE}, pattern is a fixed string not regex.}
+#'     }
+#'   }
+#'   \item{\code{startsWith(x, prefix)}:}{
+#'     Returns a DuckDBColumn containing logicals indicating if strings start
+#'     with the specified prefix.
+#'   }
+#'   \item{\code{endsWith(x, suffix)}:}{
+#'     Returns a DuckDBColumn containing logicals indicating if strings end
+#'     with the specified suffix.
+#'   }
+#' }
+#'
 #' @section General Methods:
 #' In the code snippets below, \code{x} is a DuckDBColumn object:
 #' \describe{
@@ -199,6 +269,18 @@
 #' quantile.DuckDBColumn
 #' mad,DuckDBColumn-method
 #' IQR,DuckDBColumn-method
+#'
+#' nchar,DuckDBColumn-method
+#' tolower,DuckDBColumn-method
+#' toupper,DuckDBColumn-method
+#' chartr,ANY,ANY,DuckDBColumn-method
+#' substr,DuckDBColumn-method
+#' substring,DuckDBColumn-method
+#' grepl,ANY,DuckDBColumn-method
+#' sub,ANY,ANY,DuckDBColumn-method
+#' gsub,ANY,ANY,DuckDBColumn-method
+#' startsWith,DuckDBColumn-method
+#' endsWith,DuckDBColumn-method
 #'
 #' unique,DuckDBColumn-method
 #' %in%,DuckDBColumn,ANY-method
@@ -340,6 +422,75 @@ function(x, center = median(x), constant = 1.4826, na.rm = FALSE, low = FALSE, h
 #' @export
 setMethod("IQR", "DuckDBColumn", function(x, na.rm = FALSE, type = 7) {
     callGeneric(x@table, type = type)
+})
+
+### - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+### Character methods
+###
+
+#' @export
+#' @importMethodsFrom S4Vectors nchar
+setMethod("nchar", "DuckDBColumn", function(x, type = "chars", allowNA = FALSE, keepNA = NA) {
+    replaceSlots(x, table = callGeneric(x@table, type = type, allowNA = allowNA, keepNA = keepNA), check = FALSE)
+})
+
+#' @export
+#' @importMethodsFrom IRanges tolower
+setMethod("tolower", "DuckDBColumn", function(x) {
+    replaceSlots(x, table = callGeneric(x@table), check = FALSE)
+})
+
+#' @export
+#' @importMethodsFrom IRanges toupper
+setMethod("toupper", "DuckDBColumn", function(x) {
+    replaceSlots(x, table = callGeneric(x@table), check = FALSE)
+})
+
+#' @export
+#' @importMethodsFrom IRanges chartr
+setMethod("chartr", signature(x = "DuckDBColumn"), function(old, new, x) {
+    replaceSlots(x, table = callGeneric(old = old, new = new, x = x@table), check = FALSE)
+})
+
+#' @export
+#' @importMethodsFrom S4Vectors substr
+setMethod("substr", "DuckDBColumn", function(x, start, stop) {
+    replaceSlots(x, table = callGeneric(x@table, start, stop), check = FALSE)
+})
+
+#' @export
+#' @importMethodsFrom S4Vectors substring
+setMethod("substring", "DuckDBColumn", function(text, first, last = 1000000L) {
+    replaceSlots(text, table = callGeneric(text@table, first, last), check = FALSE)
+})
+
+#' @export
+setMethod("grepl", signature(x = "DuckDBColumn"), function(pattern, x, ignore.case = FALSE, perl = FALSE, fixed = FALSE, useBytes = FALSE) {
+    replaceSlots(x, table = callGeneric(pattern, x@table, ignore.case = ignore.case, perl = perl, fixed = fixed, useBytes = useBytes), check = FALSE)
+})
+
+#' @export
+#' @importMethodsFrom IRanges sub
+setMethod("sub", signature(x = "DuckDBColumn"), function(pattern, replacement, x, ignore.case = FALSE, perl = FALSE, fixed = FALSE, useBytes = FALSE) {
+    replaceSlots(x, table = callGeneric(pattern, replacement, x@table, ignore.case = ignore.case, perl = perl, fixed = fixed, useBytes = useBytes), check = FALSE)
+})
+
+#' @export
+#' @importMethodsFrom IRanges gsub
+setMethod("gsub", signature(x = "DuckDBColumn"), function(pattern, replacement, x, ignore.case = FALSE, perl = FALSE, fixed = FALSE, useBytes = FALSE) {
+    replaceSlots(x, table = callGeneric(pattern, replacement, x@table, ignore.case = ignore.case, perl = perl, fixed = fixed, useBytes = useBytes), check = FALSE)
+})
+
+#' @export
+#' @importMethodsFrom IRanges startsWith
+setMethod("startsWith", "DuckDBColumn", function(x, prefix) {
+    replaceSlots(x, table = callGeneric(x@table, prefix), check = FALSE)
+})
+
+#' @export
+#' @importMethodsFrom IRanges endsWith
+setMethod("endsWith", "DuckDBColumn", function(x, suffix) {
+    replaceSlots(x, table = callGeneric(x@table, suffix), check = FALSE)
 })
 
 ### - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -

@@ -21,6 +21,17 @@
 \alias{quantile.DuckDBColumn}
 \alias{mad,DuckDBColumn-method}
 \alias{IQR,DuckDBColumn-method}
+\alias{nchar,DuckDBColumn-method}
+\alias{tolower,DuckDBColumn-method}
+\alias{toupper,DuckDBColumn-method}
+\alias{chartr,ANY,ANY,DuckDBColumn-method}
+\alias{substr,DuckDBColumn-method}
+\alias{substring,DuckDBColumn-method}
+\alias{grepl,ANY,DuckDBColumn-method}
+\alias{sub,ANY,ANY,DuckDBColumn-method}
+\alias{gsub,ANY,ANY,DuckDBColumn-method}
+\alias{startsWith,DuckDBColumn-method}
+\alias{endsWith,DuckDBColumn-method}
 \alias{unique,DuckDBColumn-method}
 \alias{\%in\%,DuckDBColumn,ANY-method}
 \alias{table,DuckDBColumn-method}
@@ -119,6 +130,78 @@ In the code snippets below, \code{x} is a DuckDBColumn object:
       \item{\code{type}}{Either 1 or 7 that specifies the quantile algorithm
         detailed in \code{\link[stats]{quantile}}.}
     }
+  }
+}
+}
+
+\section{Character Methods}{
+
+In the code snippets below, \code{x} is a DuckDBColumn object:
+\describe{
+  \item{\code{nchar(x)}:}{
+    Returns a DuckDBColumn containing the number of characters in each
+    string.
+  }
+  \item{\code{tolower(x)}:}{
+    Returns a DuckDBColumn with all strings converted to lowercase.
+  }
+  \item{\code{toupper(x)}:}{
+    Returns a DuckDBColumn with all strings converted to uppercase.
+  }
+  \item{\code{chartr(old, new, x)}:}{
+    Returns a DuckDBColumn with characters translated.
+    \describe{
+      \item{\code{old}}{Characters to be translated.}
+      \item{\code{new}}{Characters to translate to.}
+    }
+  }
+  \item{\code{substr(x, start, stop)}:}{
+    Returns a DuckDBColumn containing substrings extracted by position.
+    \describe{
+      \item{\code{start}}{Integer starting position (1-indexed).}
+      \item{\code{stop}}{Integer ending position (inclusive).}
+    }
+  }
+  \item{\code{substring(x, first, last = 1000000L)}:}{
+    Returns a DuckDBColumn containing substrings extracted by position.
+    \describe{
+      \item{\code{first}}{Integer starting position (1-indexed).}
+      \item{\code{last}}{Integer ending position (inclusive).}
+    }
+  }
+  \item{\code{grepl(pattern, x, ignore.case = FALSE, fixed = FALSE)}:}{
+    Returns a DuckDBColumn containing logicals indicating pattern matches.
+    \describe{
+      \item{\code{pattern}}{Character string containing a regular expression.}
+      \item{\code{ignore.case}}{If \code{TRUE}, case-insensitive matching.}
+      \item{\code{fixed}}{If \code{TRUE}, pattern is a fixed string not regex.}
+    }
+  }
+  \item{\code{sub(pattern, replacement, x, ignore.case = FALSE, fixed = FALSE)}:}{
+    Returns a DuckDBColumn with first match of pattern replaced.
+    \describe{
+      \item{\code{pattern}}{Character string containing a regular expression.}
+      \item{\code{replacement}}{Replacement string.}
+      \item{\code{ignore.case}}{If \code{TRUE}, case-insensitive matching.}
+      \item{\code{fixed}}{If \code{TRUE}, pattern is a fixed string not regex.}
+    }
+  }
+  \item{\code{gsub(pattern, replacement, x, ignore.case = FALSE, fixed = FALSE)}:}{
+    Returns a DuckDBColumn with all matches of pattern replaced.
+    \describe{
+      \item{\code{pattern}}{Character string containing a regular expression.}
+      \item{\code{replacement}}{Replacement string.}
+      \item{\code{ignore.case}}{If \code{TRUE}, case-insensitive matching.}
+      \item{\code{fixed}}{If \code{TRUE}, pattern is a fixed string not regex.}
+    }
+  }
+  \item{\code{startsWith(x, prefix)}:}{
+    Returns a DuckDBColumn containing logicals indicating if strings start
+    with the specified prefix.
+  }
+  \item{\code{endsWith(x, suffix)}:}{
+    Returns a DuckDBColumn containing logicals indicating if strings end
+    with the specified suffix.
   }
 }
 }
