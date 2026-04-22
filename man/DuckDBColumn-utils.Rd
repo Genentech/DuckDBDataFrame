@@ -21,6 +21,8 @@
 \alias{quantile.DuckDBColumn}
 \alias{mad,DuckDBColumn-method}
 \alias{IQR,DuckDBColumn-method}
+\alias{pmax,DuckDBColumn-method}
+\alias{pmin,DuckDBColumn-method}
 \alias{nchar,DuckDBColumn-method}
 \alias{tolower,DuckDBColumn-method}
 \alias{toupper,DuckDBColumn-method}
@@ -32,6 +34,10 @@
 \alias{gsub,ANY,ANY,DuckDBColumn-method}
 \alias{startsWith,DuckDBColumn-method}
 \alias{endsWith,DuckDBColumn-method}
+\alias{paste2,DuckDBColumn,DuckDBColumn-method}
+\alias{paste2,DuckDBColumn,character-method}
+\alias{paste2,character,DuckDBColumn-method}
+\alias{paste,DuckDBColumn-method}
 \alias{unique,DuckDBColumn-method}
 \alias{\%in\%,DuckDBColumn,ANY-method}
 \alias{table,DuckDBColumn-method}
@@ -131,6 +137,14 @@ In the code snippets below, \code{x} is a DuckDBColumn object:
         detailed in \code{\link[stats]{quantile}}.}
     }
   }
+  \item{\code{pmax(..., na.rm = FALSE)}:}{
+    Returns the parallel maxima of multiple DuckDBColumn objects.
+    All arguments must be DuckDBColumn objects with compatible dimensions.
+  }
+  \item{\code{pmin(..., na.rm = FALSE)}:}{
+    Returns the parallel minima of multiple DuckDBColumn objects.
+    All arguments must be DuckDBColumn objects with compatible dimensions.
+  }
 }
 }
 
@@ -203,6 +217,11 @@ In the code snippets below, \code{x} is a DuckDBColumn object:
     Returns a DuckDBColumn containing logicals indicating if strings end
     with the specified suffix.
   }
+  \item{\code{paste(..., sep = " ", collapse = NULL)}:}{
+    Concatenates multiple DuckDBColumn objects using the specified separator.
+    The \code{collapse} argument is not supported.
+    All arguments must be DuckDBColumn objects with compatible dimensions.
+  }
 }
 }
 
@@ -233,66 +252,6 @@ In the code snippets below, \code{x} is a DuckDBColumn object:
   }
   \item{\code{nzcount(x)}:}{
     Returns the total number of non-zero values.
-  }
-}
-}
-
-\section{Spatial Methods}{
-
-In the code snippets below, \code{x} is a DuckDBColumn object:
-\describe{
-  \item{\code{st_area(x)}:}{
-    Returns a DuckDBColumn containing the areas of geometries.
-  }
-  \item{\code{st_as_binary(x, hex = FALSE)}:}{
-    Returns the DuckDBColumn containing either WKB if \code{hex = FALSE} or
-    HEXWKB if \code{hex = TRUE} representations of geometries.
-  }
-  \item{\code{st_as_sfc(x, ..., crs = NA_integer_, GeoJSON = FALSE, WKB = FALSE)}:}{
-    Returns a DuckDBColumn of geometry type by parsing WKT (or GeoJSON if
-    \code{GeoJSON = TRUE}, or WKB if \code{WKB = TRUE}).
-  }
-  \item{\code{st_as_text(x, geojson = FALSE)}:}{
-    Returns the DuckDBColumn containing either WKT if \code{geojson = FALSE} or
-    GeoJSON if \code{geojson = TRUE} representations of geometries.
-  }
-  \item{\code{st_boundary(x)}:}{
-    Returns a DuckDBColumn containing the boundaries of geometries.
-  }
-  \item{\code{st_centroid(x)}:}{
-    Returns a DuckDBColumn containing the centroids of geometries.
-  }
-  \item{\code{st_convex_hull(x)}:}{
-    Returns a DuckDBColumn containing the convex hulls of geometries.
-  }
-  \item{\code{st_coordinates(x)}:}{
-    Returns a DuckDBDataFrame containing X, Y, and potentially Z and M
-    coordinate columns when x contains points.
-  }
-  \item{\code{st_exterior_ring(x)}:}{
-    Returns a DuckDBColumn containing the exterior rings of geometries.
-  }
-  \item{\code{st_is_valid(x)}:}{
-    Returns a DuckDBColumn containing logicals that indicate if the
-    geometries are valid.
-  }
-  \item{\code{st_line_merge(x, directed = FALSE)}:}{
-    Returns a DuckDBColumn containing the merged lines of geometries,
-    optionally taking direction into account.
-  }
-  \item{\code{st_make_valid(x)}:}{
-    Returns a DuckDBColumn containing valid geometries.
-  }
-  \item{\code{st_normalize(x)}:}{
-    Returns a DuckDBColumn containing normalized geometries.
-  }
-  \item{\code{st_point_on_surface(x)}:}{
-    Returns a DuckDBColumn containing a point on the surface of the input
-    geometry.
-  }
-  \item{\code{st_reverse(x)}:}{
-    Returns a DuckDBColumn containing geometries with the vertice order
-    reversed.
   }
 }
 }

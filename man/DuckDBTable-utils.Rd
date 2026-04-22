@@ -33,6 +33,12 @@
 \alias{gsub,ANY,ANY,DuckDBTable-method}
 \alias{startsWith,DuckDBTable-method}
 \alias{endsWith,DuckDBTable-method}
+\alias{paste2,DuckDBTable,DuckDBTable-method}
+\alias{paste2,DuckDBTable,character-method}
+\alias{paste2,character,DuckDBTable-method}
+\alias{paste,DuckDBTable-method}
+\alias{pmax,DuckDBTable-method}
+\alias{pmin,DuckDBTable-method}
 \alias{unique,DuckDBTable-method}
 \alias{\%in\%,DuckDBTable,ANY-method}
 \alias{table,DuckDBTable-method}
@@ -146,6 +152,14 @@ In the code snippets below, \code{x} is a DuckDBTable object:
       \item{\code{FUN}}{function to be used to carry out the sweep}
     }
   }
+  \item{\code{pmax(..., na.rm = FALSE)}:}{
+    Returns the parallel maxima of multiple DuckDBTable objects.
+    All arguments must be DuckDBTable objects with compatible dimensions.
+  }
+  \item{\code{pmin(..., na.rm = FALSE)}:}{
+    Returns the parallel minima of multiple DuckDBTable objects.
+    All arguments must be DuckDBTable objects with compatible dimensions.
+  }
 }
 }
 
@@ -218,6 +232,11 @@ In the code snippets below, \code{x} is a DuckDBTable object:
     Returns a DuckDBTable containing logicals indicating if strings end
     with the specified suffix.
   }
+  \item{\code{paste(..., sep = " ", collapse = NULL)}:}{
+    Concatenates multiple DuckDBTable objects column-wise using the
+    specified separator. The \code{collapse} argument is not supported.
+    All arguments must be DuckDBTable objects with compatible dimensions.
+  }
 }
 }
 
@@ -262,62 +281,6 @@ In the code snippets below, \code{x} is a DuckDBTable object:
   }
   \item{\code{is_sparse(x)}:}{
     Returns \code{TRUE} since data are stored in a sparse array representation.
-  }
-}
-}
-
-\section{Spatial Methods}{
-
-In the code snippets below, \code{x} is a DuckDBTable object:
-\describe{
-  \item{\code{st_area(x)}:}{
-    Returns a DuckDBTable containing the areas of geometries.
-  }
-  \item{\code{st_as_binary(x, hex = FALSE)}:}{
-    Returns the DuckDBTable containing either WKB if \code{hex = FALSE} or
-    HEXWKB if \code{hex = TRUE} representations of geometries.
-  }
-  \item{\code{st_as_sfc(x, ..., crs = NA_integer_, GeoJSON = FALSE, WKB = FALSE)}:}{
-    Returns the DuckDBTable containing geometry types by parsing WKT
-    (or GeoJSON if \code{GeoJSON = TRUE}, or WKB if \code{WKB = TRUE}).
-  }
-  \item{\code{st_as_text(x, geojson = FALSE)}:}{
-    Returns the DuckDBTable containing either WKT if \code{geojson = FALSE} or
-    GeoJSON if \code{geojson = TRUE} representations of geometries.
-  }
-  \item{\code{st_boundary(x)}:}{
-    Returns a DuckDBTable containing the boundaries of geometries.
-  }
-  \item{\code{st_centroid(x)}:}{
-    Returns a DuckDBTable containing the centroids of geometries.
-  }
-  \item{\code{st_convex_hull(x)}:}{
-    Returns a DuckDBTable containing the convex hulls of geometries.
-  }
-  \item{\code{st_exterior_ring(x)}:}{
-    Returns a DuckDBTable containing the exterior rings of geometries.
-  }
-  \item{\code{st_is_valid(x)}:}{
-    Returns a DuckDBTable containing logicals that indicate if the
-    geometries are valid.
-  }
-  \item{\code{st_line_merge(x, directed = FALSE)}:}{
-    Returns a DuckDBTable containing the merged lines of geometries,
-    optionally taking direction into account.
-  }
-  \item{\code{st_make_valid(x)}:}{
-    Returns a DuckDBTable containing valid geometries.
-  }
-  \item{\code{st_normalize(x)}:}{
-    Returns a DuckDBTable containing normalized geometries.
-  }
-  \item{\code{st_point_on_surface(x)}:}{
-    Returns a DuckDBTable containing a point on the surface of the input
-    geometry.
-  }
-  \item{\code{st_reverse(x)}:}{
-    Returns a DuckDBTable containing geometries with the vertice order
-    reversed.
   }
 }
 }

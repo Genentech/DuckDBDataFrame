@@ -100,6 +100,14 @@
 #'       \item{\code{FUN}}{function to be used to carry out the sweep}
 #'     }
 #'   }
+#'   \item{\code{pmax(..., na.rm = FALSE)}:}{
+#'     Returns the parallel maxima of multiple DuckDBTable objects.
+#'     All arguments must be DuckDBTable objects with compatible dimensions.
+#'   }
+#'   \item{\code{pmin(..., na.rm = FALSE)}:}{
+#'     Returns the parallel minima of multiple DuckDBTable objects.
+#'     All arguments must be DuckDBTable objects with compatible dimensions.
+#'   }
 #' }
 #'
 #' @section Character Methods:
@@ -170,6 +178,11 @@
 #'     Returns a DuckDBTable containing logicals indicating if strings end
 #'     with the specified suffix.
 #'   }
+#'   \item{\code{paste(..., sep = " ", collapse = NULL)}:}{
+#'     Concatenates multiple DuckDBTable objects column-wise using the
+#'     specified separator. The \code{collapse} argument is not supported.
+#'     All arguments must be DuckDBTable objects with compatible dimensions.
+#'   }
 #' }
 #'
 #' @section General Methods:
@@ -208,60 +221,6 @@
 #'   }
 #'   \item{\code{is_sparse(x)}:}{
 #'     Returns \code{TRUE} since data are stored in a sparse array representation.
-#'   }
-#' }
-#'
-#' @section Spatial Methods:
-#' In the code snippets below, \code{x} is a DuckDBTable object:
-#' \describe{
-#'   \item{\code{st_area(x)}:}{
-#'     Returns a DuckDBTable containing the areas of geometries.
-#'   }
-#'   \item{\code{st_as_binary(x, hex = FALSE)}:}{
-#'     Returns the DuckDBTable containing either WKB if \code{hex = FALSE} or
-#'     HEXWKB if \code{hex = TRUE} representations of geometries.
-#'   }
-#'   \item{\code{st_as_sfc(x, ..., crs = NA_integer_, GeoJSON = FALSE, WKB = FALSE)}:}{
-#'     Returns the DuckDBTable containing geometry types by parsing WKT
-#'     (or GeoJSON if \code{GeoJSON = TRUE}, or WKB if \code{WKB = TRUE}).
-#'   }
-#'   \item{\code{st_as_text(x, geojson = FALSE)}:}{
-#'     Returns the DuckDBTable containing either WKT if \code{geojson = FALSE} or
-#'     GeoJSON if \code{geojson = TRUE} representations of geometries.
-#'   }
-#'   \item{\code{st_boundary(x)}:}{
-#'     Returns a DuckDBTable containing the boundaries of geometries.
-#'   }
-#'   \item{\code{st_centroid(x)}:}{
-#'     Returns a DuckDBTable containing the centroids of geometries.
-#'   }
-#'   \item{\code{st_convex_hull(x)}:}{
-#'     Returns a DuckDBTable containing the convex hulls of geometries.
-#'   }
-#'   \item{\code{st_exterior_ring(x)}:}{
-#'     Returns a DuckDBTable containing the exterior rings of geometries.
-#'   }
-#'   \item{\code{st_is_valid(x)}:}{
-#'     Returns a DuckDBTable containing logicals that indicate if the
-#'     geometries are valid.
-#'   }
-#'   \item{\code{st_line_merge(x, directed = FALSE)}:}{
-#'     Returns a DuckDBTable containing the merged lines of geometries,
-#'     optionally taking direction into account.
-#'   }
-#'   \item{\code{st_make_valid(x)}:}{
-#'     Returns a DuckDBTable containing valid geometries.
-#'   }
-#'   \item{\code{st_normalize(x)}:}{
-#'     Returns a DuckDBTable containing normalized geometries.
-#'   }
-#'   \item{\code{st_point_on_surface(x)}:}{
-#'     Returns a DuckDBTable containing a point on the surface of the input
-#'     geometry.
-#'   }
-#'   \item{\code{st_reverse(x)}:}{
-#'     Returns a DuckDBTable containing geometries with the vertice order
-#'     reversed.
 #'   }
 #' }
 #'
@@ -308,6 +267,12 @@
 #' gsub,ANY,ANY,DuckDBTable-method
 #' startsWith,DuckDBTable-method
 #' endsWith,DuckDBTable-method
+#' paste2,DuckDBTable,DuckDBTable-method
+#' paste2,DuckDBTable,character-method
+#' paste2,character,DuckDBTable-method
+#' paste,DuckDBTable-method
+#' pmax,DuckDBTable-method
+#' pmin,DuckDBTable-method
 #'
 #' unique,DuckDBTable-method
 #' %in%,DuckDBTable,ANY-method
@@ -627,6 +592,76 @@ setMethod("IQR", "DuckDBTable", function(x, na.rm = FALSE, type = 7) {
     diff(quantile(x, c(0.25, 0.75), na.rm = na.rm, names = FALSE, type = type))
 })
 
+#' @importFrom stats setNames
+.pmaxTwoDuckDBTables <- function(x, y) {
+    if (!isTRUE(all.equal(x, y)) || ((ncol(x) > 1L) && (ncol(y) > 1L) && (ncol(x) != ncol(y)))) {
+        stop("can only perform operations with compatible objects")
+    }
+    comb <- cbind(x, y)
+    fin1 <- head(comb@datacols, ncol(x))
+    fin2 <- tail(comb@datacols, ncol(y))
+    fout <- if (ncol(x) >= ncol(y)) colnames(x) else colnames(y)
+    datacols <- setNames(as.expression(Map(function(a, b) call("greatest", a, b), fin1, fin2)), fout)
+    replaceSlots(comb, datacols = datacols, check = FALSE)
+}
+
+#' @export
+setMethod("pmax", "DuckDBTable", function(..., na.rm = FALSE) {
+    args <- list(...)
+    ans <- args[[1L]]
+    if (length(args) > 1L) {
+        for (i in 2:length(args)) {
+            if (is(args[[i]], "DuckDBTable")) {
+                ans <- .pmaxTwoDuckDBTables(ans, args[[i]])
+            } else if (is.atomic(args[[i]])) {
+                if (length(args[[i]]) != 1L) {
+                    stop("can only perform operations with scalar values")
+                }
+                datacols <- setNames(as.expression(Map(function(col) call("greatest", col, args[[i]]), ans@datacols)), colnames(ans))
+                ans <- replaceSlots(ans, datacols = datacols, check = FALSE)
+            } else {
+                stop("all arguments must be DuckDBTable objects or scalar values")
+            }
+        }
+    }
+    ans
+})
+
+#' @importFrom stats setNames
+.pminTwoDuckDBTables <- function(x, y) {
+    if (!isTRUE(all.equal(x, y)) || ((ncol(x) > 1L) && (ncol(y) > 1L) && (ncol(x) != ncol(y)))) {
+        stop("can only perform operations with compatible objects")
+    }
+    comb <- cbind(x, y)
+    fin1 <- head(comb@datacols, ncol(x))
+    fin2 <- tail(comb@datacols, ncol(y))
+    fout <- if (ncol(x) >= ncol(y)) colnames(x) else colnames(y)
+    datacols <- setNames(as.expression(Map(function(a, b) call("least", a, b), fin1, fin2)), fout)
+    replaceSlots(comb, datacols = datacols, check = FALSE)
+}
+
+#' @export
+setMethod("pmin", "DuckDBTable", function(..., na.rm = FALSE) {
+    args <- list(...)
+    ans <- args[[1L]]
+    if (length(args) > 1L) {
+        for (i in 2:length(args)) {
+            if (is(args[[i]], "DuckDBTable")) {
+                ans <- .pminTwoDuckDBTables(ans, args[[i]])
+            } else if (is.atomic(args[[i]])) {
+                if (length(args[[i]]) != 1L) {
+                    stop("can only perform operations with scalar values")
+                }
+                datacols <- setNames(as.expression(Map(function(col) call("least", col, args[[i]]), ans@datacols)), colnames(ans))
+                ans <- replaceSlots(ans, datacols = datacols, check = FALSE)
+            } else {
+                stop("all arguments must be DuckDBTable objects or scalar values")
+            }
+        }
+    }
+    ans
+})
+
 #' @export
 #' @importFrom DelayedArray sweep
 #' @importFrom dplyr left_join
@@ -783,6 +818,79 @@ setMethod("endsWith", "DuckDBTable", function(x, suffix) {
     tbl <- sql_call(x, "suffix", suffix)
     coltypes(tbl) <- rep.int("logical", ncol(tbl))
     tbl
+})
+
+#' @export
+setMethod("paste2", signature(x = "DuckDBTable", y = "DuckDBTable"), function(x, y) {
+    if (!isTRUE(all.equal(x, y)) || ((ncol(x) > 1L) && (ncol(y) > 1L) && (ncol(x) != ncol(y)))) {
+        stop("can only perform binary operations with compatible objects")
+    }
+    comb <- cbind(x, y)
+    fin1 <- head(comb@datacols, ncol(x))
+    fin2 <- tail(comb@datacols, ncol(y))
+    if (ncol(x) >= ncol(y)) {
+        fout <- colnames(x)
+    } else {
+        fout <- colnames(y)
+    }
+    datacols <- setNames(as.expression(Map(function(x, y) call("concat", x, y), fin1, fin2)), fout)
+    replaceSlots(comb, datacols = datacols, check = FALSE)
+})
+
+#' @export
+setMethod("paste2", signature(x = "DuckDBTable", y = "character"), function(x, y) {
+    if (length(y) != 1L) {
+        stop("can only perform binary operations with a scalar value")
+    }
+    datacols <- setNames(as.expression(Map(function(col) call("concat", col, y), x@datacols)), colnames(x))
+    replaceSlots(x, datacols = datacols, check = FALSE)
+})
+
+#' @export
+setMethod("paste2", signature(x = "character", y = "DuckDBTable"), function(x, y) {
+    if (length(x) != 1L) {
+        stop("can only perform binary operations with a scalar value")
+    }
+    datacols <- setNames(as.expression(Map(function(col) call("concat", x, col), y@datacols)), colnames(y))
+    replaceSlots(y, datacols = datacols, check = FALSE)
+})
+
+#' @importFrom stats setNames
+.pasteTwoDuckDBTables <- function(x, y, sep = " ") {
+    if (!isTRUE(all.equal(x, y)) || ((ncol(x) > 1L) && (ncol(y) > 1L) && (ncol(x) != ncol(y)))) {
+        stop("can only perform operations with compatible objects")
+    }
+    comb <- cbind(x, y)
+    fin1 <- head(comb@datacols, ncol(x))
+    fin2 <- tail(comb@datacols, ncol(y))
+    fout <- if (ncol(x) >= ncol(y)) colnames(x) else colnames(y)
+    datacols <- setNames(as.expression(Map(function(a, b) call("concat_ws", sep, a, b), fin1, fin2)), fout)
+    replaceSlots(comb, datacols = datacols, check = FALSE)
+}
+
+#' @export
+setMethod("paste", "DuckDBTable", function(..., sep = " ", collapse = NULL) {
+    if (!is.null(collapse)) {
+        stop("'collapse' is not supported for DuckDBTable")
+    }
+    args <- list(...)
+    ans <- args[[1L]]
+    if (length(args) > 1L) {
+        for (i in 2:length(args)) {
+            if (is(args[[i]], "DuckDBTable")) {
+                ans <- .pasteTwoDuckDBTables(ans, args[[i]], sep = sep)
+            } else if (is.atomic(args[[i]])) {
+                if (length(args[[i]]) != 1L) {
+                    stop("can only perform operations with scalar values")
+                }
+                datacols <- setNames(as.expression(Map(function(col) call("concat_ws", sep, col, args[[i]]), ans@datacols)), colnames(ans))
+                ans <- replaceSlots(ans, datacols = datacols, check = FALSE)
+            } else {
+                stop("all arguments must be DuckDBTable objects or scalar values")
+            }
+        }
+    }
+    ans
 })
 
 ### - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
