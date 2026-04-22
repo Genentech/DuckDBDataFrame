@@ -160,6 +160,7 @@ test_that("Other aggregate methods work as expected for a DuckDBColumn", {
 test_that("Character methods work as expected for a DuckDBColumn", {
     df <- DuckDBDataFrame(penguins_raw_path, datacols = colnames(penguins_raw))
     species <- df[["Species"]]
+    region <- df[["Region"]]
 
     checkDuckDBColumn(nchar(species), nchar(as.vector(species)))
     checkDuckDBColumn(tolower(species), tolower(as.vector(species)))
@@ -173,4 +174,30 @@ test_that("Character methods work as expected for a DuckDBColumn", {
     checkDuckDBColumn(gsub("a", "X", species), gsub("a", "X", as.vector(species)))
     checkDuckDBColumn(startsWith(species, "a"), startsWith(as.vector(species), "a"))
     checkDuckDBColumn(endsWith(species, "z"), endsWith(as.vector(species), "z"))
+    checkDuckDBColumn(paste2(species, region), paste2(as.vector(species), as.vector(region)))
+    checkDuckDBColumn(paste2(species, " suffix"), paste2(as.vector(species), " suffix"))
+    checkDuckDBColumn(paste2("prefix ", species), paste2("prefix ", as.vector(species)))
+})
+
+test_that("Variadic character methods work as expected for a DuckDBColumn", {
+    df <- DuckDBDataFrame(penguins_raw_path, datacols = colnames(penguins_raw))
+    species <- df[["Species"]]
+    region <- df[["Region"]]
+    island <- df[["Island"]]
+
+    checkDuckDBColumn(paste(species, region), paste(as.vector(species), as.vector(region)))
+    checkDuckDBColumn(paste(species, region, sep = "-"), paste(as.vector(species), as.vector(region), sep = "-"))
+    checkDuckDBColumn(paste(species, region, island), paste(as.vector(species), as.vector(region), as.vector(island)))
+})
+
+test_that("Variadic numeric methods work as expected for a DuckDBColumn", {
+    df <- DuckDBDataFrame(penguins_raw_path, datacols = colnames(penguins_raw))
+    culmen_length <- df[["Culmen Length (mm)"]]
+    culmen_depth <- df[["Culmen Depth (mm)"]]
+    flipper_length <- df[["Flipper Length (mm)"]]
+
+    checkDuckDBColumn(pmax(culmen_length, culmen_depth), pmax(as.vector(culmen_length), as.vector(culmen_depth)))
+    checkDuckDBColumn(pmin(culmen_length, culmen_depth), pmin(as.vector(culmen_length), as.vector(culmen_depth)))
+    checkDuckDBColumn(pmax(culmen_length, culmen_depth, flipper_length), pmax(as.vector(culmen_length), as.vector(culmen_depth), as.vector(flipper_length)))
+    checkDuckDBColumn(pmin(culmen_length, culmen_depth, flipper_length), pmin(as.vector(culmen_length), as.vector(culmen_depth), as.vector(flipper_length)))
 })

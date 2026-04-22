@@ -254,4 +254,26 @@ test_that("Character methods work as expected for a DuckDBTable", {
     checkDuckDBTable(gsub("a", "X", tbl), endoapply(penguins, gsub, pattern = "a", replacement = "X"))
     checkDuckDBTable(startsWith(tbl, "a"), endoapply(penguins, startsWith, prefix = "a"))
     checkDuckDBTable(endsWith(tbl, "z"), endoapply(penguins, endsWith, suffix = "z"))
+    checkDuckDBTable(paste2(tbl, tbl), as.data.frame(mapply(paste2, penguins, penguins)))
+    checkDuckDBTable(paste2(tbl, " suffix"), endoapply(penguins, paste2, y = " suffix"))
+    checkDuckDBTable(paste2("prefix ", tbl), endoapply(penguins, paste2, x = "prefix "))
+})
+
+test_that("Variadic character methods work as expected for a DuckDBTable", {
+    tbl <- DuckDBTable(penguins_raw_path, datacols = c("studyName", "Species", "Region"))
+    penguins <- penguins_raw[, c("studyName", "Species", "Region")]
+
+    checkDuckDBTable(paste(tbl, tbl), as.data.frame(mapply(paste, penguins, penguins)))
+    checkDuckDBTable(paste(tbl, tbl, sep = "-"), as.data.frame(mapply(paste, penguins, penguins, MoreArgs = list(sep = "-"))))
+    checkDuckDBTable(paste(tbl, tbl, tbl), as.data.frame(mapply(paste, penguins, penguins, penguins)))
+})
+
+test_that("Variadic numeric methods work as expected for a DuckDBTable", {
+    tbl <- DuckDBTable(penguins_raw_path, datacols = c("Culmen Length (mm)", "Culmen Depth (mm)", "Flipper Length (mm)"))
+    penguins <- penguins_raw[, c("Culmen Length (mm)", "Culmen Depth (mm)", "Flipper Length (mm)")]
+
+    checkDuckDBTable(pmax(tbl, tbl), as.data.frame(mapply(pmax, penguins, penguins)))
+    checkDuckDBTable(pmin(tbl, tbl), as.data.frame(mapply(pmin, penguins, penguins)))
+    checkDuckDBTable(pmax(tbl, tbl, tbl), as.data.frame(mapply(pmax, penguins, penguins, penguins)))
+    checkDuckDBTable(pmin(tbl, tbl, tbl), as.data.frame(mapply(pmin, penguins, penguins, penguins)))
 })

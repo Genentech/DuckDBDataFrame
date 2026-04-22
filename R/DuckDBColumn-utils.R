@@ -88,6 +88,14 @@
 #'         detailed in \code{\link[stats]{quantile}}.}
 #'     }
 #'   }
+#'   \item{\code{pmax(..., na.rm = FALSE)}:}{
+#'     Returns the parallel maxima of multiple DuckDBColumn objects.
+#'     All arguments must be DuckDBColumn objects with compatible dimensions.
+#'   }
+#'   \item{\code{pmin(..., na.rm = FALSE)}:}{
+#'     Returns the parallel minima of multiple DuckDBColumn objects.
+#'     All arguments must be DuckDBColumn objects with compatible dimensions.
+#'   }
 #' }
 #'
 #' @section Character Methods:
@@ -158,6 +166,11 @@
 #'     Returns a DuckDBColumn containing logicals indicating if strings end
 #'     with the specified suffix.
 #'   }
+#'   \item{\code{paste(..., sep = " ", collapse = NULL)}:}{
+#'     Concatenates multiple DuckDBColumn objects using the specified separator.
+#'     The \code{collapse} argument is not supported.
+#'     All arguments must be DuckDBColumn objects with compatible dimensions.
+#'   }
 #' }
 #'
 #' @section General Methods:
@@ -187,64 +200,6 @@
 #'   }
 #' }
 #'
-#' @section Spatial Methods:
-#' In the code snippets below, \code{x} is a DuckDBColumn object:
-#' \describe{
-#'   \item{\code{st_area(x)}:}{
-#'     Returns a DuckDBColumn containing the areas of geometries.
-#'   }
-#'   \item{\code{st_as_binary(x, hex = FALSE)}:}{
-#'     Returns the DuckDBColumn containing either WKB if \code{hex = FALSE} or
-#'     HEXWKB if \code{hex = TRUE} representations of geometries.
-#'   }
-#'   \item{\code{st_as_sfc(x, ..., crs = NA_integer_, GeoJSON = FALSE, WKB = FALSE)}:}{
-#'     Returns a DuckDBColumn of geometry type by parsing WKT (or GeoJSON if
-#'     \code{GeoJSON = TRUE}, or WKB if \code{WKB = TRUE}).
-#'   }
-#'   \item{\code{st_as_text(x, geojson = FALSE)}:}{
-#'     Returns the DuckDBColumn containing either WKT if \code{geojson = FALSE} or
-#'     GeoJSON if \code{geojson = TRUE} representations of geometries.
-#'   }
-#'   \item{\code{st_boundary(x)}:}{
-#'     Returns a DuckDBColumn containing the boundaries of geometries.
-#'   }
-#'   \item{\code{st_centroid(x)}:}{
-#'     Returns a DuckDBColumn containing the centroids of geometries.
-#'   }
-#'   \item{\code{st_convex_hull(x)}:}{
-#'     Returns a DuckDBColumn containing the convex hulls of geometries.
-#'   }
-#'   \item{\code{st_coordinates(x)}:}{
-#'     Returns a DuckDBDataFrame containing X, Y, and potentially Z and M
-#'     coordinate columns when x contains points.
-#'   }
-#'   \item{\code{st_exterior_ring(x)}:}{
-#'     Returns a DuckDBColumn containing the exterior rings of geometries.
-#'   }
-#'   \item{\code{st_is_valid(x)}:}{
-#'     Returns a DuckDBColumn containing logicals that indicate if the
-#'     geometries are valid.
-#'   }
-#'   \item{\code{st_line_merge(x, directed = FALSE)}:}{
-#'     Returns a DuckDBColumn containing the merged lines of geometries,
-#'     optionally taking direction into account.
-#'   }
-#'   \item{\code{st_make_valid(x)}:}{
-#'     Returns a DuckDBColumn containing valid geometries.
-#'   }
-#'   \item{\code{st_normalize(x)}:}{
-#'     Returns a DuckDBColumn containing normalized geometries.
-#'   }
-#'   \item{\code{st_point_on_surface(x)}:}{
-#'     Returns a DuckDBColumn containing a point on the surface of the input
-#'     geometry.
-#'   }
-#'   \item{\code{st_reverse(x)}:}{
-#'     Returns a DuckDBColumn containing geometries with the vertice order
-#'     reversed.
-#'   }
-#' }
-#'
 #' @author Patrick Aboyoun
 #'
 #' @aliases
@@ -269,6 +224,8 @@
 #' quantile.DuckDBColumn
 #' mad,DuckDBColumn-method
 #' IQR,DuckDBColumn-method
+#' pmax,DuckDBColumn-method
+#' pmin,DuckDBColumn-method
 #'
 #' nchar,DuckDBColumn-method
 #' tolower,DuckDBColumn-method
@@ -281,6 +238,10 @@
 #' gsub,ANY,ANY,DuckDBColumn-method
 #' startsWith,DuckDBColumn-method
 #' endsWith,DuckDBColumn-method
+#' paste2,DuckDBColumn,DuckDBColumn-method
+#' paste2,DuckDBColumn,character-method
+#' paste2,character,DuckDBColumn-method
+#' paste,DuckDBColumn-method
 #'
 #' unique,DuckDBColumn-method
 #' %in%,DuckDBColumn,ANY-method
@@ -424,6 +385,24 @@ setMethod("IQR", "DuckDBColumn", function(x, na.rm = FALSE, type = 7) {
     callGeneric(x@table, type = type)
 })
 
+#' @export
+setMethod("pmax", "DuckDBColumn", function(..., na.rm = FALSE) {
+    args <- list(...)
+    table_args <- lapply(args, function(a) {
+        if (is(a, "DuckDBColumn")) a@table else a
+    })
+    replaceSlots(args[[1L]], table = do.call(callGeneric, c(table_args, list(na.rm = na.rm))), check = FALSE)
+})
+
+#' @export
+setMethod("pmin", "DuckDBColumn", function(..., na.rm = FALSE) {
+    args <- list(...)
+    table_args <- lapply(args, function(a) {
+        if (is(a, "DuckDBColumn")) a@table else a
+    })
+    replaceSlots(args[[1L]], table = do.call(callGeneric, c(table_args, list(na.rm = na.rm))), check = FALSE)
+})
+
 ### - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 ### Character methods
 ###
@@ -491,6 +470,30 @@ setMethod("startsWith", "DuckDBColumn", function(x, prefix) {
 #' @importMethodsFrom IRanges endsWith
 setMethod("endsWith", "DuckDBColumn", function(x, suffix) {
     replaceSlots(x, table = callGeneric(x@table, suffix), check = FALSE)
+})
+
+#' @export
+setMethod("paste2", signature(x = "DuckDBColumn", y = "DuckDBColumn"), function(x, y) {
+    replaceSlots(x, table = callGeneric(x@table, y@table), check = FALSE)
+})
+
+#' @export
+setMethod("paste2", signature(x = "DuckDBColumn", y = "character"), function(x, y) {
+    replaceSlots(x, table = callGeneric(x@table, y), check = FALSE)
+})
+
+#' @export
+setMethod("paste2", signature(x = "character", y = "DuckDBColumn"), function(x, y) {
+    replaceSlots(y, table = callGeneric(x, y@table), check = FALSE)
+})
+
+#' @export
+setMethod("paste", "DuckDBColumn", function(..., sep = " ", collapse = NULL) {
+    args <- list(...)
+    table_args <- lapply(args, function(a) {
+        if (is(a, "DuckDBColumn")) a@table else a
+    })
+    replaceSlots(args[[1L]], table = do.call(callGeneric, c(table_args, list(sep = sep, collapse = collapse))), check = FALSE)
 })
 
 ### - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
