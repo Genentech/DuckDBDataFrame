@@ -21,7 +21,6 @@
 \alias{quantile.DuckDBTable}
 \alias{mad,DuckDBTable-method}
 \alias{IQR,DuckDBTable-method}
-\alias{sweep,DuckDBTable-method}
 \alias{nchar,DuckDBTable-method}
 \alias{tolower,DuckDBTable-method}
 \alias{toupper,DuckDBTable-method}
@@ -138,18 +137,6 @@ In the code snippets below, \code{x} is a DuckDBTable object:
     \describe{
       \item{\code{type}}{Either 1 or 7 that specifies the quantile algorithm
         detailed in \code{\link[stats]{quantile}}.}
-    }
-  }
-  \item{\code{sweep(x, MARGIN, STATS, FUN = "/")}:}{
-    Sweeps out array summaries from \code{x}. Applies \code{FUN} to each
-    element of \code{x} using the corresponding value from \code{STATS}
-    based on \code{MARGIN}.
-    \describe{
-      \item{\code{MARGIN}}{integer specifying the dimension (1 for rows,
-        2 for columns)}
-      \item{\code{STATS}}{numeric vector with length equal to the extent
-        of dimension \code{MARGIN}}
-      \item{\code{FUN}}{function to be used to carry out the sweep}
     }
   }
   \item{\code{pmax(..., na.rm = FALSE)}:}{

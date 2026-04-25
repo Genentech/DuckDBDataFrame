@@ -88,18 +88,6 @@
 #'         detailed in \code{\link[stats]{quantile}}.}
 #'     }
 #'   }
-#'   \item{\code{sweep(x, MARGIN, STATS, FUN = "/")}:}{
-#'     Sweeps out array summaries from \code{x}. Applies \code{FUN} to each
-#'     element of \code{x} using the corresponding value from \code{STATS}
-#'     based on \code{MARGIN}.
-#'     \describe{
-#'       \item{\code{MARGIN}}{integer specifying the dimension (1 for rows,
-#'         2 for columns)}
-#'       \item{\code{STATS}}{numeric vector with length equal to the extent
-#'         of dimension \code{MARGIN}}
-#'       \item{\code{FUN}}{function to be used to carry out the sweep}
-#'     }
-#'   }
 #'   \item{\code{pmax(..., na.rm = FALSE)}:}{
 #'     Returns the parallel maxima of multiple DuckDBTable objects.
 #'     All arguments must be DuckDBTable objects with compatible dimensions.
@@ -254,7 +242,6 @@
 #' quantile.DuckDBTable
 #' mad,DuckDBTable-method
 #' IQR,DuckDBTable-method
-#' sweep,DuckDBTable-method
 #'
 #' nchar,DuckDBTable-method
 #' tolower,DuckDBTable-method
@@ -660,41 +647,6 @@ setMethod("pmin", "DuckDBTable", function(..., na.rm = FALSE) {
         }
     }
     ans
-})
-
-#' @export
-#' @importFrom DelayedArray sweep
-#' @importFrom dplyr left_join
-#' @importFrom S4Vectors endoapply isSingleNumber
-#' @importFrom stats setNames
-setMethod("sweep", "DuckDBTable",
-function(x, MARGIN, STATS, FUN = "/", check.margin = TRUE, ...) {
-    nk <- nkey(x)
-    if (nk < 2L) {
-        stop("'x' must be an array of at least two dimensions")
-    }
-    if (!isSingleNumber(MARGIN) || MARGIN < 1L || MARGIN > nk) {
-        stop("'MARGIN' must be between 1 and ", nk)
-    }
-    if (length(x@datacols) != 1L) {
-        stop("sweep requires a single datacols")
-    }
-
-    levels <- x@keycols[[MARGIN]]
-    if (length(STATS) != length(levels)) {
-        stop("length of 'STATS' (", length(STATS), ") must equal the extent ",
-             "of dimension ", MARGIN, " (", length(levels), ")")
-    }
-
-    key <- names(x@keycols)[MARGIN]
-    conn <- tblconn(x, select = FALSE)
-    stats <- tail(make.unique(c(colnames(conn), "__sweep_stats__"), sep = "_"), 1L)
-    df <- setNames(data.frame(levels, STATS), c(key, stats))
-
-    conn <- left_join(conn, df, by = key, copy = TRUE)
-
-    datacols <- endoapply(x@datacols, function(y) call(FUN, call("(", y), as.name(stats)))
-    replaceSlots(x, conn = conn, datacols = datacols, check = FALSE)
 })
 
 ### - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
