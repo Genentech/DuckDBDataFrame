@@ -57,30 +57,29 @@
 #'
 #' @author Patrick Aboyoun
 #'
-#' @aliases
-#' DuckDBColumn-class
+#' @aliases DuckDBColumn-class
 #'
-#' dbconn,DuckDBColumn-method
-#' tblconn,DuckDBColumn-method
-#' .keycols,DuckDBColumn-method
-#' .has_row_number,DuckDBColumn-method
-#' dimtbls,DuckDBColumn-method
-#' dimtbls<-,DuckDBColumn-method
-#' length,DuckDBColumn-method
-#' names,DuckDBColumn-method
-#' names<-,DuckDBColumn-method
-#' type,DuckDBColumn-method
-#' type<-,DuckDBColumn-method
+#' @aliases dbconn,DuckDBColumn-method
+#' @aliases tblconn,DuckDBColumn-method
+#' @aliases .keycols,DuckDBColumn-method
+#' @aliases .has_row_number,DuckDBColumn-method
+#' @aliases dimtbls,DuckDBColumn-method
+#' @aliases dimtbls<-,DuckDBColumn-method
+#' @aliases length,DuckDBColumn-method
+#' @aliases names,DuckDBColumn-method
+#' @aliases names<-,DuckDBColumn-method
+#' @aliases type,DuckDBColumn-method
+#' @aliases type<-,DuckDBColumn-method
 #'
-#' extractROWS,DuckDBColumn,ANY-method
-#' head,DuckDBColumn-method
-#' tail,DuckDBColumn-method
+#' @aliases extractROWS,DuckDBColumn,ANY-method
+#' @aliases head,DuckDBColumn-method
+#' @aliases tail,DuckDBColumn-method
 #'
-#' as.vector,DuckDBColumn-method
-#' realize,DuckDBColumn-method
+#' @aliases as.vector,DuckDBColumn-method
+#' @aliases realize,DuckDBColumn-method
 #'
-#' show,DuckDBColumn-method
-#' showAsCell,DuckDBColumn-method
+#' @aliases show,DuckDBColumn-method
+#' @aliases showAsCell,DuckDBColumn-method
 #'
 #' @seealso
 #' \itemize{

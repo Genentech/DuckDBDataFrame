@@ -182,36 +182,35 @@
 #' combined2 <- cbind(df, some_new_name=df[,1])
 #' class(combined2)
 #'
-#' @aliases
-#' DuckDBDataFrame-class
+#' @aliases DuckDBDataFrame-class
 #'
-#' length,DuckDBDataFrame-method
-#' names,DuckDBDataFrame-method
-#' rownames<-,DuckDBDataFrame-method
-#' colnames<-,DuckDBDataFrame-method
-#' names<-,DuckDBDataFrame-method
+#' @aliases length,DuckDBDataFrame-method
+#' @aliases names,DuckDBDataFrame-method
+#' @aliases rownames<-,DuckDBDataFrame-method
+#' @aliases colnames<-,DuckDBDataFrame-method
+#' @aliases names<-,DuckDBDataFrame-method
 #'
-#' DuckDBDataFrame
+#' @aliases DuckDBDataFrame
 #'
-#' [[,DuckDBDataFrame-method
-#' [,DuckDBDataFrame,ANY,ANY,ANY-method
-#' replaceROWS,DuckDBDataFrame-method
-#' replaceCOLS,DuckDBDataFrame-method
-#' [[<-,DuckDBDataFrame-method
-#' normalizeSingleBracketReplacementValue,DuckDBDataFrame-method
-#' subset,DuckDBDataFrame-method
+#' @aliases [[,DuckDBDataFrame-method
+#' @aliases [,DuckDBDataFrame,ANY,ANY,ANY-method
+#' @aliases replaceROWS,DuckDBDataFrame-method
+#' @aliases replaceCOLS,DuckDBDataFrame-method
+#' @aliases [[<-,DuckDBDataFrame-method
+#' @aliases normalizeSingleBracketReplacementValue,DuckDBDataFrame-method
+#' @aliases subset,DuckDBDataFrame-method
 #'
-#' cbind,DuckDBDataFrame-method
-#' cbind.DuckDBDataFrame
+#' @aliases cbind,DuckDBDataFrame-method
+#' @aliases cbind.DuckDBDataFrame
 #'
-#' as.data.frame,DuckDBDataFrame-method
-#' as.matrix,DuckDBDataFrame-method
-#' coerce,DuckDBDataFrame,DFrame-method
-#' realize,DuckDBDataFrame-method
+#' @aliases as.data.frame,DuckDBDataFrame-method
+#' @aliases as.matrix,DuckDBDataFrame-method
+#' @aliases coerce,DuckDBDataFrame,DFrame-method
+#' @aliases realize,DuckDBDataFrame-method
 #'
-#' .makePrettyCharacterMatrixForDisplay
-#' makeNakedCharacterMatrixForDisplay,DuckDBDataFrame-method
-#' show,DuckDBDataFrame-method
+#' @aliases .makePrettyCharacterMatrixForDisplay
+#' @aliases makeNakedCharacterMatrixForDisplay,DuckDBDataFrame-method
+#' @aliases show,DuckDBDataFrame-method
 #'
 #' @seealso
 #' \itemize{

@@ -30,9 +30,8 @@ reg.finalizer(.duckdb, function(env) {
 #' releaseDuckDBConn()
 #' }
 #'
-#' @aliases
-#' acquireDuckDBConn
-#' releaseDuckDBConn
+#' @aliases acquireDuckDBConn
+#' @aliases releaseDuckDBConn
 #'
 #' @keywords IO
 #'

@@ -128,48 +128,47 @@
 #'
 #' tbl <- DuckDBTable(tf, datacols = "fate", keycols = c("Class", "Sex", "Age", "Survived"))
 #'
-#' @aliases
-#' DuckDBTable-class
+#' @aliases DuckDBTable-class
 #'
-#' .set_row_number
-#' dbconn,DuckDBTable-method
-#' tblconn,DuckDBTable-method
-#' .keycols
-#' .keycols,DuckDBTable-method
-#' .has_row_number
-#' .has_row_number,DuckDBTable-method
-#' nrow,DuckDBTable-method
-#' ncol,DuckDBTable-method
-#' rownames,DuckDBTable-method
-#' colnames,DuckDBTable-method
-#' colnames<-,DuckDBTable-method
-#' coltypes
-#' coltypes,DuckDBTable-method
-#' coltypes<-
-#' coltypes<-,DuckDBTable-method
-#' dimtbls
-#' dimtbls,DuckDBTable-method
-#' dimtbls<-
-#' dimtbls<-,DuckDBTable-method
+#' @aliases .set_row_number
+#' @aliases dbconn,DuckDBTable-method
+#' @aliases tblconn,DuckDBTable-method
+#' @aliases .keycols
+#' @aliases .keycols,DuckDBTable-method
+#' @aliases .has_row_number
+#' @aliases .has_row_number,DuckDBTable-method
+#' @aliases nrow,DuckDBTable-method
+#' @aliases ncol,DuckDBTable-method
+#' @aliases rownames,DuckDBTable-method
+#' @aliases colnames,DuckDBTable-method
+#' @aliases colnames<-,DuckDBTable-method
+#' @aliases coltypes
+#' @aliases coltypes,DuckDBTable-method
+#' @aliases coltypes<-
+#' @aliases coltypes<-,DuckDBTable-method
+#' @aliases dimtbls
+#' @aliases dimtbls,DuckDBTable-method
+#' @aliases dimtbls<-
+#' @aliases dimtbls<-,DuckDBTable-method
 #'
-#' DuckDBTable
+#' @aliases DuckDBTable
 #'
-#' all.equal.DuckDBTable
+#' @aliases all.equal.DuckDBTable
 #'
-#' [,DuckDBTable,ANY,ANY,ANY-method
-#' extractROWS,DuckDBTable,ANY-method
-#' extractCOLS,DuckDBTable-method
-#' head,DuckDBTable-method
-#' tail,DuckDBTable-method
-#' subset,DuckDBTable-method
+#' @aliases [,DuckDBTable,ANY,ANY,ANY-method
+#' @aliases extractROWS,DuckDBTable,ANY-method
+#' @aliases extractCOLS,DuckDBTable-method
+#' @aliases head,DuckDBTable-method
+#' @aliases tail,DuckDBTable-method
+#' @aliases subset,DuckDBTable-method
 #'
-#' bindROWS,DuckDBTable-method
-#' bindCOLS,DuckDBTable-method
+#' @aliases bindROWS,DuckDBTable-method
+#' @aliases bindCOLS,DuckDBTable-method
 #'
-#' as.data.frame,DuckDBTable-method
-#' as.env,DuckDBTable-method
+#' @aliases as.data.frame,DuckDBTable-method
+#' @aliases as.env,DuckDBTable-method
 #'
-#' show,DuckDBTable-method
+#' @aliases show,DuckDBTable-method
 #'
 #' @seealso
 #' \itemize{
@@ -659,7 +658,6 @@ setReplaceMethod("colnames", "DuckDBTable", function(x, value) {
 
 #' @importFrom DBI dbGetQuery
 #' @importFrom dbplyr sql_render
-#' @importFrom dplyr mutate
 .get_duckdb_schema <- function(conn, datacols) {
     if (!inherits(conn, "tbl_duckdb_connection")) {
         return(character(0L))
@@ -667,7 +665,7 @@ setReplaceMethod("colnames", "DuckDBTable", function(x, value) {
 
     tryCatch({
         # Apply datacols if provided to get schema of mutated connection
-        conn <- mutate(conn, !!!as.list(datacols))
+        conn <- .mutate_datacols(conn, datacols)
 
         # Get the SQL representation of the connection
         sql <- sql_render(conn)

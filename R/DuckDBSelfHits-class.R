@@ -197,40 +197,39 @@
 #' # Convert to sparse matrix (materializes)
 #' mat <- as(hits, "dgCMatrix")
 #'
-#' @aliases
-#' DuckDBSelfHits-class
+#' @aliases DuckDBSelfHits-class
 #'
-#' dbconn,DuckDBSelfHits-method
-#' tblconn,DuckDBSelfHits-method
-#' .keycols,DuckDBSelfHits-method
-#' .has_row_number,DuckDBSelfHits-method
-#' dimtbls,DuckDBSelfHits-method
-#' dimtbls<-,DuckDBSelfHits-method
-#' length,DuckDBSelfHits-method
-#' from,DuckDBSelfHits-method
-#' to,DuckDBSelfHits-method
-#' countLnodeHits,DuckDBSelfHits-method
-#' countRnodeHits,DuckDBSelfHits-method
-#' elementMetadata,DuckDBSelfHits-method
-#' elementMetadata<-,DuckDBSelfHits-method
+#' @aliases dbconn,DuckDBSelfHits-method
+#' @aliases tblconn,DuckDBSelfHits-method
+#' @aliases .keycols,DuckDBSelfHits-method
+#' @aliases .has_row_number,DuckDBSelfHits-method
+#' @aliases dimtbls,DuckDBSelfHits-method
+#' @aliases dimtbls<-,DuckDBSelfHits-method
+#' @aliases length,DuckDBSelfHits-method
+#' @aliases from,DuckDBSelfHits-method
+#' @aliases to,DuckDBSelfHits-method
+#' @aliases countLnodeHits,DuckDBSelfHits-method
+#' @aliases countRnodeHits,DuckDBSelfHits-method
+#' @aliases elementMetadata,DuckDBSelfHits-method
+#' @aliases elementMetadata<-,DuckDBSelfHits-method
 #'
-#' DuckDBSelfHits
+#' @aliases DuckDBSelfHits
 #'
-#' extractROWS,DuckDBSelfHits,ANY-method
-#' [,DuckDBSelfHits,ANY,ANY,ANY-method
-#' extractNODES
-#' extractNODES,DuckDBSelfHits-method
-#' head,DuckDBSelfHits-method
-#' tail,DuckDBSelfHits-method
+#' @aliases extractROWS,DuckDBSelfHits,ANY-method
+#' @aliases [,DuckDBSelfHits,ANY,ANY,ANY-method
+#' @aliases extractNODES
+#' @aliases extractNODES,DuckDBSelfHits-method
+#' @aliases head,DuckDBSelfHits-method
+#' @aliases tail,DuckDBSelfHits-method
 #'
-#' coerce,DuckDBSelfHits,DuckDBDataFrame-method
-#' coerce,DuckDBSelfHits,DFrame-method
-#' as.data.frame,DuckDBSelfHits-method
-#' coerce,DuckDBSelfHits,SelfHits-method
-#' coerce,DuckDBSelfHits,dgCMatrix-method
-#' realize,DuckDBSelfHits-method
+#' @aliases coerce,DuckDBSelfHits,DuckDBDataFrame-method
+#' @aliases coerce,DuckDBSelfHits,DFrame-method
+#' @aliases as.data.frame,DuckDBSelfHits-method
+#' @aliases coerce,DuckDBSelfHits,SelfHits-method
+#' @aliases coerce,DuckDBSelfHits,dgCMatrix-method
+#' @aliases realize,DuckDBSelfHits-method
 #'
-#' show,DuckDBSelfHits-method
+#' @aliases show,DuckDBSelfHits-method
 #'
 #' @seealso
 #' \itemize{

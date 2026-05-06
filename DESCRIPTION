@@ -1,6 +1,6 @@
 Package: DuckDBDataFrame
-Version: 0.9.12
-Date: 2026-04-25
+Version: 0.9.13
+Date: 2026-05-05
 Title: DuckDB-Backed DataFrame and Table Structures
 Description:
     Provides DuckDB-backed implementations of core tabular data structures
@@ -46,7 +46,6 @@ biocViews:
     Infrastructure,
     Software
 VignetteBuilder: knitr
-RoxygenNote: 7.3.3
 Encoding: UTF-8
 Collate:
     'sql_fun.R'
@@ -64,3 +63,4 @@ Collate:
     'DuckDBDataFrameList-class.R'
     'DuckDBSelfHits-class.R'
     'DuckDBTransposedDataFrame-class.R'
+Config/roxygen2/version: 8.0.0

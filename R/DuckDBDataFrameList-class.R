@@ -126,35 +126,34 @@
 #' dflist <- split(df, df$cyl)
 #' dflist
 #'
-#' @aliases
-#' DuckDBDataFrameList-class
+#' @aliases DuckDBDataFrameList-class
 #'
-#' dbconn,DuckDBDataFrameList-method
-#' tblconn,DuckDBDataFrameList-method
-#' dimtbls,DuckDBDataFrameList-method
-#' dimtbls<-,DuckDBDataFrameList-method
-#' length,DuckDBDataFrameList-method
-#' names,DuckDBDataFrameList-method
-#' names<-,DuckDBDataFrameList-method
-#' elementNROWS,DuckDBDataFrameList-method
-#' ncols,DuckDBDataFrameList-method
-#' rownames<-,DuckDBDataFrameList-method
-#' colnames<-,DuckDBDataFrameList-method
-#' commonColnames,DuckDBDataFrameList-method
-#' columnMetadata,DuckDBDataFrameList-method
-#' columnMetadata<-,DuckDBDataFrameList-method
+#' @aliases dbconn,DuckDBDataFrameList-method
+#' @aliases tblconn,DuckDBDataFrameList-method
+#' @aliases dimtbls,DuckDBDataFrameList-method
+#' @aliases dimtbls<-,DuckDBDataFrameList-method
+#' @aliases length,DuckDBDataFrameList-method
+#' @aliases names,DuckDBDataFrameList-method
+#' @aliases names<-,DuckDBDataFrameList-method
+#' @aliases elementNROWS,DuckDBDataFrameList-method
+#' @aliases ncols,DuckDBDataFrameList-method
+#' @aliases rownames<-,DuckDBDataFrameList-method
+#' @aliases colnames<-,DuckDBDataFrameList-method
+#' @aliases commonColnames,DuckDBDataFrameList-method
+#' @aliases columnMetadata,DuckDBDataFrameList-method
+#' @aliases columnMetadata<-,DuckDBDataFrameList-method
 #'
-#' split,DuckDBDataFrame,DuckDBColumn-method
+#' @aliases split,DuckDBDataFrame,DuckDBColumn-method
 #'
-#' unlist,DuckDBDataFrameList-method
+#' @aliases unlist,DuckDBDataFrameList-method
 #'
-#' extractROWS,DuckDBDataFrameList,ANY-method
-#' getListElement,DuckDBDataFrameList-method
-#' head,DuckDBDataFrameList-method
-#' tail,DuckDBDataFrameList-method
+#' @aliases extractROWS,DuckDBDataFrameList,ANY-method
+#' @aliases getListElement,DuckDBDataFrameList-method
+#' @aliases head,DuckDBDataFrameList-method
+#' @aliases tail,DuckDBDataFrameList-method
 #'
-#' coerce,DuckDBDataFrameList,DFrameList-method
-#' realize,DuckDBDataFrameList-method
+#' @aliases coerce,DuckDBDataFrameList,DFrameList-method
+#' @aliases realize,DuckDBDataFrameList-method
 #'
 #' @seealso
 #' \itemize{

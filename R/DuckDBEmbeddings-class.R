@@ -90,25 +90,24 @@
 #'
 #' @author Patrick Aboyoun
 #'
-#' @aliases
-#' DuckDBEmbeddings-class
+#' @aliases DuckDBEmbeddings-class
 #'
-#' nrow,DuckDBEmbeddings-method
-#' ncol,DuckDBEmbeddings-method
-#' rownames,DuckDBEmbeddings-method
-#' rownames<-,DuckDBEmbeddings-method
-#' colnames,DuckDBEmbeddings-method
-#' colnames<-,DuckDBEmbeddings-method
+#' @aliases nrow,DuckDBEmbeddings-method
+#' @aliases ncol,DuckDBEmbeddings-method
+#' @aliases rownames,DuckDBEmbeddings-method
+#' @aliases rownames<-,DuckDBEmbeddings-method
+#' @aliases colnames,DuckDBEmbeddings-method
+#' @aliases colnames<-,DuckDBEmbeddings-method
 #'
-#' extractCOLS,DuckDBEmbeddings-method
-#' [,DuckDBEmbeddings,ANY,ANY,ANY-method
+#' @aliases extractCOLS,DuckDBEmbeddings-method
+#' @aliases [,DuckDBEmbeddings,ANY,ANY,ANY-method
 #'
-#' as.matrix,DuckDBEmbeddings-method
-#' as.list,DuckDBEmbeddings-method
-#' realize,DuckDBEmbeddings-method
+#' @aliases as.matrix,DuckDBEmbeddings-method
+#' @aliases as.list,DuckDBEmbeddings-method
+#' @aliases realize,DuckDBEmbeddings-method
 #'
-#' show,DuckDBEmbeddings-method
-#' showAsCell,DuckDBEmbeddings-method
+#' @aliases show,DuckDBEmbeddings-method
+#' @aliases showAsCell,DuckDBEmbeddings-method
 #'
 #' @seealso
 #' \itemize{

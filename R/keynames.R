@@ -17,18 +17,17 @@
 #' nkey
 #' showMethods("nkey")
 #'
-#' @aliases
-#' keynames
-#' keydimnames
-#' keydimnames<-
-#' nkey
-#' nkeydim
+#' @aliases keynames
+#' @aliases keydimnames
+#' @aliases keydimnames<-
+#' @aliases nkey
+#' @aliases nkeydim
 #'
-#' keynames,DuckDBTable-method
-#' keydimnames,DuckDBTable-method
-#' keydimnames<-,DuckDBTable-method
-#' nkey,DuckDBTable-method
-#' nkeydim,DuckDBTable-method
+#' @aliases keynames,DuckDBTable-method
+#' @aliases keydimnames,DuckDBTable-method
+#' @aliases keydimnames<-,DuckDBTable-method
+#' @aliases nkey,DuckDBTable-method
+#' @aliases nkeydim,DuckDBTable-method
 #'
 #' @keywords methods
 #'

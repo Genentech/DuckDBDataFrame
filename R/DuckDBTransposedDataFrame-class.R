@@ -66,21 +66,20 @@
 #' tdf[,1:5]
 #' tdf[1:5,]
 #'
-#' @aliases
-#' DuckDBTransposedDataFrame-class
+#' @aliases DuckDBTransposedDataFrame-class
 #'
-#' dbconn,DuckDBTransposedDataFrame-method
-#' tblconn,DuckDBTransposedDataFrame-method
-#' dimtbls,DuckDBTransposedDataFrame-method
-#' dimtbls<-,DuckDBTransposedDataFrame-method
+#' @aliases dbconn,DuckDBTransposedDataFrame-method
+#' @aliases tblconn,DuckDBTransposedDataFrame-method
+#' @aliases dimtbls,DuckDBTransposedDataFrame-method
+#' @aliases dimtbls<-,DuckDBTransposedDataFrame-method
 #'
-#' t,DuckDBDataFrame-method
-#' t.DuckDBDataFrame
+#' @aliases t,DuckDBDataFrame-method
+#' @aliases t.DuckDBDataFrame
 #'
-#' as.matrix,DuckDBTransposedDataFrame-method
-#' realize,DuckDBTransposedDataFrame-method
+#' @aliases as.matrix,DuckDBTransposedDataFrame-method
+#' @aliases realize,DuckDBTransposedDataFrame-method
 #'
-#' show,DuckDBTransposedDataFrame-method
+#' @aliases show,DuckDBTransposedDataFrame-method
 #'
 #' @seealso
 #' \itemize{

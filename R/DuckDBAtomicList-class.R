@@ -64,27 +64,26 @@
 #'
 #' @author Patrick Aboyoun
 #'
-#' @aliases
-#' DuckDBAtomicList-class
-#' DuckDBLogicalList-class
-#' DuckDBIntegerList-class
-#' DuckDBInteger64List-class
-#' DuckDBNumericList-class
-#' DuckDBCharacterList-class
-#' DuckDBFactorList-class
+#' @aliases DuckDBAtomicList-class
+#' @aliases DuckDBLogicalList-class
+#' @aliases DuckDBIntegerList-class
+#' @aliases DuckDBInteger64List-class
+#' @aliases DuckDBNumericList-class
+#' @aliases DuckDBCharacterList-class
+#' @aliases DuckDBFactorList-class
 #'
-#' elementNROWS,DuckDBAtomicList-method
+#' @aliases elementNROWS,DuckDBAtomicList-method
 #'
-#' extractROWS,DuckDBAtomicList,ANY-method
-#' getListElement,DuckDBAtomicList-method
-#' head,DuckDBAtomicList-method
-#' tail,DuckDBAtomicList-method
+#' @aliases extractROWS,DuckDBAtomicList,ANY-method
+#' @aliases getListElement,DuckDBAtomicList-method
+#' @aliases head,DuckDBAtomicList-method
+#' @aliases tail,DuckDBAtomicList-method
 #'
-#' as.list,DuckDBAtomicList-method
-#' realize,DuckDBAtomicList-method
+#' @aliases as.list,DuckDBAtomicList-method
+#' @aliases realize,DuckDBAtomicList-method
 #'
-#' show,DuckDBAtomicList-method
-#' showAsCell,DuckDBAtomicList-method
+#' @aliases show,DuckDBAtomicList-method
+#' @aliases showAsCell,DuckDBAtomicList-method
 #'
 #' @seealso
 #' \itemize{

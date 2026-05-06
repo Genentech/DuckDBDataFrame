@@ -202,53 +202,52 @@
 #'
 #' @author Patrick Aboyoun
 #'
-#' @aliases
-#' sql_call,DuckDBColumn-method
-#' sql_fun,DuckDBColumn-method
+#' @aliases sql_call,DuckDBColumn-method
+#' @aliases sql_fun,DuckDBColumn-method
 #'
-#' Ops,DuckDBColumn,DuckDBColumn-method
-#' Ops,DuckDBColumn,atomic-method
-#' Ops,atomic,DuckDBColumn-method
-#' Ops,DuckDBColumn,missing-method
-#' !,DuckDBColumn-method
-#' Math,DuckDBColumn-method
-#' Summary,DuckDBColumn-method
+#' @aliases Ops,DuckDBColumn,DuckDBColumn-method
+#' @aliases Ops,DuckDBColumn,atomic-method
+#' @aliases Ops,atomic,DuckDBColumn-method
+#' @aliases Ops,DuckDBColumn,missing-method
+#' @aliases !,DuckDBColumn-method
+#' @aliases Math,DuckDBColumn-method
+#' @aliases Summary,DuckDBColumn-method
 #'
-#' is.finite,DuckDBColumn-method
-#' is.infinite,DuckDBColumn-method
-#' is.nan,DuckDBColumn-method
-#' mean,DuckDBColumn-method
-#' var,DuckDBColumn,ANY-method
-#' sd,DuckDBColumn-method
-#' median.DuckDBColumn
-#' quantile.DuckDBColumn
-#' mad,DuckDBColumn-method
-#' IQR,DuckDBColumn-method
-#' pmax,DuckDBColumn-method
-#' pmin,DuckDBColumn-method
+#' @aliases is.finite,DuckDBColumn-method
+#' @aliases is.infinite,DuckDBColumn-method
+#' @aliases is.nan,DuckDBColumn-method
+#' @aliases mean,DuckDBColumn-method
+#' @aliases var,DuckDBColumn,ANY-method
+#' @aliases sd,DuckDBColumn-method
+#' @aliases median.DuckDBColumn
+#' @aliases quantile.DuckDBColumn
+#' @aliases mad,DuckDBColumn-method
+#' @aliases IQR,DuckDBColumn-method
+#' @aliases pmax,DuckDBColumn-method
+#' @aliases pmin,DuckDBColumn-method
 #'
-#' nchar,DuckDBColumn-method
-#' tolower,DuckDBColumn-method
-#' toupper,DuckDBColumn-method
-#' chartr,ANY,ANY,DuckDBColumn-method
-#' substr,DuckDBColumn-method
-#' substring,DuckDBColumn-method
-#' grepl,ANY,DuckDBColumn-method
-#' sub,ANY,ANY,DuckDBColumn-method
-#' gsub,ANY,ANY,DuckDBColumn-method
-#' startsWith,DuckDBColumn-method
-#' endsWith,DuckDBColumn-method
-#' paste2,DuckDBColumn,DuckDBColumn-method
-#' paste2,DuckDBColumn,character-method
-#' paste2,character,DuckDBColumn-method
-#' paste,DuckDBColumn-method
+#' @aliases nchar,DuckDBColumn-method
+#' @aliases tolower,DuckDBColumn-method
+#' @aliases toupper,DuckDBColumn-method
+#' @aliases chartr,ANY,ANY,DuckDBColumn-method
+#' @aliases substr,DuckDBColumn-method
+#' @aliases substring,DuckDBColumn-method
+#' @aliases grepl,ANY,DuckDBColumn-method
+#' @aliases sub,ANY,ANY,DuckDBColumn-method
+#' @aliases gsub,ANY,ANY,DuckDBColumn-method
+#' @aliases startsWith,DuckDBColumn-method
+#' @aliases endsWith,DuckDBColumn-method
+#' @aliases paste2,DuckDBColumn,DuckDBColumn-method
+#' @aliases paste2,DuckDBColumn,character-method
+#' @aliases paste2,character,DuckDBColumn-method
+#' @aliases paste,DuckDBColumn-method
 #'
-#' unique,DuckDBColumn-method
-#' %in%,DuckDBColumn,ANY-method
-#' table,DuckDBColumn-method
+#' @aliases unique,DuckDBColumn-method
+#' @aliases %in%,DuckDBColumn,ANY-method
+#' @aliases table,DuckDBColumn-method
 #'
-#' is_nonzero,DuckDBColumn-method
-#' nzcount,DuckDBColumn-method
+#' @aliases is_nonzero,DuckDBColumn-method
+#' @aliases nzcount,DuckDBColumn-method
 #'
 #' @seealso
 #' \itemize{

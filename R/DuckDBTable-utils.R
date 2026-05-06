@@ -220,56 +220,55 @@
 #'   \item \code{\link[S4Vectors]{RectangularData}} for the base class
 #' }
 #'
-#' @aliases
-#' sql_call,DuckDBTable-method
-#' sql_fun,DuckDBTable-method
+#' @aliases sql_call,DuckDBTable-method
+#' @aliases sql_fun,DuckDBTable-method
 #'
-#' Ops,DuckDBTable,DuckDBTable-method
-#' Ops,DuckDBTable,atomic-method
-#' Ops,atomic,DuckDBTable-method
-#' Ops,DuckDBTable,missing-method
-#' !,DuckDBTable-method
-#' Math,DuckDBTable-method
-#' Summary,DuckDBTable-method
+#' @aliases Ops,DuckDBTable,DuckDBTable-method
+#' @aliases Ops,DuckDBTable,atomic-method
+#' @aliases Ops,atomic,DuckDBTable-method
+#' @aliases Ops,DuckDBTable,missing-method
+#' @aliases !,DuckDBTable-method
+#' @aliases Math,DuckDBTable-method
+#' @aliases Summary,DuckDBTable-method
 #'
-#' is.finite,DuckDBTable-method
-#' is.infinite,DuckDBTable-method
-#' is.nan,DuckDBTable-method
-#' mean,DuckDBTable-method
-#' var,DuckDBTable,ANY-method
-#' sd,DuckDBTable-method
-#' median.DuckDBTable
-#' quantile.DuckDBTable
-#' mad,DuckDBTable-method
-#' IQR,DuckDBTable-method
+#' @aliases is.finite,DuckDBTable-method
+#' @aliases is.infinite,DuckDBTable-method
+#' @aliases is.nan,DuckDBTable-method
+#' @aliases mean,DuckDBTable-method
+#' @aliases var,DuckDBTable,ANY-method
+#' @aliases sd,DuckDBTable-method
+#' @aliases median.DuckDBTable
+#' @aliases quantile.DuckDBTable
+#' @aliases mad,DuckDBTable-method
+#' @aliases IQR,DuckDBTable-method
 #'
-#' nchar,DuckDBTable-method
-#' tolower,DuckDBTable-method
-#' toupper,DuckDBTable-method
-#' chartr,ANY,ANY,DuckDBTable-method
-#' substr,DuckDBTable-method
-#' substring,DuckDBTable-method
-#' grepl,ANY,DuckDBTable-method
-#' sub,ANY,ANY,DuckDBTable-method
-#' gsub,ANY,ANY,DuckDBTable-method
-#' startsWith,DuckDBTable-method
-#' endsWith,DuckDBTable-method
-#' paste2,DuckDBTable,DuckDBTable-method
-#' paste2,DuckDBTable,character-method
-#' paste2,character,DuckDBTable-method
-#' paste,DuckDBTable-method
-#' pmax,DuckDBTable-method
-#' pmin,DuckDBTable-method
+#' @aliases nchar,DuckDBTable-method
+#' @aliases tolower,DuckDBTable-method
+#' @aliases toupper,DuckDBTable-method
+#' @aliases chartr,ANY,ANY,DuckDBTable-method
+#' @aliases substr,DuckDBTable-method
+#' @aliases substring,DuckDBTable-method
+#' @aliases grepl,ANY,DuckDBTable-method
+#' @aliases sub,ANY,ANY,DuckDBTable-method
+#' @aliases gsub,ANY,ANY,DuckDBTable-method
+#' @aliases startsWith,DuckDBTable-method
+#' @aliases endsWith,DuckDBTable-method
+#' @aliases paste2,DuckDBTable,DuckDBTable-method
+#' @aliases paste2,DuckDBTable,character-method
+#' @aliases paste2,character,DuckDBTable-method
+#' @aliases paste,DuckDBTable-method
+#' @aliases pmax,DuckDBTable-method
+#' @aliases pmin,DuckDBTable-method
 #'
-#' unique,DuckDBTable-method
-#' %in%,DuckDBTable,ANY-method
-#' table,DuckDBTable-method
+#' @aliases unique,DuckDBTable-method
+#' @aliases %in%,DuckDBTable,ANY-method
+#' @aliases table,DuckDBTable-method
 #'
-#' elementNROWS,DuckDBTable-method
+#' @aliases elementNROWS,DuckDBTable-method
 #'
-#' is_nonzero,DuckDBTable-method
-#' nzcount,DuckDBTable-method
-#' is_sparse,DuckDBTable-method
+#' @aliases is_nonzero,DuckDBTable-method
+#' @aliases nzcount,DuckDBTable-method
+#' @aliases is_sparse,DuckDBTable-method
 #'
 #' @include DuckDBTable-class.R
 #' @include sql_call.R
