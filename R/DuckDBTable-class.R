@@ -225,6 +225,7 @@ setClass("DuckDBTable", contains = c("RectangularData", "OutOfMemoryObject"),
 #' @export
 setMethod("dbconn", "DuckDBTable", function(x) x@conn$src$con)
 
+#' @importFrom dbplyr lazy_select_query
 #' @importFrom dplyr mutate
 #' @importFrom rlang new_quosure
 #' @importFrom stats setNames
@@ -232,7 +233,11 @@ setMethod("dbconn", "DuckDBTable", function(x) x@conn$src$con)
 .mutate_datacols <- function(conn, datacols) {
     lazy_query <- conn[["lazy_query"]]
     k <- length(datacols)
-    if (inherits(lazy_query, "lazy_select_query") && (k > 1L)) {
+    if (k > 1L) {
+        if (!inherits(lazy_query, "lazy_select_query")) {
+            lazy_query <- lazy_select_query(lazy_query,
+                                            select_operation = "select")
+        }
         slist <- lazy_query[["select"]]
 
         # Create the tibble for the mutation
@@ -258,7 +263,6 @@ setMethod("dbconn", "DuckDBTable", function(x) x@conn$src$con)
     } else {
         conn <- mutate(conn, !!!as.list(datacols))
     }
-
 
     # Return the updated connection
     conn
