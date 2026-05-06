@@ -255,9 +255,6 @@ setMethod("dbconn", "DuckDBTable", function(x) x@conn$src$con)
         slist <- slist[!(slist[["name"]] %in% klist[["name"]]), ]
         slist <- rbind(slist, klist)
         lazy_query[["select"]] <- slist
-        if (inherits(lazy_query[["x"]], "lazy_query")) {
-            lazy_query[["x"]][["vars"]] <- slist[["name"]]
-        }
 
         conn[["lazy_query"]] <- lazy_query
     } else {
