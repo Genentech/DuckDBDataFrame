@@ -659,25 +659,19 @@ setReplaceMethod("colnames", "DuckDBTable", function(x, value) {
 
 #' @importFrom DBI dbGetQuery
 #' @importFrom dbplyr sql_render
+#' @importFrom dplyr select
 .get_duckdb_schema <- function(conn, datacols) {
     if (!inherits(conn, "tbl_duckdb_connection")) {
         return(character(0L))
     }
 
     tryCatch({
-        # Apply datacols if provided to get schema of mutated connection
         conn <- .mutate_datacols(conn, datacols)
-
-        # Get the SQL representation of the connection
+        conn <- select(conn, !!!as.list(names(datacols)))
         sql <- sql_render(conn)
 
-        # Get the underlying DuckDB connection
         db_conn <- conn$src$con
-
-        # Query schema using DESCRIBE
         schema <- dbGetQuery(db_conn, sprintf("DESCRIBE (%s)", sql))
-
-        # Return as named character vector for fast lookup
         setNames(schema$column_type, schema$column_name)
     }, error = function(e) {
         character(0L)
@@ -1237,14 +1231,6 @@ function(x, row.names = NULL, optional = FALSE, ..., limit.rows = TRUE) {
         class(df) <- "data.frame"
         attr(df, "row.names") <- integer()
     } else {
-        ## Convert DuckDB GEOMETRY columns to WKT
-        geoms <- which(coltypes(x) == "geometry")
-        if (length(geoms) > 0L) {
-            for (col in geoms) {
-                datacols[[col]] <- call("ST_AsText", datacols[[col]])
-            }
-            x <- replaceSlots(x, datacols = datacols, check = FALSE)
-        }
         conn <- tblconn(x)
 
         if (limit.rows) {
