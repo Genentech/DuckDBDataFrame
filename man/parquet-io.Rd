@@ -13,7 +13,7 @@ validateAppendOffset(offset)
 
 readParquetSchema(path, columns = NULL)
 
-reconcileParquetSchema(path, columns, arrow_types)
+reconcileParquetSchema(path, columns, arrowtypes)
 
 checkHiveAppendPartitions(
   path,
@@ -35,7 +35,7 @@ table append (\code{\link{validateAppendOffset}}).}
 \item{columns}{Character vector of column names required in an existing
 dataset schema.}
 
-\item{arrow_types}{Named list of \code{\link[arrow]{DataType}} objects
+\item{arrowtypes}{Named list of \code{\link[arrow]{DataType}} objects
 (names must match \code{columns}). \code{NULL} elements adopt the on-disk
 type; non-\code{NULL} elements must match the existing type exactly
 (\code{\link{reconcileParquetSchema}}).}

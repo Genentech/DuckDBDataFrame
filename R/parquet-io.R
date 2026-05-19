@@ -11,7 +11,7 @@
 #' @param path Directory containing Parquet files or hive partitions.
 #' @param columns Character vector of column names required in an existing
 #'   dataset schema.
-#' @param arrow_types Named list of \code{\link[arrow]{DataType}} objects
+#' @param arrowtypes Named list of \code{\link[arrow]{DataType}} objects
 #'   (names must match \code{columns}). \code{NULL} elements adopt the on-disk
 #'   type; non-\code{NULL} elements must match the existing type exactly
 #'   (\code{\link{reconcileParquetSchema}}).
@@ -102,13 +102,13 @@ readParquetSchema <- function(path, columns = NULL) {
 
 #' @export
 #' @rdname parquet-io
-reconcileParquetSchema <- function(path, columns, arrow_types) {
+reconcileParquetSchema <- function(path, columns, arrowtypes) {
     sch <- readParquetSchema(path, columns = columns)
     resolved <- vector("list", length(columns))
     names(resolved) <- columns
     for (nm in columns) {
         existing <- sch$GetFieldByName(nm)$type
-        arrow_type <- arrow_types[[nm]]
+        arrow_type <- arrowtypes[[nm]]
         if (is.null(arrow_type)) {
             resolved[[nm]] <- existing
         } else if (!arrow_type$Equals(existing)) {
