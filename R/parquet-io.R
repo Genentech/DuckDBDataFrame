@@ -11,10 +11,10 @@
 #' @param path Directory containing Parquet files or hive partitions.
 #' @param columns Character vector of column names required in an existing
 #'   dataset schema.
-#' @param arrowtypes Named list of \code{\link[arrow]{DataType}} objects
-#'   (names must match \code{columns}). \code{NULL} elements adopt the on-disk
-#'   type; non-\code{NULL} elements must match the existing type exactly
-#'   (\code{\link{reconcileParquetSchema}}).
+#' @param arrowtypes Named list of \code{\link[arrow]{DataType}} objects or
+#'   length-one character Arrow type names (names must match \code{columns}).
+#'   \code{NULL} elements adopt the on-disk type; non-\code{NULL} elements must
+#'   match the existing type exactly (\code{\link{reconcileParquetSchema}}).
 #' @param indexcols Character vector of index column names for hive layout.
 #' @param grid_suffix Partition directory suffix (e.g. \code{"group__"}).
 #' @param grid \link[S4Arrays]{ArrayGrid} for the current write slab.
@@ -110,6 +110,13 @@ reconcileParquetSchema <- function(path, columns, arrowtypes) {
         existing <- sch$GetFieldByName(nm)$type
         arrow_type <- arrowtypes[[nm]]
         if (is.null(arrow_type)) {
+            resolved[[nm]] <- existing
+        } else if (is.character(arrow_type)) {
+            if (!identical(arrow_type, existing$ToString())) {
+                stop("append schema mismatch on '", nm,
+                     "': existing type is ", existing$ToString(),
+                     ", supplied type is ", arrow_type)
+            }
             resolved[[nm]] <- existing
         } else if (!arrow_type$Equals(existing)) {
             stop("append schema mismatch on '", nm,

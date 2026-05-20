@@ -36,3 +36,25 @@ test_that("arrowIntType narrows by range", {
     expect_identical(arrowIntType(c(0L, 10L))$ToString(), "uint8")
     expect_identical(arrowIntType(c(-5L, 5L))$ToString(), "int8")
 })
+
+test_that("arrowTypeFromName and arrowTypeToName round-trip", {
+    expect_identical(arrowTypeToName(arrow::uint16()), "uint16")
+    expect_identical(arrowTypeFromName("uint16")$ToString(), "uint16")
+    expect_identical(arrowTypeToName("int32"), "int32")
+})
+
+test_that("reconcileParquetSchema accepts character type names", {
+    path <- tempfile()
+    dir.create(path)
+    on.exit(unlink(path, recursive = TRUE), add = TRUE)
+    df <- data.frame(x = 1:3L, y = letters[1:3])
+    arrow::write_parquet(df, file.path(path, "part-0.parquet"))
+    arrowtypes <- list(x = "int32", y = NULL)
+    resolved <- reconcileParquetSchema(path, c("x", "y"), arrowtypes)
+    expect_identical(resolved$x$ToString(), "int32")
+    expect_identical(resolved$y$ToString(), "string")
+    expect_error(
+        reconcileParquetSchema(path, "x", list(x = "int64")),
+        "schema mismatch"
+    )
+})

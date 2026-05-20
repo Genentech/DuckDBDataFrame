@@ -35,10 +35,10 @@ table append (\code{\link{validateAppendOffset}}).}
 \item{columns}{Character vector of column names required in an existing
 dataset schema.}
 
-\item{arrowtypes}{Named list of \code{\link[arrow]{DataType}} objects
-(names must match \code{columns}). \code{NULL} elements adopt the on-disk
-type; non-\code{NULL} elements must match the existing type exactly
-(\code{\link{reconcileParquetSchema}}).}
+\item{arrowtypes}{Named list of \code{\link[arrow]{DataType}} objects or
+length-one character Arrow type names (names must match \code{columns}).
+\code{NULL} elements adopt the on-disk type; non-\code{NULL} elements must
+match the existing type exactly (\code{\link{reconcileParquetSchema}}).}
 
 \item{indexcols}{Character vector of index column names for hive layout.}
 
