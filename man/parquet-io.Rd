@@ -7,7 +7,14 @@
 \alias{reconcileParquetSchema}
 \alias{checkHiveAppendPartitions}
 \alias{checkAppendPart}
-\title{Parquet append validation for the DuckDB package suite}
+\alias{parquetPartPath}
+\alias{validateWriteParquetPart}
+\alias{setupFlatParquetWrite}
+\alias{escapeSQLPath}
+\alias{quoteSQLColumns}
+\alias{buildParquetCopySQL}
+\alias{writeDuckDBTableParquet}
+\title{Parquet I/O utilities for the DuckDB package suite}
 \usage{
 validateAppendOffset(offset)
 
@@ -25,6 +32,46 @@ checkHiveAppendPartitions(
 )
 
 checkAppendPart(path, part, part_digits = 0L)
+
+parquetPartPath(path, part, part_digits = 0L)
+
+validateWriteParquetPart(part)
+
+setupFlatParquetWrite(
+  path,
+  append = FALSE,
+  offset = 0L,
+  part = NULL,
+  part_digits = 0L,
+  indexcol = NULL,
+  reconcile_columns = NULL,
+  create = TRUE
+)
+
+escapeSQLPath(path)
+
+quoteSQLColumns(conn, cols)
+
+buildParquetCopySQL(
+  query_sql,
+  target_path,
+  order_cols = NULL,
+  partition_by = NULL,
+  row_group_size = NULL
+)
+
+writeDuckDBTableParquet(
+  x,
+  path,
+  indexcol = "__index__",
+  keycol = "__name__",
+  dimtbl = NULL,
+  append = FALSE,
+  offset = 0L,
+  part = NULL,
+  part_digits = 0L,
+  ...
+)
 }
 \arguments{
 \item{offset}{Non-negative integer scalar; global index shift for flat
@@ -55,6 +102,42 @@ append.}
 \item{part}{Non-negative integer; flat \code{part-<n>.parquet} index.}
 
 \item{part_digits}{Zero-padding width for \code{part} in the filename.}
+
+\item{append}{Logical; enable flat multi-part append
+(\code{\link{setupFlatParquetWrite}}).}
+
+\item{indexcol}{Optional index column name for lazy table export.}
+
+\item{reconcile_columns}{Character vector of columns to pin on append via
+\code{\link{reconcileParquetSchema}}.}
+
+\item{create}{Logical; create \code{path} when missing
+(\code{\link{setupFlatParquetWrite}}).}
+
+\item{conn}{DBI connection for \code{\link{quoteSQLColumns}}.}
+
+\item{cols}{Character vector of column names to quote.}
+
+\item{query_sql}{Inner \code{SELECT} (or \code{SELECT ... WHERE ...}) for
+\code{\link{buildParquetCopySQL}}.}
+
+\item{target_path}{Destination file or directory path for
+\code{\link{buildParquetCopySQL}}.}
+
+\item{order_cols}{Optional character vector of \code{ORDER BY} expressions
+(pre-quoted identifiers or SQL expressions).}
+
+\item{partition_by}{Optional character vector of hive partition column names
+(pre-quoted identifiers) for \code{PARTITION_BY}.}
+
+\item{row_group_size}{Optional integer \code{ROW_GROUP_SIZE} (coord arrays).}
+
+\item{x}{A \linkS4class{DuckDBTable} object
+(\code{\link{writeDuckDBTableParquet}}).}
+
+\item{keycol}{Optional primary-key column name for lazy table export.}
+
+\item{dimtbl}{Optional single-row \linkS4class{DataFrame} of partition columns.}
 }
 \value{
 \describe{
@@ -64,11 +147,23 @@ append.}
     \code{DataType} objects.}
   \item{\code{checkHiveAppendPartitions}, \code{checkAppendPart}}{
     \code{NULL}, invisibly.}
+  \item{\code{parquetPartPath}}{Character path to a \code{part-*.parquet} file.}
+  \item{\code{validateWriteParquetPart}}{Integer scalar or \code{NULL}.}
+  \item{\code{setupFlatParquetWrite}}{Named list with validated flat-write
+    parameters (\code{path}, \code{part}, \code{offset}, \code{pq_path},
+    \code{flat_part}, \code{subsequent_part}).}
+  \item{\code{escapeSQLPath}}{Escaped path string.}
+  \item{\code{quoteSQLColumns}}{Character vector of quoted identifiers.}
+  \item{\code{buildParquetCopySQL}}{Complete \code{COPY TO} SQL string.}
+  \item{\code{writeDuckDBTableParquet}}{List with \code{path}, \code{dir},
+    \code{nrow}, \code{sample_df}, \code{colnames}, \code{part},
+    \code{append}, and \code{subsequent_part}.}
 }
 }
 \description{
-Low-level guards for incremental Parquet writes used by
-\pkg{BiocDuckDB} and \pkg{DuckDBArray}. End users should call
+Shared append validation, SQL \code{COPY TO} helpers, and lazy
+\linkS4class{DuckDBTable} export used by \pkg{BiocDuckDB} and
+\pkg{DuckDBArray}. End users should call
 \code{\link[BiocDuckDB]{writeParquet}} or
 \code{\link[DuckDBArray]{writeCoordArray}} rather than these functions
 directly.
@@ -86,6 +181,11 @@ no silent overwrite):
     found under \code{path} (recursive search).
 }
 }
+\section{Functions}{
+\itemize{
+\item \code{writeDuckDBTableParquet()}: Lazy DuckDBTable SQL Parquet export.
+
+}}
 \seealso{
 \code{\link[BiocDuckDB]{writeParquet}},
 \code{\link[DuckDBArray]{writeCoordArray}}
