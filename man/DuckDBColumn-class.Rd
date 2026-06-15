@@ -21,6 +21,9 @@
 \alias{show,DuckDBColumn-method}
 \alias{showAsCell,DuckDBColumn-method}
 \title{DuckDBColumn objects}
+\value{
+Objects of class \code{DuckDBColumn} extend \link[S4Vectors]{Vector}.
+}
 \description{
 The DuckDBColumn class extends \linkS4class{Vector} to represent a column
 extracted from a \linkS4class{DuckDBDataFrame} object.
@@ -82,6 +85,18 @@ In the code snippets below, \code{x} is a DuckDBColumn object:
 }
 }
 
+\examples{
+tf <- tempfile(fileext = ".parquet")
+on.exit(unlink(tf))
+arrow::write_parquet(cbind(model = rownames(mtcars), mtcars), tf)
+df <- DuckDBDataFrame(tf, datacols = colnames(mtcars), keycol = "model")
+cyl <- df[["cyl"]]
+cyl
+length(cyl)
+mean(cyl)
+head(cyl, 3)
+
+}
 \seealso{
 \itemize{
   \item \code{\link{DuckDBColumn-utils}} for the utilities

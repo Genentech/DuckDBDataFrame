@@ -46,6 +46,9 @@
 \alias{nzcount,DuckDBTable-method}
 \alias{is_sparse,DuckDBTable-method}
 \title{Common operations on DuckDBTable objects}
+\value{
+Method return types are documented in the sections above.
+}
 \description{
 Common operations on \linkS4class{DuckDBTable} objects.
 }
@@ -272,6 +275,15 @@ In the code snippets below, \code{x} is a DuckDBTable object:
 }
 }
 
+\examples{
+tf <- tempfile(fileext = ".parquet")
+on.exit(unlink(tf))
+arrow::write_parquet(cbind(model = rownames(mtcars), mtcars), tf)
+tbl <- DuckDBTable(tf, datacols = colnames(mtcars), keycol = "model")
+mean(tbl[, "mpg"])
+head(tbl, 3)
+
+}
 \seealso{
 \itemize{
   \item \code{\link{DuckDBTable-class}} for the main class

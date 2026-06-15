@@ -1,0 +1,5 @@
+*.Rcheck/
+*.tar.gz
+*.BiocCheck/
+.DS_Store
+.Rproj.user

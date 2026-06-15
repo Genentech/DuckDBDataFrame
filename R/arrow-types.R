@@ -45,6 +45,12 @@
 #' @aliases arrowTypeToName
 #' @aliases arrowTypeFromName
 #'
+#' @examples
+#' arrowIntType(c(0L, 10L))
+#' arrowType(1:10L)
+#' arrowTypeToName(arrow::uint16())
+#' arrowTypeFromName("uint16")
+#'
 #' @name arrow-types
 NULL
 

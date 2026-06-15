@@ -212,6 +212,9 @@
 #'   }
 #' }
 #'
+#' @return
+#' Method return types are documented in the sections above.
+#'
 #' @author Patrick Aboyoun
 #'
 #' @seealso
@@ -269,6 +272,14 @@
 #' @aliases is_nonzero,DuckDBTable-method
 #' @aliases nzcount,DuckDBTable-method
 #' @aliases is_sparse,DuckDBTable-method
+#'
+#' @examples
+#' tf <- tempfile(fileext = ".parquet")
+#' on.exit(unlink(tf))
+#' arrow::write_parquet(cbind(model = rownames(mtcars), mtcars), tf)
+#' tbl <- DuckDBTable(tf, datacols = colnames(mtcars), keycol = "model")
+#' mean(tbl[, "mpg"])
+#' head(tbl, 3)
 #'
 #' @include DuckDBTable-class.R
 #' @include sql_call.R

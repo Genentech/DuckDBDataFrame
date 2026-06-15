@@ -36,6 +36,9 @@
 \alias{as.env,DuckDBTable-method}
 \alias{show,DuckDBTable-method}
 \title{DuckDBTable objects}
+\value{
+Objects of class \code{DuckDBTable} extend \link[S4Vectors]{RectangularData}.
+}
 \description{
 The DuckDBTable class extends the \linkS4class{RectangularData} virtual
 class for DuckDB tables by wrapping a tbl_duckdb_connection object.

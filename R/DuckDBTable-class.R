@@ -114,6 +114,9 @@
 #'   }
 #' }
 #'
+#' @return
+#' Objects of class \code{DuckDBTable} extend \link[S4Vectors]{RectangularData}.
+#'
 #' @author Patrick Aboyoun
 #'
 #' @examples

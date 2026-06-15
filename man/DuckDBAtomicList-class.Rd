@@ -18,6 +18,9 @@
 \alias{show,DuckDBAtomicList-method}
 \alias{showAsCell,DuckDBAtomicList-method}
 \title{DuckDBAtomicList objects}
+\value{
+Objects of class \code{DuckDBAtomicList} extend \link[IRanges]{AtomicList}.
+}
 \description{
 The DuckDBAtomicList class extends \linkS4class{AtomicList} and
 \linkS4class{DuckDBColumn} to represent list columns extracted from a
@@ -86,6 +89,20 @@ In the code snippets below, \code{x} is a DuckDBAtomicList object:
 }
 }
 
+\examples{
+tf <- tempfile(fileext = ".parquet")
+on.exit(unlink(tf))
+df <- data.frame(
+    id = sprintf("gene\%02d", 1:5),
+    int_list = I(lapply(1:5, function(i) seq_len(i)))
+)
+arrow::write_parquet(df, tf)
+ddf <- DuckDBDataFrame(tf, keycol = "id")
+lst <- ddf[["int_list"]]
+lst
+elementNROWS(lst)
+
+}
 \seealso{
 \itemize{
   \item \code{\link{DuckDBColumn-class}} for atomic columns

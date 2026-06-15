@@ -25,6 +25,9 @@
 \alias{coerce,DuckDBDataFrameList,DFrameList-method}
 \alias{realize,DuckDBDataFrameList-method}
 \title{DuckDBDataFrameList objects}
+\value{
+Objects of class \code{DuckDBDataFrameList} extend \link[S4Vectors]{List}.
+}
 \description{
 The DuckDBDataFrame class extends \linkS4class{SplitDataFrameList}.
 }

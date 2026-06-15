@@ -62,6 +62,9 @@
 #'   }
 #' }
 #'
+#' @return
+#' Objects of class \code{DuckDBAtomicList} extend \link[IRanges]{AtomicList}.
+#'
 #' @author Patrick Aboyoun
 #'
 #' @aliases DuckDBAtomicList-class
@@ -91,6 +94,19 @@
 #'   \item \code{\link[IRanges]{AtomicList}} for the base class
 #'   \item \code{\link[S4Vectors]{List}} for the List class hierarchy
 #' }
+#'
+#' @examples
+#' tf <- tempfile(fileext = ".parquet")
+#' on.exit(unlink(tf))
+#' df <- data.frame(
+#'     id = sprintf("gene%02d", 1:5),
+#'     int_list = I(lapply(1:5, function(i) seq_len(i)))
+#' )
+#' arrow::write_parquet(df, tf)
+#' ddf <- DuckDBDataFrame(tf, keycol = "id")
+#' lst <- ddf[["int_list"]]
+#' lst
+#' elementNROWS(lst)
 #'
 #' @include DuckDBColumn-class.R
 #' @include DuckDBTable-class.R

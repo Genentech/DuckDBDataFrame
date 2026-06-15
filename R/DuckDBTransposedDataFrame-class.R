@@ -50,6 +50,10 @@
 #' options \code{showHeadLines} and \code{showTailLines} for controlling the
 #' number of head and tail rows to display.
 #'
+#' @return
+#' Objects of class \code{DuckDBTransposedDataFrame} extend
+#' \link[S4Vectors]{RectangularData}.
+#'
 #' @author Patrick Aboyoun
 #'
 #' @examples

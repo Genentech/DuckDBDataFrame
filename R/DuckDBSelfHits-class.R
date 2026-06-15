@@ -1,7 +1,7 @@
 #' DuckDBSelfHits objects
 #'
 #' @description
-#' The DuckDBSelfHits class extends the \linkS4class{SelfHits} class from
+#' The DuckDBSelfHits class extends the \link[S4Vectors]{SelfHits-class} class from
 #' S4Vectors for DuckDB tables.
 #'
 #' @details
@@ -170,6 +170,9 @@
 #' \code{showHeadLines} and \code{showTailLines} for controlling the number of
 #' edges to display.
 #'
+#' @return
+#' Objects of class \code{DuckDBSelfHits} extend \link[S4Vectors]{SelfHits-class}.
+#'
 #' @author Patrick Aboyoun
 #'
 #' @examples
@@ -225,7 +228,6 @@
 #' @aliases coerce,DuckDBSelfHits,DuckDBDataFrame-method
 #' @aliases coerce,DuckDBSelfHits,DFrame-method
 #' @aliases as.data.frame,DuckDBSelfHits-method
-#' @aliases coerce,DuckDBSelfHits,SelfHits-method
 #' @aliases coerce,DuckDBSelfHits,dgCMatrix-method
 #' @aliases realize,DuckDBSelfHits-method
 #'
@@ -233,7 +235,7 @@
 #'
 #' @seealso
 #' \itemize{
-#'   \item \code{\link[S4Vectors]{SelfHits}} for the base class
+#'   \item \code{\link[S4Vectors]{SelfHits-class}} for the base class
 #'   \item \code{\link[SingleCellExperiment]{colPairs}} for usage in SingleCellExperiment
 #'   \item \code{\linkS4class{DuckDBDataFrame}} for the underlying storage
 #' }

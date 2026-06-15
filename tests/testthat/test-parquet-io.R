@@ -43,6 +43,41 @@ test_that("arrowTypeFromName and arrowTypeToName round-trip", {
     expect_identical(arrowTypeToName("int32"), "int32")
 })
 
+test_that("arrowIntType selects wider unsigned integer types", {
+    expect_identical(arrowIntType(c(0L, 65535L))$ToString(), "uint16")
+    expect_identical(arrowIntType(c(0L, 2147483647L))$ToString(), "int32")
+    expect_identical(arrowIntType(c(0L, 4294967295))$ToString(), "uint32")
+    expect_identical(arrowIntType(c(0L, 5000000000))$ToString(), "int64")
+})
+
+test_that("arrowIntType selects signed integer types", {
+    expect_identical(arrowIntType(c(-32768L, 32767L))$ToString(), "int16")
+    expect_identical(arrowIntType(c(-2147483647L, 2147483647L))$ToString(), "int32")
+    expect_identical(arrowIntType(c(-5000000000, 5000000000))$ToString(), "int64")
+})
+
+test_that("arrowType infers non-integer vectors", {
+    expect_identical(arrowType(letters)$ToString(), "string")
+    expect_identical(arrowType(c(1.5, 2.5))$ToString(), "double")
+    expect_identical(arrowType(integer(0))$ToString(), "int32")
+})
+
+test_that("arrowTypeToName validates input", {
+    expect_error(arrowTypeToName(c("int32", "int64")), "single")
+    expect_error(arrowTypeToName(1L), "DataType")
+})
+
+test_that("arrowTypeFromName supports scalar types and validates input", {
+    expect_identical(arrowTypeFromName("float")$ToString(), "float")
+    expect_identical(arrowTypeFromName("double")$ToString(), "double")
+    expect_identical(arrowTypeFromName("bool")$ToString(), "bool")
+    expect_identical(arrowTypeFromName("int8")$ToString(), "int8")
+    expect_identical(arrowTypeFromName("uint32")$ToString(), "uint32")
+    expect_identical(arrowTypeFromName("uint64")$ToString(), "uint64")
+    expect_error(arrowTypeFromName("not_a_type"), "unsupported")
+    expect_error(arrowTypeFromName(c("int32", "int64")), "single")
+})
+
 test_that("reconcileParquetSchema accepts character type names", {
     path <- tempfile()
     dir.create(path)

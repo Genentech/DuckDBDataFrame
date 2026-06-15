@@ -113,6 +113,9 @@
 #'   }
 #' }
 #'
+#' @return
+#' Objects of class \code{DuckDBDataFrameList} extend \link[S4Vectors]{List}.
+#'
 #' @author Patrick Aboyoun
 #'
 #' @examples

@@ -12,6 +12,10 @@
 \alias{realize,DuckDBTransposedDataFrame-method}
 \alias{show,DuckDBTransposedDataFrame-method}
 \title{DuckDBTransposedDataFrame objects}
+\value{
+Objects of class \code{DuckDBTransposedDataFrame} extend
+\link[S4Vectors]{RectangularData}.
+}
 \description{
 The DuckDBTransposedDataFrame class extends \linkS4class{TransposedDataFrame}
 to represent a DuckDB table as a \linkS4class{TransposedDataFrame} object.

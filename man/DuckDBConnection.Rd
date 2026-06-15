@@ -16,7 +16,8 @@ releaseDuckDBConn()
 \item{conn}{A \code{duckdb_connection} object.}
 }
 \value{
-\code{acquireDuckDBConn} returns the current DuckDB connection.
+\code{acquireDuckDBConn} returns a cached \code{duckdb_connection} object.
+\code{releaseDuckDBConn} returns \code{NULL}, invisibly.
 }
 \description{
 Acquire and Release the DuckDB connection used by the
@@ -29,10 +30,11 @@ the \pkg{BiocDuckDB} package cache.
 from that cache.
 }
 \examples{
-\dontrun{
-acquireDuckDBConn()
 releaseDuckDBConn()
-}
+conn <- acquireDuckDBConn()
+identical(conn, acquireDuckDBConn())
+releaseDuckDBConn()
+releaseDuckDBConn()
 
 }
 \author{

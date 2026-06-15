@@ -5,6 +5,10 @@
 #' @param x An object to get the keycols related information.
 #' @param value A character vector of keycols dimension names.
 #'
+#' @return
+#' \code{keynames} and \code{keydimnames} return character vectors.
+#' \code{nkey} and \code{nkeydim} return a single integer.
+#'
 #' @author Patrick Aboyoun
 #'
 #' @examples

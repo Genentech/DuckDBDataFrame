@@ -14,7 +14,8 @@ reg.finalizer(.duckdb, function(env) {
 #' @param conn A \code{duckdb_connection} object.
 #'
 #' @return
-#' \code{acquireDuckDBConn} returns the current DuckDB connection.
+#' \code{acquireDuckDBConn} returns a cached \code{duckdb_connection} object.
+#' \code{releaseDuckDBConn} returns \code{NULL}, invisibly.
 #'
 #' @author Patrick Aboyoun
 #'
@@ -25,10 +26,11 @@ reg.finalizer(.duckdb, function(env) {
 #' from that cache.
 #'
 #' @examples
-#' \dontrun{
-#' acquireDuckDBConn()
 #' releaseDuckDBConn()
-#' }
+#' conn <- acquireDuckDBConn()
+#' identical(conn, acquireDuckDBConn())
+#' releaseDuckDBConn()
+#' releaseDuckDBConn()
 #'
 #' @aliases acquireDuckDBConn
 #' @aliases releaseDuckDBConn

@@ -103,6 +103,17 @@
 #' @aliases buildParquetCopySQL
 #' @aliases writeDuckDBTableParquet
 #'
+#' @examples
+#' path <- tempfile()
+#' dir.create(path)
+#' on.exit(unlink(path, recursive = TRUE), add = TRUE)
+#' pq <- file.path(path, "part-0.parquet")
+#' arrow::write_parquet(data.frame(x = 1:3L, y = letters[1:3]), pq)
+#' validateAppendOffset(0L)
+#' readParquetSchema(path, columns = c("x", "y"))
+#' tbl <- DuckDBTable(pq)
+#' quoteSQLColumns(dbconn(tbl), c("x", "y"))
+#'
 #' @keywords internal
 #'
 #' @name parquet-io

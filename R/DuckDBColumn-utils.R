@@ -200,6 +200,9 @@
 #'   }
 #' }
 #'
+#' @return
+#' Method return types are documented in the sections above.
+#'
 #' @author Patrick Aboyoun
 #'
 #' @aliases sql_call,DuckDBColumn-method
@@ -254,6 +257,16 @@
 #'   \item \code{\link{DuckDBColumn-class}} for the main class
 #'   \item \code{\link[S4Vectors]{Vector}} for the base class
 #' }
+#'
+#' @examples
+#' tf <- tempfile(fileext = ".parquet")
+#' on.exit(unlink(tf))
+#' arrow::write_parquet(cbind(model = rownames(mtcars), mtcars), tf)
+#' df <- DuckDBDataFrame(tf, datacols = colnames(mtcars), keycol = "model")
+#' mpg <- df[["mpg"]]
+#' mean(mpg)
+#' sd(mpg)
+#' unique(mpg)[1:5]
 #'
 #' @include DuckDBColumn-class.R
 #' @include DuckDBTable-utils.R

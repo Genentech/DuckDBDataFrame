@@ -44,6 +44,9 @@
 \alias{is_nonzero,DuckDBColumn-method}
 \alias{nzcount,DuckDBColumn-method}
 \title{Common operations on DuckDBColumn objects}
+\value{
+Method return types are documented in the sections above.
+}
 \description{
 Common operations on \linkS4class{DuckDBColumn} objects.
 }
@@ -256,6 +259,17 @@ In the code snippets below, \code{x} is a DuckDBColumn object:
 }
 }
 
+\examples{
+tf <- tempfile(fileext = ".parquet")
+on.exit(unlink(tf))
+arrow::write_parquet(cbind(model = rownames(mtcars), mtcars), tf)
+df <- DuckDBDataFrame(tf, datacols = colnames(mtcars), keycol = "model")
+mpg <- df[["mpg"]]
+mean(mpg)
+sd(mpg)
+unique(mpg)[1:5]
+
+}
 \seealso{
 \itemize{
   \item \code{\link{DuckDBColumn-class}} for the main class

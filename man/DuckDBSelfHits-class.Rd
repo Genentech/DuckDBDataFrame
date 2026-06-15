@@ -25,13 +25,15 @@
 \alias{coerce,DuckDBSelfHits,DuckDBDataFrame-method}
 \alias{coerce,DuckDBSelfHits,DFrame-method}
 \alias{as.data.frame,DuckDBSelfHits-method}
-\alias{coerce,DuckDBSelfHits,SelfHits-method}
 \alias{coerce,DuckDBSelfHits,dgCMatrix-method}
 \alias{realize,DuckDBSelfHits-method}
 \alias{show,DuckDBSelfHits-method}
 \title{DuckDBSelfHits objects}
+\value{
+Objects of class \code{DuckDBSelfHits} extend \link[S4Vectors]{SelfHits-class}.
+}
 \description{
-The DuckDBSelfHits class extends the \linkS4class{SelfHits} class from
+The DuckDBSelfHits class extends the \link[S4Vectors]{SelfHits-class} class from
 S4Vectors for DuckDB tables.
 }
 \details{
@@ -240,7 +242,7 @@ mat <- as(hits, "dgCMatrix")
 }
 \seealso{
 \itemize{
-  \item \code{\link[S4Vectors]{SelfHits}} for the base class
+  \item \code{\link[S4Vectors]{SelfHits-class}} for the base class
   \item \code{\link[SingleCellExperiment]{colPairs}} for usage in SingleCellExperiment
   \item \code{\linkS4class{DuckDBDataFrame}} for the underlying storage
 }

@@ -88,6 +88,9 @@
 #'   }
 #' }
 #'
+#' @return
+#' Objects of class \code{DuckDBEmbeddings} extend \link[S4Vectors]{RectangularData}.
+#'
 #' @author Patrick Aboyoun
 #'
 #' @aliases DuckDBEmbeddings-class
@@ -114,6 +117,22 @@
 #'   \item \code{\link{DuckDBNumericList-class}} for the base class
 #'   \item \code{\link{DuckDBTable-class}} for the underlying table representation
 #' }
+#'
+#' @examples
+#' tf <- tempfile(fileext = ".parquet")
+#' on.exit(unlink(tf))
+#' n <- 10L
+#' mat <- matrix(rnorm(n * 5), nrow = n)
+#' df <- data.frame(
+#'     cell_id = sprintf("cell_%02d", seq_len(n)),
+#'     pca = I(asplit(mat, 1L)),
+#'     stringsAsFactors = FALSE
+#' )
+#' arrow::write_parquet(df, tf)
+#' emb <- DuckDBDataFrame(tf, keycol = "cell_id")[["pca"]]
+#' emb
+#' dim(emb)
+#' head(emb, 3)
 #'
 #' @include DuckDBColumn-class.R
 #' @include DuckDBTable-class.R

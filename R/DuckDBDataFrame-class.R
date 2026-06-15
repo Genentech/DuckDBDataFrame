@@ -157,6 +157,9 @@
 #' \code{showHeadLines} and \code{showTailLines} for controlling the number of
 #' head and tail rows and columns to display.
 #'
+#' @return
+#' Objects of class \code{DuckDBDataFrame} extend \link[S4Vectors]{DataFrame}.
+#'
 #' @author Patrick Aboyoun, Aaron Lun
 #'
 #' @examples

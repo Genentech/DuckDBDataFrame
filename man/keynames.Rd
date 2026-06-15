@@ -28,6 +28,10 @@ nkeydim(x)
 
 \item{value}{A character vector of keycols dimension names.}
 }
+\value{
+\code{keynames} and \code{keydimnames} return character vectors.
+\code{nkey} and \code{nkeydim} return a single integer.
+}
 \description{
 Get the keycols names, keycols dimension names, or keycols count of an object.
 }

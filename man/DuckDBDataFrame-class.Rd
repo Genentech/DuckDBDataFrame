@@ -25,6 +25,9 @@
 \alias{makeNakedCharacterMatrixForDisplay,DuckDBDataFrame-method}
 \alias{show,DuckDBDataFrame-method}
 \title{DuckDBDataFrame objects}
+\value{
+Objects of class \code{DuckDBDataFrame} extend \link[S4Vectors]{DataFrame}.
+}
 \description{
 The DuckDBDataFrame class extends both \linkS4class{DuckDBTable} and
 \linkS4class{DataFrame} to represent a DuckDB table as a

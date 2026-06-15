@@ -55,6 +55,9 @@
 #'   }
 #' }
 #'
+#' @return
+#' Objects of class \code{DuckDBColumn} extend \link[S4Vectors]{Vector}.
+#'
 #' @author Patrick Aboyoun
 #'
 #' @aliases DuckDBColumn-class
@@ -86,6 +89,17 @@
 #'   \item \code{\link{DuckDBColumn-utils}} for the utilities
 #'   \item \code{\link[S4Vectors]{Vector}} for the base class
 #' }
+#'
+#' @examples
+#' tf <- tempfile(fileext = ".parquet")
+#' on.exit(unlink(tf))
+#' arrow::write_parquet(cbind(model = rownames(mtcars), mtcars), tf)
+#' df <- DuckDBDataFrame(tf, datacols = colnames(mtcars), keycol = "model")
+#' cyl <- df[["cyl"]]
+#' cyl
+#' length(cyl)
+#' mean(cyl)
+#' head(cyl, 3)
 #'
 #' @include DuckDBTable-class.R
 #'

@@ -54,6 +54,13 @@ registry of scalar Arrow types used when passing type information to
 BiocParallel workers (where \code{DataType} external pointers do not
 serialize reliably).
 }
+\examples{
+arrowIntType(c(0L, 10L))
+arrowType(1:10L)
+arrowTypeToName(arrow::uint16())
+arrowTypeFromName("uint16")
+
+}
 \seealso{
 \code{\link{parquet-io}},
 \code{\link[BiocDuckDB]{writeParquet}},
