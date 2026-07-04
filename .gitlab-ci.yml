@@ -1,0 +1,13 @@
+---
+# DuckDBDataFrame CI — MODL shared R-check (base template).
+# DuckDBDataFrame has no intra-suite dependencies and no modl-schemas contract, so the
+# base template (build + R CMD check on the CEDAR kickstart image, deps resolved from
+# Kite) is sufficient. See modl/modl-ci for the shared templates.
+
+include:
+  - project: 'modl/modl-ci'
+    ref: main
+    file: 'r-check.yml'
+
+check:
+  extends: .modl_r_check
