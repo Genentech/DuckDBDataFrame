@@ -40,6 +40,18 @@ reg.finalizer(.duckdb, function(env) {
 #' @name DuckDBConnection
 NULL
 
+#' @importFrom DBI dbExecute
+#' @importFrom tools R_user_dir
+setExtensionDirectory <- function(conn) {
+    ext_dir <- Sys.getenv("DUCKDB_EXTENSION_DIRECTORY", unset = "")
+    if (!nzchar(ext_dir)) {
+        ext_dir <- R_user_dir("DuckDBDataFrame", which = "cache")
+    }
+    dir.create(ext_dir, recursive = TRUE, showWarnings = FALSE)
+    dbExecute(conn, sprintf("SET extension_directory = '%s';", ext_dir))
+    invisible(ext_dir)
+}
+
 #' @importFrom DBI dbExecute dbGetQuery
 loadExtension <- function(conn, extension, optional = FALSE) {
     qry <-
@@ -47,36 +59,48 @@ loadExtension <- function(conn, extension, optional = FALSE) {
               extension)
     tbl <- dbGetQuery(conn, qry)
     if (nrow(tbl) == 0L) {
+        if (optional) {
+            warning(sprintf("Optional extension '%s' is unknown to this DuckDB build; skipping.",
+                            extension), call. = FALSE)
+            return(invisible(0L))
+        }
         stop(sprintf("Extension '%s' not found in DuckDB.", extension))
     }
     if (!tbl[["installed"]]) {
-        tryCatch({
+        installed <- tryCatch({
             dbExecute(conn, sprintf("INSTALL '%s';", extension))
+            TRUE
         }, error = function(e) {
             err_msg <- conditionMessage(e)
-            if (grepl("SSL|certificate|TLS", err_msg, ignore.case = TRUE)) {
-                if (optional) {
-                    warning(sprintf(
-                        "Could not install optional '%s' extension due to SSL certificate issues.\n",
-                        "Some functionality may be limited.\n",
-                        "To fix: manually download from http://extensions.duckdb.org"
-                    ), extension, call. = FALSE)
-                    return(invisible(0L))
-                } else {
-                    stop(sprintf(
-                        paste0(
-                            "Failed to install '%s' extension due to SSL certificate error.\n\n",
-                            "To fix: manually download the extension from http://extensions.duckdb.org\n",
-                            "and place it in the DuckDB extensions directory.\n\n",
-                            "Original error: %s"
-                        ),
-                        extension, err_msg
-                    ), call. = FALSE)
-                }
-            } else {
-                stop(e)
+            is_perm <- grepl("Permission denied|read-only|Failed to create directory",
+                             err_msg, ignore.case = TRUE)
+            is_net <- grepl("SSL|certificate|TLS|Failed to download|network|timeout",
+                            err_msg, ignore.case = TRUE)
+            if (optional && (is_perm || is_net)) {
+                warning(sprintf(
+                    "Could not install optional '%s' extension; some functionality may be limited.\nOriginal error: %s",
+                    extension, err_msg), call. = FALSE)
+                return(FALSE)
             }
+            if (is_perm) {
+                stop(sprintf(paste0(
+                    "Failed to install '%s' extension: the DuckDB extension directory is not writable.\n",
+                    "Set the DUCKDB_EXTENSION_DIRECTORY environment variable to a writable path\n",
+                    "(e.g. '~/.duckdb/extensions') and retry.\n\nOriginal error: %s"),
+                    extension, err_msg), call. = FALSE)
+            }
+            if (is_net) {
+                stop(sprintf(paste0(
+                    "Failed to install '%s' extension: could not reach the extension repository.\n",
+                    "Install it from a host with network access, or manually download it from\n",
+                    "http://extensions.duckdb.org into the DuckDB extension directory.\n\nOriginal error: %s"),
+                    extension, err_msg), call. = FALSE)
+            }
+            stop(e)
         })
+        if (!isTRUE(installed)) {
+            return(invisible(0L))
+        }
     }
     status <- 0L
     tbl_final <- dbGetQuery(conn, qry)
@@ -95,7 +119,8 @@ acquireDuckDBConn <- function(conn = dbConnect(duckdb(), bigint = "integer64", a
         if (!inherits(conn, "duckdb_connection")) {
             stop("'conn' must be a DuckDB connection")
         }
-        loadExtension(conn, "httpfs", optional = FALSE)
+        setExtensionDirectory(conn)
+        loadExtension(conn, "httpfs", optional = TRUE)
         loadExtension(conn, "spatial", optional = TRUE)
         .duckdb$drv <- conn
     }
