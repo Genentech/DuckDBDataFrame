@@ -16,7 +16,7 @@ Authors@R:
     )
 License: Apache License 2.0
 Depends:
-    R (>= 4.4.0),
+    R (>= 4.6.0),
     methods,
     stats,
     bit64,
