@@ -1,0 +1,166 @@
+---
+title: "Introduction to DuckDBDataFrame"
+author:
+- name: Patrick Aboyoun
+  email: aboyounp@gene.com
+  affiliation: Genentech, Inc.
+date: "Compiled: `r BiocStyle::doc_date()`; Modified: 6 July 2026"
+package: DuckDBDataFrame
+vignette: >
+  %\VignetteIndexEntry{1. Introduction to DuckDBDataFrame}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+output:
+  BiocStyle::html_document:
+    number_sections: true
+    toc: true
+    toc_depth: 2
+---
+
+```{r setup, include=FALSE}
+library(BiocStyle)
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>",
+                      error = FALSE, warning = FALSE, message = FALSE)
+```
+
+# Introduction
+
+Bioconductor objects increasingly carry large *tabular* metadata: a
+`SingleCellExperiment` with millions of cells has a `colData` of the same height, a
+big sample sheet, per-feature annotations. Holding such a table fully in memory is
+wasteful when a workflow only ever reads a few columns or a filtered subset of rows.
+
+`r Biocpkg("DuckDBDataFrame")` is a `r Biocpkg("S4Vectors")` `DataFrame` backed by
+[DuckDB](https://duckdb.org) over columnar **Parquet**. It behaves like an ordinary
+`DataFrame` --- `$`, `[`, `mcols()`, `cbind()` --- but the data stays **on disk** and
+operations are recorded as lazy SQL queries: you can subset, add computed columns,
+and aggregate **without loading the table into memory**. Each column read comes back
+only when you ask for it.
+
+It is the tabular foundation of the **BiocDuckDB** suite: `r Biocpkg("DuckDBArray")`
+(DuckDB-backed `DelayedArray`) and `r Biocpkg("DuckDBGRanges")` (DuckDB-backed
+`GRanges`) both build on it.
+
+This vignette is a practical introduction. For the design of the underlying
+`DuckDBTable` and how other packages extend it, see
+*Design and extension of DuckDBDataFrame*.
+
+## Installation
+
+```{r install, eval=FALSE}
+if (!require("BiocManager"))
+    install.packages("BiocManager")
+BiocManager::install("DuckDBDataFrame")
+```
+
+```{r load}
+library(DuckDBDataFrame)
+```
+
+# Quick start
+
+We write the built-in `mtcars` table to Parquet and open it as a
+`DuckDBDataFrame`. The `keycol` argument names the column that supplies row names.
+
+```{r quickstart}
+library(arrow)
+mtcars_df <- cbind(model = rownames(mtcars), mtcars)
+path <- tempfile(fileext = ".parquet")
+write_parquet(mtcars_df, path)
+
+df <- DuckDBDataFrame(path, datacols = colnames(mtcars),
+                      keycol = list(model = mtcars_df$model))
+df
+```
+
+It looks and behaves like a `DataFrame`, but the values live in the Parquet file:
+
+```{r quickstart-ops}
+dim(df)
+df$mpg[1:5]
+```
+
+# Working with a DuckDBDataFrame
+
+## Column access
+
+`$` returns a single column as a `DuckDBColumn` (still lazy); `[` selects columns:
+
+```{r columns}
+df[, c("mpg", "cyl", "hp")]
+```
+
+## Row subsetting
+
+Rows can be selected by name, by a logical column, or by position (note that
+positional order is not guaranteed, as rows map to a set on disk):
+
+```{r rows}
+df[df$mpg > 25, c("mpg", "cyl")]
+```
+
+## Computed columns
+
+Assigning an expression of existing columns records a new lazy column; nothing is
+evaluated until the values are pulled:
+
+```{r computed}
+df$efficiency <- df$mpg / df$hp
+df[1:3, c("mpg", "hp", "efficiency")]
+```
+
+## Column metadata
+
+`mcols()` works as it does for any `DataFrame`:
+
+```{r metadata}
+mcols(df) <- DataFrame(row.names = colnames(df),
+                       label = sub("\\..*", "", colnames(df)))
+mcols(df)[1:3, , drop = FALSE]
+```
+
+# Columns come in three flavors
+
+Depending on the underlying Parquet type, extracting a column yields:
+
+- a **`DuckDBColumn`** for atomic columns --- vector-like and lazy
+  (`length()`, `[`, arithmetic, `mean()`), materialized with `as.vector()`;
+- a **`DuckDBAtomicList`** for DuckDB `LIST[]` columns (variable-length list
+  columns), supporting `elementNROWS()`, `[[`, `unlist()`;
+- a **`DuckDBEmbeddings`** for DuckDB `ARRAY[n]` columns (fixed-length numeric
+  vectors, e.g. embeddings), which behaves like a matrix with one row per element.
+
+```{r column-flavors}
+eff <- df$mpg / df$hp     # DuckDBColumn
+class(eff)
+as.vector(eff)[1:5]       # materialize on demand
+```
+
+# Reaching for SQL directly
+
+Because the backend is DuckDB, its full SQL function library is available.
+`sql_fun()` lists functions applicable to a column, and `sql_call()` applies one:
+
+```{r sql}
+sql_call(df$mpg, "round", 1)[1:5]
+```
+
+For custom work you can reach the shared connection with `dbconn(df)` and run
+arbitrary `DBI::dbGetQuery()` calls against it.
+
+# When to use DuckDBDataFrame
+
+A good fit when the table is **larger than memory** (or you want to keep memory
+free), when the workload is **columnar** (filtering, aggregation, selecting a few
+columns of a wide table), or when the data already lives on disk as **Parquet** that
+other tools should read. An in-memory `DataFrame` remains preferable for small tables
+and for row-wise or heavy random-access work.
+
+For how the `DuckDBTable` abstraction works and how to build on it, see
+*Design and extension of DuckDBDataFrame*.
+
+# Session information
+
+```{r sessioninfo}
+sessionInfo()
+```

@@ -1,0 +1,165 @@
+---
+title: "Design and extension of DuckDBDataFrame"
+author:
+- name: Patrick Aboyoun
+  email: aboyounp@gene.com
+  affiliation: Genentech, Inc.
+date: "Compiled: `r BiocStyle::doc_date()`; Modified: 6 July 2026"
+package: DuckDBDataFrame
+vignette: >
+  %\VignetteIndexEntry{2. Design and extension of DuckDBDataFrame}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+output:
+  BiocStyle::html_document:
+    number_sections: true
+    toc: true
+    toc_depth: 3
+---
+
+```{r setup, include=FALSE}
+library(BiocStyle)
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>",
+                      error = FALSE, warning = FALSE, message = FALSE)
+```
+
+# Scope
+
+This vignette is for developers: it documents the `DuckDBTable` abstraction that
+underlies `r Biocpkg("DuckDBDataFrame")`, how R operations become SQL, and how other
+packages build on it. For day-to-day use see *Introduction to DuckDBDataFrame*.
+
+```{r load}
+library(DuckDBDataFrame)
+```
+
+# The classes
+
+`r Biocpkg("DuckDBDataFrame")` extends the `r Biocpkg("S4Vectors")` framework with
+DuckDB-backed versions of its core tabular classes:
+
+| Class | Extends | Purpose |
+|-------|---------|---------|
+| `DuckDBTable` | `RectangularData` | N-dimensional table with a SQL backend |
+| `DuckDBDataFrame` | `DataFrame` + `DuckDBTable` | 2-D tabular data with row/column names |
+| `DuckDBColumn` | `Vector` | a single extracted (atomic) column |
+| `DuckDBAtomicList` | `List` | list columns (DuckDB `LIST[]`) |
+| `DuckDBEmbeddings` | matrix-like | fixed-length arrays (DuckDB `ARRAY[n]`) |
+
+`DuckDBTable` is the foundation. `DuckDBDataFrame` is the 2-D case (it adds the
+constraint `nkey(x) <= 1`); the same `DuckDBTable` with two or more key dimensions is
+what `r Biocpkg("DuckDBArray")` wraps for arrays.
+
+# The DuckDBTable abstraction
+
+A `DuckDBTable` records a *query*, not data. Its slots are:
+
+- **`conn`** --- a `tbl_duckdb_connection` (dplyr/dbplyr) over a DuckDB relation:
+  Parquet/CSV files or an in-memory table.
+- **`datacols`** --- a named `expression`; each element is a column reference
+  (`as.name("mpg")`) or a computation (`call("/", as.name("mpg"), as.name("hp"))`)
+  that translates to SQL.
+- **`keycols`** --- a named `list` of dimension index vectors: length 0 (row numbers
+  generated internally), 1 (row names, a `DuckDBDataFrame`), or ≥2 (array indices).
+- **`dimtbls`** --- an optional locked environment of dimension lookup tables for
+  partition pruning.
+
+Operations build up `datacols`/`keycols` and the `conn` query lazily; materialization
+(`as.data.frame()`, `as.vector()`) is deferred until values are needed. This is what
+lets a `DuckDBTable` describe data larger than memory and push filters and arithmetic
+into DuckDB's columnar engine (predicate pushdown, direct Parquet scans).
+
+## Construction
+
+`DuckDBTable()` accepts a Parquet or CSV path, or an existing dplyr connection:
+
+```{r construct}
+mtcars_df <- cbind(model = rownames(mtcars), mtcars)
+path <- tempfile(fileext = ".parquet")
+arrow::write_parquet(mtcars_df, path)
+
+tbl <- DuckDBTable(path, datacols = colnames(mtcars),
+                   keycols = list(model = mtcars_df$model))
+dim(tbl)
+```
+
+## The contract
+
+Classes that extend `DuckDBTable` or use it as a backend rely on:
+`nrow()`/`ncol()`/`dim()` (from `keycols`/`datacols`), `[` for sub-tables,
+`keynames()`/`keydimnames()`/`colnames()` accessors, and `as.data.frame()` for
+materialization.
+
+## Key-dimension semantics
+
+The number of key dimensions determines the shape: 0 → no row names (row numbers
+generated), 1 → a `DuckDBDataFrame`, ≥2 → an array. With no `keycols`, `DuckDBTable`
+uses a compact row-number encoding:
+
+```{r rownum}
+tbl0 <- DuckDBTable(path, datacols = colnames(mtcars))
+.has_row_number(tbl0)
+```
+
+# From R to SQL
+
+Column operations become SQL, at the table level. A `DuckDBColumn` computation like
+`df$mpg / df$hp` records `call("/", as.name("mpg"), as.name("hp"))` in `datacols`;
+row/column summaries on arrays (via `r Biocpkg("DuckDBArray")`) become `GROUP BY`
+aggregations. The `sql_fun()` / `sql_call()` helpers expose DuckDB's function catalog
+so any SQL scalar function can be applied without leaving R.
+
+# Connection management
+
+`r Biocpkg("DuckDBDataFrame")` keeps a single shared DuckDB connection per session,
+acquired lazily:
+
+```{r conn}
+conn <- acquireDuckDBConn()
+identical(dbconn(tbl), conn)
+```
+
+One process per session gives consistent semantics and efficient resource use;
+`releaseDuckDBConn()` tears it down (rarely needed). The connection also configures a
+writable extension directory so extension install/load works on shared or read-only
+R libraries. Advanced callers can run arbitrary SQL through `dbconn()` with
+`r CRANpkg("DBI")`.
+
+# Dimension tables
+
+For partitioned data, dimension tables map index values to partition groups so a
+query can prune to the relevant Parquet partitions:
+
+```{r dimtbls}
+state_df <- data.frame(
+    state = rep(rownames(state.x77), times = ncol(state.x77)),
+    metric = rep(colnames(state.x77), each = nrow(state.x77)),
+    value = as.vector(state.x77))
+sp <- tempfile(fileext = ".parquet"); arrow::write_parquet(state_df, sp)
+tbl2 <- DuckDBTable(sp, datacols = "value",
+                    keycols = list(state = rownames(state.x77),
+                                   metric = colnames(state.x77)))
+dimtbls(tbl2) <- list(state = DataFrame(
+    row.names = rownames(state.x77),
+    region = rep(c("West", "East"), length.out = nrow(state.x77))))
+names(dimtbls(tbl2))
+```
+
+# Extending DuckDBDataFrame
+
+Other suite packages build directly on this foundation:
+
+- `r Biocpkg("DuckDBArray")` wraps a `DuckDBTable` with `nkey >= 2` as a
+  `DelayedArray` backend (see that package's *Implementing the DuckDBArray backend*
+  vignette).
+- `r Biocpkg("DuckDBGRanges")` uses a `DuckDBDataFrame` to hold genomic coordinates.
+
+Both inherit the SQL translation and lazy evaluation described here, so a new
+backend mostly needs to define how its data maps onto `keycols`/`datacols` and which
+operations to push into SQL.
+
+# Session information
+
+```{r sessioninfo}
+sessionInfo()
+```
