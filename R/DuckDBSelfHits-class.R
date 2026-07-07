@@ -482,7 +482,7 @@ function(conn, from, to, nnode, mcols = NULL, keycol = NULL, dimtbl = NULL, node
     datacols <- datacols[dcnms]
     if (length(mcols) > 0L) {
         if (is.character(mcols)) {
-            mcols <- sapply(mcols, as.name, simplify = FALSE)
+            mcols <- setNames(lapply(mcols, as.name), mcols)
         }
         mcols <- as.expression(mcols)
         datacols <- c(datacols, mcols)
@@ -664,7 +664,7 @@ setMethod("show", "DuckDBSelfHits", function(object) {
         k <- length(setdiff(colnames(object@frame), names(.datacols_selfhits)))
         if (k > 0L) {
             h <- nc - k
-            m <- cbind(m[, 1:h, drop = FALSE],
+            m <- cbind(m[, seq_len(h), drop = FALSE],
                        `|` = ifelse(rownames(m) == "...", ".", "|"),
                        m[, (h + 1L):nc, drop = FALSE])
         }

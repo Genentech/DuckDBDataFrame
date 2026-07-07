@@ -983,7 +983,7 @@ function(conn, datacols = colnames(conn), keycols = NULL, dimtbls = NULL, type =
     } else {
         if (is.character(keycols)) {
             keycols <- unname(cols[keycols])
-            keycols <- sapply(keycols, function(x) NULL, simplify = FALSE)
+            keycols <- setNames(vector("list", length(keycols)), keycols)
         }
         if (!is.list(keycols) || is.null(names(keycols))) {
             stop("'keycols' must be a character vector or a named list of vectors")

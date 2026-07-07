@@ -40,18 +40,6 @@ reg.finalizer(.duckdb, function(env) {
 #' @name DuckDBConnection
 NULL
 
-#' @importFrom DBI dbExecute
-#' @importFrom tools R_user_dir
-setExtensionDirectory <- function(conn) {
-    ext_dir <- Sys.getenv("DUCKDB_EXTENSION_DIRECTORY", unset = "")
-    if (!nzchar(ext_dir)) {
-        ext_dir <- R_user_dir("DuckDBDataFrame", which = "cache")
-    }
-    dir.create(ext_dir, recursive = TRUE, showWarnings = FALSE)
-    dbExecute(conn, sprintf("SET extension_directory = '%s';", ext_dir))
-    invisible(ext_dir)
-}
-
 #' @importFrom DBI dbExecute dbGetQuery
 loadExtension <- function(conn, extension, optional = FALSE) {
     qry <-
@@ -78,22 +66,18 @@ loadExtension <- function(conn, extension, optional = FALSE) {
                             err_msg, ignore.case = TRUE)
             if (optional && (is_perm || is_net)) {
                 warning(sprintf(
-                    "Could not install optional '%s' extension; some functionality may be limited.\nOriginal error: %s",
+                    "Could not install optional '%s' extension; some functionality may be limited.\nDetails: %s",
                     extension, err_msg), call. = FALSE)
                 return(FALSE)
             }
             if (is_perm) {
-                stop(sprintf(paste0(
-                    "Failed to install '%s' extension: the DuckDB extension directory is not writable.\n",
-                    "Set the DUCKDB_EXTENSION_DIRECTORY environment variable to a writable path\n",
-                    "(e.g. '~/.duckdb/extensions') and retry.\n\nOriginal error: %s"),
+                stop(sprintf(
+                    "Failed to install '%s' extension: the DuckDB extension directory is not writable.\nSet the DUCKDB_EXTENSION_DIRECTORY environment variable to a writable path\n(e.g. '~/.duckdb/extensions') and retry.\n\nDetails: %s",
                     extension, err_msg), call. = FALSE)
             }
             if (is_net) {
-                stop(sprintf(paste0(
-                    "Failed to install '%s' extension: could not reach the extension repository.\n",
-                    "Install it from a host with network access, or manually download it from\n",
-                    "http://extensions.duckdb.org into the DuckDB extension directory.\n\nOriginal error: %s"),
+                stop(sprintf(
+                    "Failed to install '%s' extension: could not reach the extension repository.\nInstall it from a host with network access, or manually download it from\nhttp://extensions.duckdb.org into the DuckDB extension directory.\n\nDetails: %s",
                     extension, err_msg), call. = FALSE)
             }
             stop(e)
@@ -110,6 +94,48 @@ loadExtension <- function(conn, extension, optional = FALSE) {
     invisible(status)
 }
 
+#' @importFrom DBI dbExecute dbGetQuery
+loadInstalledExtensions <- function(conn, extensions) {
+    installed <- tryCatch(
+        dbGetQuery(conn,
+                   "SELECT extension_name FROM duckdb_extensions() WHERE installed"),
+        error = function(e) NULL)
+    if (is.null(installed)) {
+        return(invisible(NULL))
+    }
+    for (ext in intersect(extensions, installed$extension_name)) {
+        try(dbExecute(conn, sprintf("LOAD %s;", ext)), silent = TRUE)
+    }
+    invisible(NULL)
+}
+
+#' @importFrom DBI dbExecute dbGetQuery
+configureExtensionAutoloading <- function(conn) {
+    try(dbExecute(conn, "SET autoinstall_known_extensions = true;"), silent = TRUE)
+    try(dbExecute(conn, "SET autoload_known_extensions = true;"), silent = TRUE)
+    repo <- Sys.getenv("MODL_DUCKDB_EXTENSION_REPOSITORY",
+                       unset = Sys.getenv("DUCKDB_EXTENSION_REPOSITORY", unset = ""))
+    if (nzchar(repo)) {
+        try(dbExecute(conn,
+                      sprintf("SET autoinstall_extension_repository = '%s';", repo)),
+            silent = TRUE)
+    }
+    loadInstalledExtensions(conn, c("spatial", "httpfs"))
+    invisible(NULL)
+}
+
+#' @importFrom DBI dbExecute
+#' @importFrom tools R_user_dir
+setExtensionDirectory <- function(conn) {
+    ext_dir <- Sys.getenv("DUCKDB_EXTENSION_DIRECTORY", unset = "")
+    if (!nzchar(ext_dir)) {
+        ext_dir <- R_user_dir("DuckDBDataFrame", which = "cache")
+    }
+    dir.create(ext_dir, recursive = TRUE, showWarnings = FALSE)
+    dbExecute(conn, sprintf("SET extension_directory = '%s';", ext_dir))
+    invisible(ext_dir)
+}
+
 #' @export
 #' @importFrom DBI dbConnect
 #' @importFrom duckdb duckdb
@@ -120,8 +146,7 @@ acquireDuckDBConn <- function(conn = dbConnect(duckdb(), bigint = "integer64", a
             stop("'conn' must be a DuckDB connection")
         }
         setExtensionDirectory(conn)
-        loadExtension(conn, "httpfs", optional = TRUE)
-        loadExtension(conn, "spatial", optional = TRUE)
+        configureExtensionAutoloading(conn)
         .duckdb$drv <- conn
     }
     .duckdb$drv

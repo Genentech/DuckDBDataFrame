@@ -472,7 +472,7 @@ function(x, indexcol = NULL, keycol = NULL, dimtbl = NULL, offset = 0L,
 
     output_names <- make.unique(output_names, sep = "_")
     if (length(select_parts) != length(output_names))
-        stop("internal error building table SELECT")
+        stop("internal problem building table SELECT")
 
     for (i in seq_along(select_parts)) {
         if (!grepl(" AS ", select_parts[i], fixed = TRUE)) {
