@@ -19,6 +19,10 @@
   `INNER JOIN` against the temporary key table. `SEMI JOIN` is the correct
   membership primitive: it neither duplicates rows when the key repeats nor
   appends the join column.
+- Lowered the key-set size at which filtering switches from an inline `IN` list
+  to a temporary-table `SEMI`/`ANTI JOIN` (from 10000 to 256). Large inline `IN`
+  lists dominate DuckDB's SQL compile time, so the crossover belongs in the low
+  hundreds.
 
 # DuckDBDataFrame 0.9.22
 

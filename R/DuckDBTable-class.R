@@ -363,13 +363,18 @@ setMethod("dbconn", "DuckDBTable", function(x) x@conn$src$con)
     tbl(db_con, temp_name)
 }
 
+# Above this many keys, filtering switches from an inline IN list to a temporary-
+# table SEMI/ANTI JOIN: large inline IN lists dominate DuckDB's SQL compile time.
+.KEY_FILTER_JOIN_THRESHOLD <- 256L
+
 # Apply key filter using the best strategy based on set size.
-# For large sets (>10K elements) a temp-table SEMI/ANTI JOIN is used instead of
-# an IN list. NA-valued keys are handled explicitly: SQL 'x [NOT] IN (..., NULL)'
-# evaluates to UNKNOWN (not TRUE/FALSE), which silently drops rows -- and for the
-# complement a single NA in 'set' turns 'NOT IN (..., NULL)' into UNKNOWN for
-# *every* row, wiping the result. We therefore never emit a NULL inside an IN
-# list, and reproduce base-R `%in%` semantics for NA-valued keys.
+# For large sets (see .KEY_FILTER_JOIN_THRESHOLD) a temp-table SEMI/ANTI JOIN is
+# used instead of an IN list. NA-valued keys are handled explicitly: SQL
+# 'x [NOT] IN (..., NULL)' evaluates to UNKNOWN (not TRUE/FALSE), which silently
+# drops rows -- and for the complement a single NA in 'set' turns
+# 'NOT IN (..., NULL)' into UNKNOWN for *every* row, wiping the result. We
+# therefore never emit a NULL inside an IN list, and reproduce base-R `%in%`
+# semantics for NA-valued keys.
 #' @importFrom dplyr anti_join filter semi_join
 #' @importFrom bit64 is.integer64
 .apply_key_filter <- function(conn, col_name, set, complement = FALSE) {
@@ -383,7 +388,7 @@ setMethod("dbconn", "DuckDBTable", function(x) x@conn$src$con)
 
     if (complement) {
         # base R: `!(x %in% set)` is TRUE for an NA key iff NA is *not* in 'set'.
-        if (k > 10000L) {
+        if (k > .KEY_FILTER_JOIN_THRESHOLD) {
             # A hash anti-join keeps NA-keyed rows (NULL never matches), matching
             # the NA-not-in-set case; drop them explicitly when NA is in 'set'.
             conn <- anti_join(conn, .register_key_table(conn, col_name, set),
@@ -398,7 +403,7 @@ setMethod("dbconn", "DuckDBTable", function(x) x@conn$src$con)
         }
     } else {
         # Membership: an NA-valued key is never selected by a value set.
-        if (k > 10000L) {
+        if (k > .KEY_FILTER_JOIN_THRESHOLD) {
             conn <- semi_join(conn, .register_key_table(conn, col_name, set),
                               by = col_name)
         } else {
