@@ -310,17 +310,27 @@ setMethod("dbconn", "DuckDBTable", function(x) x@conn$src$con)
 # Build a filter expression using BETWEEN for contiguous ranges
 # More efficient than IN lists for DuckDB row group pruning
 #' @importFrom DBI dbQuoteLiteral
-#' @importFrom dplyr between
+#' @importFrom dplyr between sql
+#' @importFrom bit64 is.integer64
 .build_range_filter <- function(conn, col_name, ranges) {
     if (length(ranges) == 0L) return(NULL)
 
     col_sym <- as.name(col_name)
     db_con <- conn$src$con
 
+    # integer64 bounds must be rendered as bare SQL integer literals
+    quote_bound <- function(v) {
+        if (is.integer64(v)) {
+            sql(as.character(v))
+        } else {
+            dbQuoteLiteral(db_con, v)
+        }
+    }
+
     # Build OR'd BETWEEN expressions for each range
     exprs <- lapply(ranges, function(r) {
-        left <- dbQuoteLiteral(db_con, r[1L])
-        right <- dbQuoteLiteral(db_con, r[2L])
+        left <- quote_bound(r[1L])
+        right <- quote_bound(r[2L])
         if (r[1L] == r[2L]) {
             # Single value - use equality
             call("==", col_sym, left)
@@ -338,37 +348,59 @@ setMethod("dbconn", "DuckDBTable", function(x) x@conn$src$con)
     }
 }
 
-# Apply key filter using best strategy based on set size
-# For large sets (>10K elements), use temp table join instead of IN list
-#' @importFrom dplyr anti_join filter inner_join tbl
+# Register an in-memory key vector as a virtual DuckDB table for join-based
+# filtering, returning a lazy tbl over it. Used for large key sets, where a
+# semi-/anti-join is cheaper to compile and execute than a giant IN list.
+#' @importFrom dplyr tbl
 #' @importFrom duckdb duckdb_register
+.register_key_table <- function(conn, col_name, set) {
+    db_con <- conn$src$con
+    temp_suffix <- basename(tempfile(pattern = ""))
+    temp_name <- sprintf("temp_filter_%s_%s", col_name, temp_suffix)
+    temp_df <- data.frame(key = set)
+    names(temp_df) <- col_name
+    duckdb_register(db_con, temp_name, temp_df)
+    tbl(db_con, temp_name)
+}
+
+# Apply key filter using the best strategy based on set size.
+# For large sets (>10K elements) a temp-table SEMI/ANTI JOIN is used instead of
+# an IN list. NA-valued keys are handled explicitly: SQL 'x [NOT] IN (..., NULL)'
+# evaluates to UNKNOWN (not TRUE/FALSE), which silently drops rows -- and for the
+# complement a single NA in 'set' turns 'NOT IN (..., NULL)' into UNKNOWN for
+# *every* row, wiping the result. We therefore never emit a NULL inside an IN
+# list, and reproduce base-R `%in%` semantics for NA-valued keys.
+#' @importFrom dplyr anti_join filter semi_join
+#' @importFrom bit64 is.integer64
 .apply_key_filter <- function(conn, col_name, set, complement = FALSE) {
+    col_sym <- as.name(col_name)
+
+    # is.na() (not anyNA()) so integer64's NA encoding is detected correctly.
+    na <- is.na(set)
+    set_has_na <- any(na)
+    set <- set[!na]
     k <- length(set)
 
-    if (k > 10000L) {
-        # Large set: use temp table join for better performance
-        db_con <- conn$src$con
-
-        temp_suffix <- basename(tempfile(pattern = ""))
-        temp_name <- sprintf("temp_filter_%s_%s", col_name, temp_suffix)
-
-        # Register temp table
-        temp_df <- data.frame(key = set)
-        names(temp_df) <- col_name
-        duckdb_register(db_con, temp_name, temp_df)
-
-        if (complement) {
-            # Anti-join for complement
-            conn <- anti_join(conn, tbl(db_con, temp_name), by = col_name)
+    if (complement) {
+        # base R: `!(x %in% set)` is TRUE for an NA key iff NA is *not* in 'set'.
+        if (k > 10000L) {
+            # A hash anti-join keeps NA-keyed rows (NULL never matches), matching
+            # the NA-not-in-set case; drop them explicitly when NA is in 'set'.
+            conn <- anti_join(conn, .register_key_table(conn, col_name, set),
+                              by = col_name)
+            if (set_has_na) {
+                conn <- filter(conn, !is.na(!!col_sym))
+            }
+        } else if (set_has_na) {
+            conn <- filter(conn, !is.na(!!col_sym) & !(!!col_sym %in% set))
         } else {
-            # Inner join for membership
-            conn <- inner_join(conn, tbl(db_con, temp_name), by = col_name)
+            conn <- filter(conn, is.na(!!col_sym) | !(!!col_sym %in% set))
         }
     } else {
-        # Small-to-medium set: use IN list
-        col_sym <- as.name(col_name)
-        if (complement) {
-            conn <- filter(conn, !(!!col_sym %in% set))
+        # Membership: an NA-valued key is never selected by a value set.
+        if (k > 10000L) {
+            conn <- semi_join(conn, .register_key_table(conn, col_name, set),
+                              by = col_name)
         } else {
             conn <- filter(conn, !!col_sym %in% set)
         }
@@ -396,7 +428,7 @@ setMethod("dbconn", "DuckDBTable", function(x) x@conn$src$con)
 
         # For integer keys, try to use BETWEEN predicates (enables row group pruning)
         range_filter <- NULL
-        if (is.integer(set) && k > 0L) {
+        if ((is.integer(set) || is.integer64(set)) && k > 0L) {
             ranges <- .find_contiguous_ranges(set)
             # Use range predicates if they're more efficient than IN list
             # Heuristic: use ranges if total range count is small relative to set size

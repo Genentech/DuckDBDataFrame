@@ -1,3 +1,25 @@
+# DuckDBDataFrame 0.9.23
+
+## Bug fixes
+
+- Row subsetting by key no longer risks silently dropping every row. A key
+  filter whose complement (exclusion) set contained an `NA` compiled to SQL
+  `NOT IN (..., NULL)`, which evaluates to `UNKNOWN` for *all* rows and returned
+  an empty result. `NA`-valued keys are now handled explicitly and never emitted
+  inside an `IN` list, reproducing base-R `%in%` semantics.
+
+## Internal changes
+
+- The BETWEEN fast-path for contiguous key ranges (which enables Parquet
+  row-group pruning) now also fires for `integer64` keys. Because `is.integer()`
+  is `FALSE` for `integer64`, the fast-path was previously skipped for exactly
+  the `BIGINT` / row-number keycols where it matters most, falling back to an
+  `IN` list.
+- Membership subsetting for large key sets now uses a `SEMI JOIN` rather than an
+  `INNER JOIN` against the temporary key table. `SEMI JOIN` is the correct
+  membership primitive: it neither duplicates rows when the key repeats nor
+  appends the join column.
+
 # DuckDBDataFrame 0.9.22
 
 ## Internal changes

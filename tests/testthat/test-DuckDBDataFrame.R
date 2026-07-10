@@ -116,6 +116,57 @@ test_that("positional slicing by rows works for a DuckDBDataFrame", {
     checkDuckDBDataFrame(df[i, ], infert[i, ])
 })
 
+test_that("slicing a contiguous integer64 key uses the BETWEEN fast-path", {
+    gid <- bit64::as.integer64(1:100)
+    df <- DuckDBDataFrame(int64_parquet, datacols = c("x", "y"), keycol = list(gid = gid))
+    expected <- data.frame(x = as.numeric(1:100), y = as.numeric(101:200),
+                           row.names = as.character(gid))
+    checkDuckDBDataFrame(df[10:30, ], expected[10:30, ])
+
+    # A contiguous integer64 range must compile to BETWEEN (enabling row-group
+    # pruning), not an IN list: is.integer() is FALSE for integer64, so this path
+    # was previously skipped for BIGINT / row-number keys.
+    sql <- as.character(dbplyr::sql_render(tblconn(df[10:30, ])))
+    expect_true(grepl("BETWEEN", sql, ignore.case = TRUE))
+})
+
+test_that("slicing a large key set uses a SEMI JOIN without duplicating rows", {
+    ids <- sprintf("id%05d", 1:12000)
+    df <- DuckDBDataFrame(bigkeys_parquet, datacols = "x", keycol = list(id = ids))
+    keep <- ids[1:11000]
+    expected <- data.frame(x = as.numeric(1:11000), row.names = keep)
+    checkDuckDBDataFrame(df[keep, , drop = FALSE], expected)
+
+    # A large membership set uses a SEMI JOIN (rendered as WHERE EXISTS), which
+    # unlike an INNER JOIN neither duplicates rows nor appends the join column.
+    sql <- as.character(dbplyr::sql_render(tblconn(df[keep, , drop = FALSE])))
+    expect_true(grepl("SEMI JOIN|EXISTS", sql, ignore.case = TRUE))
+    expect_false(grepl("INNER JOIN", sql, ignore.case = TRUE))
+})
+
+test_that("key-filter complement is NULL-safe (no 'NOT IN (NULL)' wipe-out)", {
+    con <- acquireDuckDBConn()
+
+    # A single NA in the exclusion set must not turn the predicate into UNKNOWN
+    # for every row (the SQL 'NOT IN (..., NULL)' trap that drops all rows).
+    duckdb::duckdb_register(con, "test_null_safe", data.frame(k = 1:5))
+    on.exit(duckdb::duckdb_unregister(con, "test_null_safe"), add = TRUE)
+    conn <- dplyr::tbl(con, "test_null_safe")
+    out <- DuckDBDataFrame:::.apply_key_filter(conn, "k", c(2L, 4L, NA_integer_),
+                                               complement = TRUE)
+    expect_setequal(dplyr::pull(dplyr::collect(out), "k"), c(1L, 3L, 5L))
+
+    # An NA-valued key is retained under complement when NA is not in the set,
+    # matching base-R's `!(NA %in% c(2)) == TRUE`.
+    duckdb::duckdb_register(con, "test_null_key", data.frame(k = c(1L, 2L, NA, 4L)))
+    on.exit(duckdb::duckdb_unregister(con, "test_null_key"), add = TRUE)
+    conn2 <- dplyr::tbl(con, "test_null_key")
+    got <- dplyr::pull(dplyr::collect(
+        DuckDBDataFrame:::.apply_key_filter(conn2, "k", 2L, complement = TRUE)), "k")
+    expect_identical(sum(is.na(got)), 1L)
+    expect_setequal(got[!is.na(got)], c(1L, 4L))
+})
+
 test_that("subset works for a DuckDBDataFrame", {
     df <- DuckDBDataFrame(mtcars_parquet, datacols = colnames(mtcars), keycol = list(model = rownames(mtcars)))
     checkDuckDBDataFrame(subset(df, cyl > 6, mpg:wt), subset(mtcars, cyl > 6, mpg:wt))

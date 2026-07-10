@@ -71,6 +71,19 @@ special_path <- tempfile(fileext = ".parquet")
 arrow::write_parquet(special_df, special_path)
 
 
+# Integer64 (BIGINT) keys, for the contiguous-range BETWEEN fast-path
+int64_df <- data.frame(x = as.numeric(1:100), y = as.numeric(101:200))
+int64_df$gid <- bit64::as.integer64(1:100)
+int64_parquet <- tempfile(fileext = ".parquet")
+arrow::write_parquet(int64_df, int64_parquet)
+
+
+# Large key set, to exercise join-based (rather than IN-list) membership filtering
+bigkeys_df <- data.frame(id = sprintf("id%05d", 1:12000), x = as.numeric(1:12000))
+bigkeys_parquet <- tempfile(fileext = ".parquet")
+arrow::write_parquet(bigkeys_df, bigkeys_parquet)
+
+
 # Atomic lists dataset
 lists_df <- data.frame(
     id = sprintf("gene%02d", 1:50),
