@@ -41,7 +41,7 @@ object and the familiarity of a \linkS4class{DataFrame} object.
 \section{Constructor}{
 
 \describe{
-  \item{\code{DuckDBDataFrame(conn, datacols = colnames(conn), keycol = NULL, dimtbl = NULL, type = NULL)}:}{
+  \item{\code{DuckDBDataFrame(conn, datacols = colnames(conn), keycol = NULL, dimtbl = NULL, type = NULL, collevels = NULL)}:}{
     Creates a DuckDBDataFrame object.
     \describe{
       \item{\code{conn}}{
@@ -76,6 +76,12 @@ object and the familiarity of a \linkS4class{DataFrame} object.
         column names and the values specify the column type; one of
         \code{"logical"}, \code{"integer"}, \code{"integer64"},
         \code{"double"}, or \code{"character"}.
+      }
+      \item{\code{collevels}}{
+        An optional named list, keyed by data column name, that restores
+        \code{factor} columns on materialization (each element a list with a
+        character \code{levels} vector and a \code{TRUE}/\code{FALSE}
+        \code{ordered} flag). Primarily used by \code{readParquet()}.
       }
     }
   }

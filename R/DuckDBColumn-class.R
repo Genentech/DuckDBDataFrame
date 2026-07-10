@@ -260,6 +260,15 @@ setMethod("as.vector", "DuckDBColumn", function(x, mode = "any") {
     names <- .map_keycol_names(x@table@keycols[[1L]], df[[2L]])
     vec <- setNames(df[[1L]], names)
     vec <- vec[rownames(x@table)]
+
+    # Restore a factor column recorded in the schema (no-op when none). factor()
+    # drops names, so re-attach them.
+    entry <- x@table@collevels[[names(x@table@datacols)[1L]]]
+    if (!is.null(entry) && is.character(vec)) {
+        vec <- setNames(factor(vec, levels = entry[["levels"]],
+                               ordered = entry[["ordered"]]), names(vec))
+    }
+
     if (mode != "any") {
         storage.mode(vec) <- mode
     }

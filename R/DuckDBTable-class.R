@@ -12,7 +12,7 @@
 #'
 #' @section Constructor:
 #' \describe{
-#'   \item{\code{DuckDBTable(conn, datacols = colnames(conn), keycols = NULL, dimtbls = NULL, type = NULL)}:}{
+#'   \item{\code{DuckDBTable(conn, datacols = colnames(conn), keycols = NULL, dimtbls = NULL, type = NULL, collevels = NULL)}:}{
 #'     Creates a DuckDBTable object.
 #'     \describe{
 #'       \item{\code{conn}}{
@@ -49,6 +49,14 @@
 #'         column names and the values specify the column type; one of
 #'         \code{"logical"}, \code{"integer"}, \code{"integer64"},
 #'         \code{"double"}, or \code{"character"}.
+#'       }
+#'       \item{\code{collevels}}{
+#'         An optional named list, keyed by data column name, that restores
+#'         \code{factor} columns on materialization. Each element is a list with
+#'         a character \code{levels} vector and a \code{TRUE}/\code{FALSE}
+#'         \code{ordered} flag; columns not named are left unchanged. Primarily
+#'         used by \code{readParquet()} to recover factors recorded in a
+#'         product's schema.
 #'       }
 #'     }
 #'   }
@@ -208,12 +216,13 @@ replaceSlots <- BiocGenerics:::replaceSlots
 #' @importFrom stats setNames
 setClass("DuckDBTable", contains = c("RectangularData", "OutOfMemoryObject"),
     slots = c(conn = "tbl_duckdb_connection", datacols = "expression", keycols = "list",
-              dimtbls = "environment"),
+              dimtbls = "environment", collevels = "list"),
     prototype = prototype(conn = structure(list(),
                                            class = c("tbl_duckdb_connection", "tbl_dbi",
                                                      "tbl_sql", "tbl_lazy", "tbl")),
                           datacols = setNames(expression(), character()),
                           keycols = setNames(list(), character()),
+                          collevels = setNames(list(), character()),
                           dimtbls = {
                             env <- new.env(parent = emptyenv())
                             env[["dimtbls"]] <- setNames(DataFrameList(), character())
@@ -630,8 +639,10 @@ setMethod("colnames", "DuckDBTable", function(x, do.NULL = TRUE, prefix = "col")
 #' @export
 setReplaceMethod("colnames", "DuckDBTable", function(x, value) {
     datacols <- x@datacols
+    rename <- setNames(value, names(datacols))
     names(datacols) <- value
-    replaceSlots(x, datacols = datacols, check = FALSE)
+    collevels <- .sync_collevels(x@collevels, datacols, rename = rename)
+    replaceSlots(x, datacols = datacols, collevels = collevels, check = FALSE)
 })
 
 ### - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -691,6 +702,39 @@ setReplaceMethod("colnames", "DuckDBTable", function(x, value) {
                "geometry_type" = "character",
                stop("unsupported DuckDB type: ", duckdb_type))
     }
+}
+
+# Warn once per construction when a column's DuckDB type maps to an R type that
+# cannot represent it faithfully: 128-bit integers and wide decimals collapse to
+# 'double'; unsigned 64-bit collapses to (signed) 'integer64'. Narrow integer and
+# float widths are intentionally NOT warned: base R has no type to preserve them.
+.warn_lossy_widetypes <- function(schema) {
+    if (length(schema) == 0L) {
+        return(invisible(NULL))
+    }
+    type <- toupper(schema)
+    lossy <- character(0L)
+    for (col in names(type)) {
+        t <- type[[col]]
+        if (grepl("^U?HUGEINT", t)) {
+            lossy[[col]] <- "128-bit integer -> double"
+        } else if (grepl("^UBIGINT", t)) {
+            lossy[[col]] <- "unsigned 64-bit -> signed integer64"
+        } else if (grepl("^DECIMAL", t)) {
+            p <- suppressWarnings(as.integer(sub("^DECIMAL\\((\\d+).*", "\\1", t)))
+            if (is.na(p)) p <- 18L  # bare DECIMAL defaults to DECIMAL(18,3)
+            if (p > 15L) {
+                lossy[[col]] <- sprintf("DECIMAL(%d) -> double", p)
+            }
+        }
+    }
+    if (length(lossy) > 0L) {
+        warning(sprintf("possible precision loss reading column(s): %s",
+                        paste(sprintf("'%s' (%s)", names(lossy), unlist(lossy)),
+                              collapse = ", ")),
+                call. = FALSE)
+    }
+    invisible(NULL)
 }
 
 ### - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -827,7 +871,13 @@ setGeneric("coltypes<-", function(x, value) standardGeneric("coltypes<-"))
 #' @export
 setReplaceMethod("coltypes", "DuckDBTable", function(x, value) {
     datacols <- .cast_cols(x@datacols, value)
-    replaceSlots(x, datacols = datacols, check = FALSE)
+    # A recast column is no longer a factor: drop any recorded levels for it.
+    changed <- names(value)
+    if (is.null(changed) && (length(value) == length(x@datacols))) {
+        changed <- names(x@datacols)
+    }
+    collevels <- x@collevels[setdiff(names(x@collevels), changed)]
+    replaceSlots(x, datacols = datacols, collevels = collevels, check = FALSE)
 })
 
 #' @importClassesFrom IRanges DataFrameList
@@ -906,8 +956,74 @@ setValidity2("DuckDBTable", function(x) {
         msg <- c(msg, "'datacols' slot must be a named expression")
     }
 
+    if (length(x@collevels) > 0L) {
+        if (is.null(names(x@collevels)) ||
+            !all(names(x@collevels) %in% names(x@datacols))) {
+            msg <- c(msg, "'collevels' slot must be a named list keyed by 'datacols' names")
+        }
+        for (i in seq_along(x@collevels)) {
+            entry <- x@collevels[[i]]
+            if (!is.list(entry) || !is.character(entry[["levels"]]) ||
+                !isTRUEorFALSE(entry[["ordered"]])) {
+                msg <- c(msg, "each 'collevels' entry must be list(levels = <character>, ordered = <TRUE/FALSE>)")
+                break
+            }
+        }
+    }
+
     msg %||% TRUE
 })
+
+### - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+### Factor level bookkeeping
+###
+
+# Coerce a user/reader-supplied 'collevels' into the canonical sparse form: a
+# named list keyed by datacol name, each entry list(levels=<character>,
+# ordered=<TRUE/FALSE>). Entries not naming a current datacol are dropped, as are
+# NULL/empty entries (a missing key means "not a factor").
+.normalize_collevels <- function(datacols, collevels) {
+    if (is.null(collevels) || length(collevels) == 0L) {
+        return(setNames(list(), character()))
+    }
+    collevels <- collevels[intersect(names(collevels), names(datacols))]
+    keep <- vapply(collevels, function(entry) {
+        is.list(entry) && length(entry[["levels"]]) > 0L
+    }, logical(1L))
+    collevels <- collevels[keep]
+    lapply(collevels, function(entry) {
+        list(levels = as.character(entry[["levels"]]),
+             ordered = isTRUE(entry[["ordered"]]))
+    })
+}
+
+# Keep 'collevels' in sync with a (possibly renamed/subset) 'datacols' after a
+# structural column operation: retain only entries whose column survives. When
+# 'rename' is supplied (old -> new names), the entries are re-keyed accordingly.
+.sync_collevels <- function(collevels, datacols, rename = NULL) {
+    if (length(collevels) == 0L) {
+        return(collevels)
+    }
+    if (!is.null(rename)) {
+        hit <- names(collevels) %in% names(rename)
+        names(collevels)[hit] <- rename[names(collevels)[hit]]
+    }
+    collevels[intersect(names(collevels), names(datacols))]
+}
+
+# Restore factor columns of a just-collected data.frame from 'collevels'. Gated
+# on the collected column being physically 'character': a factor column that has
+# been cast/transformed materializes as a non-character type and is left as-is.
+.apply_collevels <- function(df, collevels) {
+    for (col in intersect(names(collevels), names(df))) {
+        if (is.character(df[[col]])) {
+            entry <- collevels[[col]]
+            df[[col]] <- factor(df[[col]], levels = entry[["levels"]],
+                                ordered = entry[["ordered"]])
+        }
+    }
+    df
+}
 
 ### - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 ### Constructor
@@ -945,7 +1061,8 @@ setValidity2("DuckDBTable", function(x) {
 #' @importFrom S4Vectors new2
 #' @importFrom stats setNames
 DuckDBTable <-
-function(conn, datacols = colnames(conn), keycols = NULL, dimtbls = NULL, type = NULL) {
+function(conn, datacols = colnames(conn), keycols = NULL, dimtbls = NULL, type = NULL,
+         collevels = NULL) {
     # Acquire the connection if it is a string
     actual <- NULL
     if (is.character(conn)) {
@@ -993,8 +1110,13 @@ function(conn, datacols = colnames(conn), keycols = NULL, dimtbls = NULL, type =
         }
     }
 
+    # Warn on lossy wide-type -> R conversions (128-bit / unsigned 64-bit / wide
+    # decimal), reusing the schema fetched just below.
+    full_schema <- toupper(.get_duckdb_schema(conn, datacols))
+    .warn_lossy_widetypes(full_schema)
+
     # Cast fixed-length LIST[] to ARRAY[] for embeddings
-    schema <- toupper(.get_duckdb_schema(conn, datacols))
+    schema <- full_schema
     pattern <- "^(DOUBLE|FLOAT|REAL|DECIMAL)\\[\\]$"
     schema <- schema[grepl(pattern, schema)]
     for (col in names(schema)) {
@@ -1035,9 +1157,10 @@ function(conn, datacols = colnames(conn), keycols = NULL, dimtbls = NULL, type =
         }
     }
     dimtbls <- .create_dimtbls(dimtbls)
+    collevels <- .normalize_collevels(datacols, collevels)
 
     new2("DuckDBTable", conn = conn, datacols = datacols, keycols = keycols,
-         dimtbls = dimtbls, check = FALSE)
+         dimtbls = dimtbls, collevels = collevels, check = FALSE)
 }
 
 ### - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -1088,8 +1211,10 @@ all.equal.DuckDBTable <- function(target, current, check.datacols = FALSE, ...) 
 .subset_DuckDBTable <- function(x, i, j, ..., drop = TRUE) {
     conn <- x@conn
     datacols <- x@datacols
+    collevels <- x@collevels
     if (!missing(j)) {
         datacols <- datacols[j]
+        collevels <- .sync_collevels(collevels, datacols)
     }
 
     keycols <- x@keycols
@@ -1138,7 +1263,8 @@ all.equal.DuckDBTable <- function(target, current, check.datacols = FALSE, ...) 
         }
     }
 
-    replaceSlots(x, conn = conn, datacols = datacols, keycols = keycols, ..., check = FALSE)
+    replaceSlots(x, conn = conn, datacols = datacols, keycols = keycols,
+                 collevels = collevels, ..., check = FALSE)
 }
 
 #' @export
@@ -1236,6 +1362,7 @@ function(x, objects = list(), use.names = TRUE, ignore.mcols = FALSE, check = TR
 setMethod("bindCOLS", "DuckDBTable",
 function(x, objects = list(), use.names = TRUE, ignore.mcols = FALSE, check = TRUE) {
     datacols <- x@datacols
+    sources <- list(x)
 
     for (i in seq_along(objects)) {
         obj <- objects[[i]]
@@ -1253,9 +1380,19 @@ function(x, objects = list(), use.names = TRUE, ignore.mcols = FALSE, check = TR
             colnames(obj) <- newname
         }
         datacols <- c(datacols, obj@datacols)
+        sources <- c(sources, list(obj))
     }
     names(datacols) <- make.unique(names(datacols), sep = "_")
-    replaceSlots(x, datacols = datacols, check = FALSE)
+
+    # Re-key factor levels onto the final (uniquified) names, positionally so
+    # duplicate source names are handled correctly.
+    pos_levels <- unlist(lapply(sources, function(s) {
+        lapply(names(s@datacols), function(nm) s@collevels[[nm]])
+    }), recursive = FALSE)
+    names(pos_levels) <- names(datacols)
+    collevels <- pos_levels[!vapply(pos_levels, is.null, logical(1L))]
+
+    replaceSlots(x, datacols = datacols, collevels = collevels, check = FALSE)
 })
 
 ### - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -

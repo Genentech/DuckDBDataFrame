@@ -12,7 +12,7 @@
 #'
 #' @section Constructor:
 #' \describe{
-#'   \item{\code{DuckDBDataFrame(conn, datacols = colnames(conn), keycol = NULL, dimtbl = NULL, type = NULL)}:}{
+#'   \item{\code{DuckDBDataFrame(conn, datacols = colnames(conn), keycol = NULL, dimtbl = NULL, type = NULL, collevels = NULL)}:}{
 #'     Creates a DuckDBDataFrame object.
 #'     \describe{
 #'       \item{\code{conn}}{
@@ -47,6 +47,12 @@
 #'         column names and the values specify the column type; one of
 #'         \code{"logical"}, \code{"integer"}, \code{"integer64"},
 #'         \code{"double"}, or \code{"character"}.
+#'       }
+#'       \item{\code{collevels}}{
+#'         An optional named list, keyed by data column name, that restores
+#'         \code{factor} columns on materialization (each element a list with a
+#'         character \code{levels} vector and a \code{TRUE}/\code{FALSE}
+#'         \code{ordered} flag). Primarily used by \code{readParquet()}.
 #'       }
 #'     }
 #'   }
@@ -270,12 +276,15 @@ setReplaceMethod("rownames", "DuckDBDataFrame", function(x, value) {
 #' @importFrom S4Vectors mcols
 setReplaceMethod("colnames", "DuckDBDataFrame", function(x, value) {
     datacols <- x@datacols
+    rename <- setNames(value, names(datacols))
     names(datacols) <- value
+    collevels <- .sync_collevels(x@collevels, datacols, rename = rename)
     mc <- mcols(x)
     if (!is.null(mc)) {
         rownames(mc) <- value
     }
-    replaceSlots(x, datacols = datacols, elementMetadata = mc, check = FALSE)
+    replaceSlots(x, datacols = datacols, collevels = collevels,
+                 elementMetadata = mc, check = FALSE)
 })
 
 #' @export
@@ -309,12 +318,14 @@ setValidity2("DuckDBDataFrame", function(x) {
 #' @export
 #' @importFrom S4Vectors new2
 DuckDBDataFrame <-
-function(conn, datacols = colnames(conn), keycol = NULL, dimtbl = NULL, type = NULL) {
+function(conn, datacols = colnames(conn), keycol = NULL, dimtbl = NULL, type = NULL,
+         collevels = NULL) {
     if (missing(datacols)) {
-        tbl <- DuckDBTable(conn, keycols = keycol, dimtbls = dimtbl, type = type)
+        tbl <- DuckDBTable(conn, keycols = keycol, dimtbls = dimtbl, type = type,
+                           collevels = collevels)
     } else {
         tbl <- DuckDBTable(conn, datacols = datacols, keycols = keycol,
-                           dimtbls = dimtbl, type = type)
+                           dimtbls = dimtbl, type = type, collevels = collevels)
     }
     new2("DuckDBDataFrame", tbl, check = FALSE)
 }
@@ -366,11 +377,13 @@ setReplaceMethod("[[", "DuckDBDataFrame", function(x, i, j, ..., value) {
     if (is.null(value)) {
         datacols <- x@datacols
         datacols[[i2]] <- NULL
+        collevels <- .sync_collevels(x@collevels, datacols)
         mc <- mcols(x)
         if (!is.null(mc)) {
             mc <- mc[-i2, , drop = FALSE]
         }
-        return(replaceSlots(x, datacols = datacols, elementMetadata = mc, check = FALSE))
+        return(replaceSlots(x, datacols = datacols, collevels = collevels,
+                            elementMetadata = mc, check = FALSE))
     }
 
     if (length(i2) == 1L && !is.na(i2)) {
@@ -378,11 +391,18 @@ setReplaceMethod("[[", "DuckDBDataFrame", function(x, i, j, ..., value) {
             if (isTRUE(all.equal(as(x, "DuckDBTable"), value@table))) {
                 datacols <- x@datacols
                 datacols[[i2]] <- value@table@datacols[[1L]]
+                # Carry the source column's factor levels (if any) onto the target,
+                # dropping any levels the replaced column had.
+                target <- if (is.character(i2)) i2 else names(datacols)[i2]
+                collevels <- x@collevels
+                collevels[[target]] <- value@table@collevels[[names(value@table@datacols)[1L]]]
+                collevels <- .sync_collevels(collevels, datacols)
                 mc <- mcols(x)
                 if (!is.null(mc) && is.character(i) && !(i %in% colnames(x))) {
                     mc <- combineRows(mc, DataFrame(row.names = i))
                 }
-                return(replaceSlots(x, datacols = datacols, elementMetadata = mc, check = FALSE))
+                return(replaceSlots(x, datacols = datacols, collevels = collevels,
+                                    elementMetadata = mc, check = FALSE))
             }
         }
     }
@@ -426,13 +446,22 @@ setMethod("replaceCOLS", "DuckDBDataFrame", function(x, i, value) {
             if (is.character(i)) {
                 names(datacols)[i2] <- i
             }
+            # Carry factor levels for the replaced positions from 'value' (NULL
+            # clears the target when the replacement is not a factor).
+            collevels <- x@collevels
+            vln <- names(value@datacols)
+            for (k in seq_along(i2)) {
+                collevels[[names(datacols)[i2[k]]]] <- value@collevels[[vln[k]]]
+            }
+            collevels <- .sync_collevels(collevels, datacols)
             mc <- mcols(x)
             if (!is.null(mc) && !setequal(names(datacols), rownames(mc))) {
                 newnames <- setdiff(names(datacols), rownames(mc))
                 mc <- combineRows(mc, DataFrame(row.names = newnames))
                 mc <- mc[names(datacols), , drop = FALSE]
             }
-            return(replaceSlots(x, datacols = datacols, elementMetadata = mc, check = FALSE))
+            return(replaceSlots(x, datacols = datacols, collevels = collevels,
+                                elementMetadata = mc, check = FALSE))
         }
     }
     stop("not compatible DuckDBDataFrame objects")
@@ -559,6 +588,9 @@ function(x, row.names = NULL, optional = FALSE, ...) {
                 }
             }
         }
+
+        # Restore factor columns recorded in the schema (no-op when none)
+        df <- .apply_collevels(df, x@collevels)
     }
 
     df

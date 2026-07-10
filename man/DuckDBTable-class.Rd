@@ -52,7 +52,7 @@ such as \code{dim()}, \code{nrow()}, \code{ncol()}, \code{dimnames()},
 \section{Constructor}{
 
 \describe{
-  \item{\code{DuckDBTable(conn, datacols = colnames(conn), keycols = NULL, dimtbls = NULL, type = NULL)}:}{
+  \item{\code{DuckDBTable(conn, datacols = colnames(conn), keycols = NULL, dimtbls = NULL, type = NULL, collevels = NULL)}:}{
     Creates a DuckDBTable object.
     \describe{
       \item{\code{conn}}{
@@ -89,6 +89,14 @@ such as \code{dim()}, \code{nrow()}, \code{ncol()}, \code{dimnames()},
         column names and the values specify the column type; one of
         \code{"logical"}, \code{"integer"}, \code{"integer64"},
         \code{"double"}, or \code{"character"}.
+      }
+      \item{\code{collevels}}{
+        An optional named list, keyed by data column name, that restores
+        \code{factor} columns on materialization. Each element is a list with
+        a character \code{levels} vector and a \code{TRUE}/\code{FALSE}
+        \code{ordered} flag; columns not named are left unchanged. Primarily
+        used by \code{readParquet()} to recover factors recorded in a
+        product's schema.
       }
     }
   }

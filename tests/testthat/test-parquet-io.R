@@ -216,3 +216,51 @@ test_that("buildTableSelectSQL returns dplyr-compatible SQL", {
     expect_true(grepl("__index__", built$sql))
     expect_equal(built$colnames[1L], "__index__")
 })
+
+test_that("collevels restores factor columns on materialization", {
+    tf <- tempfile(fileext = ".parquet")
+    on.exit(unlink(tf), add = TRUE)
+    df <- data.frame(id = letters[1:6], g = c("A", "B", "A", "C", "B", "A"),
+                     stringsAsFactors = FALSE)
+    arrow::write_parquet(df, tf)
+
+    ddf <- DuckDBDataFrame(tf, datacols = "g", keycol = "id",
+                           collevels = list(g = list(levels = c("A", "B", "C"),
+                                                     ordered = FALSE)))
+    out <- as.data.frame(ddf)
+    expect_true(is.factor(out[["g"]]))
+    expect_false(is.ordered(out[["g"]]))
+    expect_identical(levels(out[["g"]]), c("A", "B", "C"))
+    # single-column materialization path (as.vector,DuckDBColumn)
+    expect_true(is.factor(as.vector(ddf[["g"]])))
+
+    ordered <- DuckDBDataFrame(tf, datacols = "g", keycol = "id",
+                              collevels = list(g = list(levels = c("A", "B", "C"),
+                                                        ordered = TRUE)))
+    expect_true(is.ordered(as.data.frame(ordered)[["g"]]))
+
+    # a recast column is no longer a factor
+    recast <- ddf
+    coltypes(recast) <- c(g = "character")
+    expect_false(is.factor(as.data.frame(recast)[["g"]]))
+})
+
+test_that("reading wide numeric types warns about possible precision loss", {
+    tf <- tempfile(fileext = ".parquet")
+    on.exit(unlink(tf), add = TRUE)
+    wide <- arrow::arrow_table(
+        id = letters[1:3],
+        d = arrow::Array$create(c(1, 2, 3), type = arrow::decimal128(38, 0)))
+    arrow::write_parquet(wide, tf)
+    expect_warning(DuckDBDataFrame(tf, datacols = "d", keycol = "id"),
+                   "precision")
+
+    tf2 <- tempfile(fileext = ".parquet")
+    on.exit(unlink(tf2), add = TRUE)
+    narrow <- arrow::arrow_table(
+        id = letters[1:3],
+        d = arrow::Array$create(c(1.5, 2.5, 3.5), type = arrow::decimal128(10, 2)))
+    arrow::write_parquet(narrow, tf2)
+    expect_no_warning(DuckDBDataFrame(tf2, datacols = "d", keycol = "id"),
+                      message = "precision")
+})

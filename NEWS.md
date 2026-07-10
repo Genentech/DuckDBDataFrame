@@ -1,5 +1,18 @@
 # DuckDBDataFrame 0.9.23
 
+## New features
+
+- `DuckDBTable()` and `DuckDBDataFrame()` gain a `collevels` argument that
+  restores `factor` (and ordered-factor) columns on materialization. Levels are
+  carried on the object and applied lazily when a column is collected, so
+  `readParquet()` can recover factors recorded in a product's schema. Columns
+  that are cast or otherwise transformed away from a character type are left
+  untouched.
+- Reading a column whose DuckDB type cannot be represented faithfully in R now
+  emits a one-time warning: 128-bit integers (`HUGEINT`/`UHUGEINT`) and wide
+  `DECIMAL` (precision > 15) collapse to `double`, and unsigned 64-bit
+  (`UBIGINT`) collapses to signed `integer64`.
+
 ## Bug fixes
 
 - Row subsetting by key no longer risks silently dropping every row. A key
