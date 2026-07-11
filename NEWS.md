@@ -1,4 +1,4 @@
-# DuckDBDataFrame 0.9.23
+# DuckDBDataFrame 0.9.24
 
 ## New features
 
@@ -12,6 +12,8 @@
   emits a one-time warning: 128-bit integers (`HUGEINT`/`UHUGEINT`) and wide
   `DECIMAL` (precision > 15) collapse to `double`, and unsigned 64-bit
   (`UBIGINT`) collapses to signed `integer64`.
+
+# DuckDBDataFrame 0.9.23
 
 ## Bug fixes
 
