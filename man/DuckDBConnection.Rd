@@ -4,8 +4,11 @@
 \alias{DuckDBConnection}
 \alias{acquireDuckDBConn}
 \alias{releaseDuckDBConn}
+\alias{loadExtension}
 \title{Acquire and Release the DuckDB Connection}
 \usage{
+loadExtension(conn, extension, optional = FALSE)
+
 acquireDuckDBConn(
   conn = dbConnect(duckdb(), bigint = "integer64", array = "matrix")
 )
@@ -14,10 +17,19 @@ releaseDuckDBConn()
 }
 \arguments{
 \item{conn}{A \code{duckdb_connection} object.}
+
+\item{extension}{A character string naming a DuckDB extension (e.g.
+\code{"spatial"}).}
+
+\item{optional}{If \code{TRUE}, an extension that is unknown to the build or
+cannot be installed (permission / network) produces a warning and is
+skipped rather than an error. Defaults to \code{FALSE}.}
 }
 \value{
 \code{acquireDuckDBConn} returns a cached \code{duckdb_connection} object.
 \code{releaseDuckDBConn} returns \code{NULL}, invisibly.
+\code{loadExtension} installs (if needed) and loads \code{extension} on
+\code{conn}, returning the load status invisibly.
 }
 \description{
 Acquire and Release the DuckDB connection used by the
@@ -28,6 +40,9 @@ Acquire and Release the DuckDB connection used by the
 the \pkg{BiocDuckDB} package cache.
 \code{releaseDuckDBConn} will remove the \code{duckdb_connection} object
 from that cache.
+\code{loadExtension} installs and loads a DuckDB extension on the shared
+connection; it is used by companion packages (e.g. \pkg{DuckDBSpatial}) to
+ensure their required extension (\code{"spatial"}) is available.
 }
 \examples{
 releaseDuckDBConn()

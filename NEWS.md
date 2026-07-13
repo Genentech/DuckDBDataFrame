@@ -1,3 +1,13 @@
+# DuckDBDataFrame 0.9.25
+
+## New features
+
+- Exported `loadExtension()`, which installs (if needed) and loads a DuckDB
+  extension on a connection. It was already used internally to load `spatial` /
+  `httpfs`; exporting it lets companion packages ensure their required extension
+  is available on the shared connection — e.g. `DuckDBSpatial` now installs and
+  loads `spatial` on load via `loadExtension(acquireDuckDBConn(), "spatial")`.
+
 # DuckDBDataFrame 0.9.24
 
 ## New features

@@ -12,10 +12,17 @@ reg.finalizer(.duckdb, function(env) {
 #' \pkg{BiocDuckDB} package.
 #'
 #' @param conn A \code{duckdb_connection} object.
+#' @param extension A character string naming a DuckDB extension (e.g.
+#'   \code{"spatial"}).
+#' @param optional If \code{TRUE}, an extension that is unknown to the build or
+#'   cannot be installed (permission / network) produces a warning and is
+#'   skipped rather than an error. Defaults to \code{FALSE}.
 #'
 #' @return
 #' \code{acquireDuckDBConn} returns a cached \code{duckdb_connection} object.
 #' \code{releaseDuckDBConn} returns \code{NULL}, invisibly.
+#' \code{loadExtension} installs (if needed) and loads \code{extension} on
+#' \code{conn}, returning the load status invisibly.
 #'
 #' @author Patrick Aboyoun
 #'
@@ -24,6 +31,9 @@ reg.finalizer(.duckdb, function(env) {
 #' the \pkg{BiocDuckDB} package cache.
 #' \code{releaseDuckDBConn} will remove the \code{duckdb_connection} object
 #' from that cache.
+#' \code{loadExtension} installs and loads a DuckDB extension on the shared
+#' connection; it is used by companion packages (e.g. \pkg{DuckDBSpatial}) to
+#' ensure their required extension (\code{"spatial"}) is available.
 #'
 #' @examples
 #' releaseDuckDBConn()
@@ -34,12 +44,15 @@ reg.finalizer(.duckdb, function(env) {
 #'
 #' @aliases acquireDuckDBConn
 #' @aliases releaseDuckDBConn
+#' @aliases loadExtension
 #'
 #' @keywords IO
 #'
 #' @name DuckDBConnection
 NULL
 
+#' @export
+#' @rdname DuckDBConnection
 #' @importFrom DBI dbExecute dbGetQuery
 loadExtension <- function(conn, extension, optional = FALSE) {
     qry <-
