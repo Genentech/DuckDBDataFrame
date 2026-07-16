@@ -1,6 +1,6 @@
 Package: DuckDBDataFrame
-Version: 0.9.25
-Date: 2026-07-13
+Version: 0.9.26
+Date: 2026-07-16
 Title: DuckDB-Backed DataFrame and Table Structures
 Description:
     Provides DuckDB-backed implementations of core tabular data structures
@@ -14,7 +14,7 @@ Authors@R:
         person("Patrick", "Aboyoun", role=c("aut", "cre"), email="aboyounp@gene.com"),
         person("Genentech, Inc.", role="cph")
     )
-License: Apache License 2.0
+License: MIT + file LICENSE
 Depends:
     R (>= 4.6.0),
     methods,

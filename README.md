@@ -67,4 +67,4 @@ and for row-wise or heavy random-access work.
 
 ## License
 
-Apache License 2.0. Copyright Genentech, Inc.
+MIT License. Copyright Genentech, Inc., 2026.
