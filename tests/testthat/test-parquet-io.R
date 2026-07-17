@@ -159,6 +159,89 @@ test_that("buildParquetCopySQL assembles COPY TO options", {
     expect_true(grepl("PARTITION_BY", sql2))
 })
 
+# ---- cluster_by: coord-indexed / multi-dimensional clustering on write -----------
+
+test_that("zorder/hilbert constructors validate their arguments", {
+    z <- zorder(c("x", "y"))
+    expect_s3_class(z, "DuckDBClusterSpec")
+    expect_identical(z$curve, "zorder")
+    expect_identical(z$cols, c("x", "y"))
+    expect_error(hilbert(c("x", "y", "z")), "exactly two")   # ST_Hilbert is 2-D
+    expect_error(zorder(character(0)), "at least one")
+    expect_error(zorder(c("a", "b", "c", "d"), bits = 16L), "<= 62")  # 4*16 overflows 64-bit
+    expect_error(zorder("x", bits = 40L), "1:20")            # bits out of range
+    expect_error(zorder("x", bits = 0L), "1:20")
+})
+
+test_that("clusterSort reorders in memory and is a permutation", {
+    set.seed(1)
+    df <- data.frame(x = runif(1000, 0, 100), y = runif(1000, 0, 100))
+    srt <- clusterSort(df, zorder(c("x", "y")))
+    expect_equal(nrow(srt), nrow(df))
+    expect_setequal(srt$x, df$x)
+    # spatially clustered: adjacent-row distance far below the random baseline
+    step <- mean(sqrt(diff(srt$x)^2 + diff(srt$y)^2))
+    base <- mean(sqrt(diff(df$x)^2 + diff(df$y)^2))
+    expect_lt(step, base / 2)
+    # lexicographic + no-op cases
+    expect_equal(clusterSort(df, "x")$x, sort(df$x))
+    expect_identical(clusterSort(df, NULL), df)
+})
+
+test_that("writeDuckDBTableParquet clusters rows with cluster_by = zorder()", {
+    skip_if_not_installed("arrow")
+    set.seed(1)
+    df <- data.frame(x = runif(3000, 0, 100), y = runif(3000, 0, 100),
+                     gene = sample(paste0("G", 0:19), 3000, replace = TRUE),
+                     stringsAsFactors = FALSE)
+    src <- tempfile(fileext = ".parquet"); on.exit(unlink(src), add = TRUE)
+    arrow::write_parquet(df, src)
+    ddf <- DuckDBDataFrame(src)
+
+    out <- tempfile()
+    writeDuckDBTableParquet(ddf, out, indexcol = NULL, keycol = NULL,
+                            cluster_by = zorder(c("x", "y")))
+    pq <- file.path(out, list.files(out, pattern = "parquet$", recursive = TRUE))[1L]
+    got <- as.data.frame(arrow::read_parquet(pq))
+    expect_equal(nrow(got), nrow(df))
+    expect_setequal(got$x, df$x)
+    step <- mean(sqrt(diff(got$x)^2 + diff(got$y)^2))
+    base <- mean(sqrt(diff(df$x)^2 + diff(df$y)^2))
+    expect_lt(step, base / 2)                                 # zonemap-friendly locality
+
+    expect_error(
+        writeDuckDBTableParquet(ddf, tempfile(), indexcol = NULL, keycol = NULL,
+                                cluster_by = zorder(c("x", "nope"))),
+        "not found")
+})
+
+test_that("writeDuckDBTableParquet clusters with cluster_by = hilbert() (native ST_Hilbert)", {
+    skip_if_not_installed("arrow")
+    have_spatial <- isTRUE(tryCatch({
+        loadExtension(acquireDuckDBConn(), "spatial", optional = TRUE)
+        "spatial" %in% DBI::dbGetQuery(
+            acquireDuckDBConn(),
+            "SELECT extension_name FROM duckdb_extensions() WHERE loaded")[[1L]]
+    }, error = function(e) FALSE))
+    skip_if_not(have_spatial, "DuckDB spatial extension unavailable (offline)")
+
+    set.seed(1)
+    df <- data.frame(x = runif(3000, 0, 100), y = runif(3000, 0, 100))
+    src <- tempfile(fileext = ".parquet"); on.exit(unlink(src), add = TRUE)
+    arrow::write_parquet(df, src)
+    ddf <- DuckDBDataFrame(src)
+
+    out <- tempfile()
+    writeDuckDBTableParquet(ddf, out, indexcol = NULL, keycol = NULL,
+                            cluster_by = hilbert(c("x", "y")))
+    pq <- file.path(out, list.files(out, pattern = "parquet$", recursive = TRUE))[1L]
+    got <- as.data.frame(arrow::read_parquet(pq))
+    expect_equal(nrow(got), nrow(df))
+    step <- mean(sqrt(diff(got$x)^2 + diff(got$y)^2))
+    base <- mean(sqrt(diff(df$x)^2 + diff(df$y)^2))
+    expect_lt(step, base / 2)
+})
+
 test_that("writeDuckDBTableParquet exports lazy table via COPY TO", {
     tf <- tempfile(fileext = ".parquet")
     on.exit(unlink(tf), add = TRUE)

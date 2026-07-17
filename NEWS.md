@@ -1,3 +1,21 @@
+# DuckDBDataFrame 0.9.27
+
+## New features
+
+- `writeParquet(..., cluster_by = )` clusters rows on write so DuckDB row-group zonemaps
+  prune range queries. `cluster_by` is a character vector (lexicographic ordering),
+  `zorder(cols)` (a Morton / Z-order space-filling code over any number of numeric columns,
+  lowered SQL-side to a generated bit-interleave `ORDER BY` — no extension needed), or
+  `hilbert(cols)` (the native DuckDB `spatial` `ST_Hilbert`, exactly two numeric columns,
+  better locality, requires the spatial extension). Space-filling keys compute per-column
+  extents with one cheap `MIN/MAX` scan and bake them into a pushed-down `ORDER BY`, so the
+  DuckDB write path never materializes the table. A single physical order clusters one key:
+  supplying `cluster_by` overrides the default `__index__` ordering. New exported
+  `zorder()` / `hilbert()` constructors and `clusterSort()` (the in-memory counterpart used
+  by the materializing `data.frame` / `DataFrame` write path). This generalizes the
+  coord-indexed points layout (DuckDBSpatial) to any multi-dimensional range-queried table
+  (spatial points, embeddings / reducedDims, genomic-interaction bins).
+
 # DuckDBDataFrame 0.9.25
 
 ## New features

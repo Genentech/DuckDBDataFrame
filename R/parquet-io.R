@@ -499,7 +499,8 @@ function(x, indexcol = NULL, keycol = NULL, dimtbl = NULL, offset = 0L,
 #' @importFrom arrow read_parquet
 writeDuckDBTableParquet <-
 function(x, path, indexcol = "__index__", keycol = "__name__", dimtbl = NULL,
-         append = FALSE, offset = 0L, part = NULL, part_digits = 0L, ...)
+         append = FALSE, offset = 0L, part = NULL, part_digits = 0L,
+         cluster_by = NULL, ...)
 {
     if (!inherits(x, "DuckDBTable"))
         stop("'x' must be a DuckDBTable")
@@ -514,12 +515,18 @@ function(x, path, indexcol = "__index__", keycol = "__name__", dimtbl = NULL,
     built <- buildTableSelectSQL(x, indexcol = indexcol, keycol = keycol,
                                  dimtbl = dimtbl, offset = prep$offset,
                                  conn = conn)
-    order_cols <- if (!is.null(built$order_col) && nzchar(built$order_col)) {
+    # A clustering key (cluster_by) chooses the physical row order to make
+    # row-group zonemaps prune range queries on its columns.
+    spec <- .asClusterSpec(cluster_by)
+    order_cols <- if (!is.null(spec)) {
+        .clusterOrderSQL(conn, built$sql, spec, available = built$colnames)
+    } else if (!is.null(built$order_col) && nzchar(built$order_col)) {
         built$order_col
     } else {
         NULL
     }
-    copy_sql <- buildParquetCopySQL(built$sql, prep$pq_path, order_cols = order_cols)
+    copy_sql <- buildParquetCopySQL(built$sql, prep$pq_path,
+                                    order_cols = order_cols)
     DBI::dbExecute(conn, copy_sql)
 
     n <- nrow(x)

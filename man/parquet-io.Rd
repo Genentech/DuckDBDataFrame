@@ -70,6 +70,7 @@ writeDuckDBTableParquet(
   offset = 0L,
   part = NULL,
   part_digits = 0L,
+  cluster_by = NULL,
   ...
 )
 }
