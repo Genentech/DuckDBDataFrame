@@ -5,9 +5,12 @@
 \alias{acquireDuckDBConn}
 \alias{releaseDuckDBConn}
 \alias{loadExtension}
+\alias{configureOutOfCore}
 \title{Acquire and Release the DuckDB Connection}
 \usage{
 loadExtension(conn, extension, optional = FALSE)
+
+configureOutOfCore(conn)
 
 acquireDuckDBConn(
   conn = dbConnect(duckdb(), bigint = "integer64", array = "matrix")
@@ -30,6 +33,10 @@ skipped rather than an error. Defaults to \code{FALSE}.}
 \code{releaseDuckDBConn} returns \code{NULL}, invisibly.
 \code{loadExtension} installs (if needed) and loads \code{extension} on
 \code{conn}, returning the load status invisibly.
+\code{configureOutOfCore} applies out-of-core engine settings (buffer-pool
+memory limit, worker threads, spill directory, insertion-order preservation)
+to \code{conn} from R options or environment variables, returning \code{NULL}
+invisibly.
 }
 \description{
 Acquire and Release the DuckDB connection used by the
@@ -43,6 +50,27 @@ from that cache.
 \code{loadExtension} installs and loads a DuckDB extension on the shared
 connection; it is used by companion packages (e.g. \pkg{DuckDBSpatial}) to
 ensure their required extension (\code{"spatial"}) is available.
+
+\code{configureOutOfCore} is called automatically by \code{acquireDuckDBConn}
+when the shared connection is first created; call it again (on
+\code{acquireDuckDBConn()}) after changing an option to re-apply. Each
+setting is read from an R option first, then an environment variable, and
+left at the DuckDB default when neither is set:
+\tabular{lll}{
+  \strong{Setting} \tab \strong{Option} \tab \strong{Environment variable}
+  \cr memory limit \tab \code{DuckDBDataFrame.memory_limit} \tab
+  \code{BIOCDUCKDB_MEMORY_LIMIT} \cr threads \tab
+  \code{DuckDBDataFrame.threads} \tab \code{BIOCDUCKDB_THREADS} \cr spill
+  directory \tab \code{DuckDBDataFrame.temp_directory} \tab
+  \code{BIOCDUCKDB_TEMP_DIRECTORY} \cr preserve insertion order \tab\
+  \code{DuckDBDataFrame.preserve_insertion_order} \tab
+  \code{BIOCDUCKDB_PRESERVE_INSERTION_ORDER} \cr
+}
+Setting \code{memory_limit} (e.g. \code{"16GB"} or \code{"80\%"}) and
+\code{temp_directory} guards against the OS killing the process before DuckDB
+can spill a large aggregation/sort/join; \code{preserve_insertion_order =
+FALSE} avoids buffering a whole result to preserve row order on a Tahoe-scale
+export where order is not significant.
 }
 \examples{
 releaseDuckDBConn()

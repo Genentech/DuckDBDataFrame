@@ -23,6 +23,10 @@ reg.finalizer(.duckdb, function(env) {
 #' \code{releaseDuckDBConn} returns \code{NULL}, invisibly.
 #' \code{loadExtension} installs (if needed) and loads \code{extension} on
 #' \code{conn}, returning the load status invisibly.
+#' \code{configureOutOfCore} applies out-of-core engine settings (buffer-pool
+#' memory limit, worker threads, spill directory, insertion-order preservation)
+#' to \code{conn} from R options or environment variables, returning \code{NULL}
+#' invisibly.
 #'
 #' @author Patrick Aboyoun
 #'
@@ -35,6 +39,27 @@ reg.finalizer(.duckdb, function(env) {
 #' connection; it is used by companion packages (e.g. \pkg{DuckDBSpatial}) to
 #' ensure their required extension (\code{"spatial"}) is available.
 #'
+#' \code{configureOutOfCore} is called automatically by \code{acquireDuckDBConn}
+#' when the shared connection is first created; call it again (on
+#' \code{acquireDuckDBConn()}) after changing an option to re-apply. Each
+#' setting is read from an R option first, then an environment variable, and
+#' left at the DuckDB default when neither is set:
+#' \tabular{lll}{
+#'   \strong{Setting} \tab \strong{Option} \tab \strong{Environment variable}
+#'   \cr memory limit \tab \code{DuckDBDataFrame.memory_limit} \tab
+#'   \code{BIOCDUCKDB_MEMORY_LIMIT} \cr threads \tab
+#'   \code{DuckDBDataFrame.threads} \tab \code{BIOCDUCKDB_THREADS} \cr spill
+#'   directory \tab \code{DuckDBDataFrame.temp_directory} \tab
+#'   \code{BIOCDUCKDB_TEMP_DIRECTORY} \cr preserve insertion order \tab\
+#'   \code{DuckDBDataFrame.preserve_insertion_order} \tab
+#'   \code{BIOCDUCKDB_PRESERVE_INSERTION_ORDER} \cr
+#' }
+#' Setting \code{memory_limit} (e.g. \code{"16GB"} or \code{"80\%"}) and
+#' \code{temp_directory} guards against the OS killing the process before DuckDB
+#' can spill a large aggregation/sort/join; \code{preserve_insertion_order =
+#' FALSE} avoids buffering a whole result to preserve row order on a Tahoe-scale
+#' export where order is not significant.
+#'
 #' @examples
 #' releaseDuckDBConn()
 #' conn <- acquireDuckDBConn()
@@ -45,6 +70,7 @@ reg.finalizer(.duckdb, function(env) {
 #' @aliases acquireDuckDBConn
 #' @aliases releaseDuckDBConn
 #' @aliases loadExtension
+#' @aliases configureOutOfCore
 #'
 #' @keywords IO
 #'
@@ -126,7 +152,7 @@ loadInstalledExtensions <- function(conn, extensions) {
 configureExtensionAutoloading <- function(conn) {
     try(dbExecute(conn, "SET autoinstall_known_extensions = true;"), silent = TRUE)
     try(dbExecute(conn, "SET autoload_known_extensions = true;"), silent = TRUE)
-    repo <- Sys.getenv("MODL_DUCKDB_EXTENSION_REPOSITORY",
+    repo <- Sys.getenv("BIOCDUCKDB_EXTENSION_REPOSITORY",
                        unset = Sys.getenv("DUCKDB_EXTENSION_REPOSITORY", unset = ""))
     if (nzchar(repo)) {
         try(dbExecute(conn,
@@ -149,6 +175,49 @@ setExtensionDirectory <- function(conn) {
     invisible(ext_dir)
 }
 
+.outOfCoreSetting <- function(option, envvar) {
+    val <- getOption(option, default = NULL)
+    if (!is.null(val)) {
+        return(as.character(val))
+    }
+    env_val <- Sys.getenv(envvar, unset = "")
+    if (nzchar(env_val)) {
+        return(env_val)
+    }
+    NULL
+}
+
+#' @export
+#' @importFrom DBI dbExecute
+#' @rdname DuckDBConnection
+configureOutOfCore <- function(conn) {
+    ml <- .outOfCoreSetting("DuckDBDataFrame.memory_limit", "BIOCDUCKDB_MEMORY_LIMIT")
+    if (!is.null(ml)) {
+        try(dbExecute(conn, sprintf("SET memory_limit = '%s';",
+                                    gsub("'", "''", ml))), silent = TRUE)
+    }
+    td <- .outOfCoreSetting("DuckDBDataFrame.temp_directory", "BIOCDUCKDB_TEMP_DIRECTORY")
+    if (!is.null(td)) {
+        try(dbExecute(conn, sprintf("SET temp_directory = '%s';",
+                                    gsub("'", "''", td))), silent = TRUE)
+    }
+    th <- .outOfCoreSetting("DuckDBDataFrame.threads", "BIOCDUCKDB_THREADS")
+    if (!is.null(th)) {
+        th_int <- suppressWarnings(as.integer(th))
+        if (!is.na(th_int)) {
+            try(dbExecute(conn, sprintf("SET threads = %d;", th_int)), silent = TRUE)
+        }
+    }
+    pio <- .outOfCoreSetting("DuckDBDataFrame.preserve_insertion_order",
+                             "BIOCDUCKDB_PRESERVE_INSERTION_ORDER")
+    if (!is.null(pio)) {
+        pio_on <- tolower(pio) %in% c("true", "t", "1", "yes")
+        try(dbExecute(conn, sprintf("SET preserve_insertion_order = %s;",
+                                    if (pio_on) "true" else "false")), silent = TRUE)
+    }
+    invisible(NULL)
+}
+
 #' @export
 #' @importFrom DBI dbConnect
 #' @importFrom duckdb duckdb
@@ -160,6 +229,7 @@ acquireDuckDBConn <- function(conn = dbConnect(duckdb(), bigint = "integer64", a
         }
         setExtensionDirectory(conn)
         configureExtensionAutoloading(conn)
+        configureOutOfCore(conn)
         .duckdb$drv <- conn
     }
     .duckdb$drv

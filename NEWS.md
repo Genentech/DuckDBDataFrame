@@ -1,3 +1,22 @@
+# DuckDBDataFrame 0.9.28
+
+## New features
+
+- `configureOutOfCore()` sets the DuckDB out-of-core engine knobs
+  (`memory_limit`, `threads`, `temp_directory`, `preserve_insertion_order`) on
+  the shared connection from R options or `BIOCDUCKDB_*` environment variables
+  (see `?DuckDBConnection`). It runs automatically the first time
+  `acquireDuckDBConn()` creates the connection, so a large aggregation / sort /
+  join can spill instead of being OOM-killed, and a very large export can drop
+  insertion-order buffering.
+
+## Changes
+
+- The internal extension-mirror environment variable is now
+  `BIOCDUCKDB_EXTENSION_REPOSITORY` (previously
+  `MODL_DUCKDB_EXTENSION_REPOSITORY`); the DuckDB-native
+  `DUCKDB_EXTENSION_REPOSITORY` fallback is unchanged.
+
 # DuckDBDataFrame 0.9.27
 
 ## New features
@@ -78,7 +97,7 @@
   - enables DuckDB **autoloading**, so extensions are fetched and loaded on first
     use of a function that needs them;
   - honors an optional **internal extension mirror** for restricted networks via
-    `MODL_DUCKDB_EXTENSION_REPOSITORY` (or the DuckDB-native
+    `BIOCDUCKDB_EXTENSION_REPOSITORY` (or the DuckDB-native
     `DUCKDB_EXTENSION_REPOSITORY`);
   - eagerly `LOAD`s only extensions **already present** in the extension directory
     (a local, offline-safe operation), so a pre-provisioned or air-gapped cache
