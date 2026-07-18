@@ -33,7 +33,12 @@
 #' better locality, requires the spatial extension). A plain character vector is
 #' a lexicographic ordering (best for the leading column). \code{clusterSort()}
 #' is the in-memory counterpart used by the materializing \code{data.frame} /
-#' \code{DataFrame} write path (Hilbert falls back to Morton there).
+#' \code{DataFrame} write path (Hilbert falls back to Morton there). Its
+#' double-precision Morton code is exact only for
+#' \code{length(cols) * bits <= 52}; the lazy SQL path (unsigned 64-bit) is
+#' exact to 62, so for a total above 52 bits the two write paths may order rows
+#' differently. Keep \code{length(cols) * bits} at or below 52 when both paths
+#' must agree byte-for-byte.
 #'
 #' @param cols Character vector of numeric column names to cluster by.
 #'   \code{hilbert()} requires exactly two.
@@ -181,9 +186,17 @@ hilbert <- function(cols, bits = 16L) .clusterSpec("hilbert", cols, bits)
                       character(1L)))
     extents <- .columnExtents(conn, subquery_sql, spec$cols)
     if (identical(spec$curve, "zorder"))
-        .mortonOrderSQL(conn, spec$cols, extents, spec$bits)
-    else
-        .hilbertOrderSQL(conn, spec$cols, extents)
+        return(.mortonOrderSQL(conn, spec$cols, extents, spec$bits))
+    # Hilbert needs the DuckDB spatial extension (ST_Hilbert). Pre-check so a
+    # missing extension gives a guided error rather than a raw catalog error.
+    have <- tryCatch(
+        nrow(DBI::dbGetQuery(conn, paste0("SELECT 1 FROM duckdb_functions() ",
+            "WHERE function_name = 'ST_Hilbert' LIMIT 1"))) > 0L,
+        error = function(e) FALSE)
+    if (!have)
+        stop("hilbert clustering requires the DuckDB spatial extension ",
+             "(ST_Hilbert); load it (e.g. via DuckDBSpatial) or use zorder()")
+    .hilbertOrderSQL(conn, spec$cols, extents)
 }
 
 #' @rdname parquet-io-cluster

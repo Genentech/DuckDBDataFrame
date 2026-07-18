@@ -51,7 +51,12 @@ DuckDB \code{spatial} \code{ST_Hilbert} curve (exactly two numeric columns,
 better locality, requires the spatial extension). A plain character vector is
 a lexicographic ordering (best for the leading column). \code{clusterSort()}
 is the in-memory counterpart used by the materializing \code{data.frame} /
-\code{DataFrame} write path (Hilbert falls back to Morton there).
+\code{DataFrame} write path (Hilbert falls back to Morton there). Its
+double-precision Morton code is exact only for
+\code{length(cols) * bits <= 52}; the lazy SQL path (unsigned 64-bit) is
+exact to 62, so for a total above 52 bits the two write paths may order rows
+differently. Keep \code{length(cols) * bits} at or below 52 when both paths
+must agree byte-for-byte.
 }
 \examples{
 zorder(c("x", "y"))
