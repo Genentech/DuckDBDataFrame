@@ -188,6 +188,28 @@ test_that("clusterSort reorders in memory and is a permutation", {
     expect_identical(clusterSort(df, NULL), df)
 })
 
+test_that("clusterSort composite key groups by `by=` prefix then clusters within", {
+    set.seed(1)
+    n <- 1200
+    df <- data.frame(gene = sample(c("A", "B", "C"), n, replace = TRUE),
+                     x = runif(n, 0, 100), y = runif(n, 0, 100),
+                     stringsAsFactors = FALSE)
+    srt <- clusterSort(df, zorder(c("x", "y"), by = "gene"))
+    expect_equal(nrow(srt), nrow(df))
+    expect_setequal(srt$x, df$x)
+    # each gene's rows are contiguous (prefix ordered ascending)
+    expect_equal(srt$gene, sort(srt$gene))
+    # ...and spatially clustered WITHIN each gene group
+    within <- mean(vapply(split(srt[c("x", "y")], srt$gene), function(g)
+        if (nrow(g) > 1L) mean(sqrt(diff(g$x)^2 + diff(g$y)^2)) else NA_real_,
+        numeric(1L)), na.rm = TRUE)
+    base <- mean(sqrt(diff(df$x)^2 + diff(df$y)^2))
+    expect_lt(within, base / 2)
+    # `by` is budget-free: the prefix does not enter the length(cols)*bits<=62 budget
+    expect_s3_class(zorder(c("a", "b", "c"), bits = 20L, by = c("gene", "cell")),
+                    "DuckDBClusterSpec")
+})
+
 test_that("writeDuckDBTableParquet clusters rows with cluster_by = zorder()", {
     skip_if_not_installed("arrow")
     set.seed(1)
@@ -212,6 +234,35 @@ test_that("writeDuckDBTableParquet clusters rows with cluster_by = zorder()", {
     expect_error(
         writeDuckDBTableParquet(ddf, tempfile(), indexcol = NULL, keycol = NULL,
                                 cluster_by = zorder(c("x", "nope"))),
+        "not found")
+})
+
+test_that("writeDuckDBTableParquet composite cluster_by = zorder(by=) groups then clusters", {
+    skip_if_not_installed("arrow")
+    set.seed(1)
+    n <- 3000
+    df <- data.frame(gene = sample(c("A", "B", "C"), n, replace = TRUE),
+                     x = runif(n, 0, 100), y = runif(n, 0, 100),
+                     stringsAsFactors = FALSE)
+    src <- tempfile(fileext = ".parquet"); on.exit(unlink(src), add = TRUE)
+    arrow::write_parquet(df, src)
+    ddf <- DuckDBDataFrame(src)
+
+    out <- tempfile()
+    writeDuckDBTableParquet(ddf, out, indexcol = NULL, keycol = NULL,
+                            cluster_by = zorder(c("x", "y"), by = "gene"))
+    pq <- file.path(out, list.files(out, pattern = "parquet$", recursive = TRUE))[1L]
+    got <- as.data.frame(arrow::read_parquet(pq))
+    expect_equal(nrow(got), nrow(df))
+    expect_equal(got$gene, sort(got$gene))          # gene groups contiguous on disk
+    within <- mean(vapply(split(got[c("x", "y")], got$gene), function(g)
+        mean(sqrt(diff(g$x)^2 + diff(g$y)^2)), numeric(1L)))
+    base <- mean(sqrt(diff(df$x)^2 + diff(df$y)^2))
+    expect_lt(within, base / 2)                       # clustered within each group
+
+    expect_error(                                    # prefix column must exist too
+        writeDuckDBTableParquet(ddf, tempfile(), indexcol = NULL, keycol = NULL,
+                                cluster_by = zorder(c("x", "y"), by = "nope")),
         "not found")
 })
 

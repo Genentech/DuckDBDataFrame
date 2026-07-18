@@ -40,11 +40,24 @@
 #' differently. Keep \code{length(cols) * bits} at or below 52 when both paths
 #' must agree byte-for-byte.
 #'
+#' \code{by} adds a \emph{composite} key: the named (typically low-cardinality
+#' categorical) columns are ordered lexicographically \emph{before} the
+#' space-filling curve, i.e. \code{ORDER BY by..., curve(cols)}. This keeps each
+#' \code{by}-group's rows contiguous so the group's own zonemaps / run-length
+#' encoding stay tight (e.g. \code{zorder(c("x","y"), by = "gene")} for a
+#' viewport+gene workload, or \code{zorder(c("x","y"), by = "__sample__")} to
+#' keep a COO assay's sample-slice pruning). The prefix columns are \strong{not}
+#' interleaved into the Morton code, so they cost none of the \code{bits}
+#' budget.
+#'
 #' @param cols Character vector of numeric column names to cluster by.
 #'   \code{hilbert()} requires exactly two.
 #' @param bits Grid resolution per axis (default 16; a \eqn{2^{16}} grid).
 #'   Higher = finer; keep \code{length(cols) * bits <= 62} so the Morton code
 #'   fits a 64-bit integer.
+#' @param by Optional character vector of columns ordered lexicographically
+#'   before the curve (a composite categorical-prefix key); \code{NULL} for a
+#'   pure space-filling key.
 #' @param df A \code{data.frame} or \link[S4Vectors:DataFrame]{DataFrame}
 #'   (\code{clusterSort}).
 #' @param cluster_by A \code{zorder()}/\code{hilbert()} spec or a character
@@ -69,13 +82,13 @@ NULL
 
 #' @rdname parquet-io-cluster
 #' @export
-zorder <- function(cols, bits = 16L) .clusterSpec("zorder", cols, bits)
+zorder <- function(cols, bits = 16L, by = NULL) .clusterSpec("zorder", cols, bits, by)
 
 #' @rdname parquet-io-cluster
 #' @export
-hilbert <- function(cols, bits = 16L) .clusterSpec("hilbert", cols, bits)
+hilbert <- function(cols, bits = 16L, by = NULL) .clusterSpec("hilbert", cols, bits, by)
 
-.clusterSpec <- function(curve, cols, bits) {
+.clusterSpec <- function(curve, cols, bits, prefix = NULL) {
     cols <- as.character(cols)
     if (length(cols) < 1L || anyNA(cols) || !all(nzchar(cols)))
         stop("'cols' must name at least one column")
@@ -87,8 +100,17 @@ hilbert <- function(cols, bits = 16L) .clusterSpec("hilbert", cols, bits)
         stop("'bits' must be a single integer in 1:20")
     if (length(cols) * bits > 62L)
         stop("length(cols) * bits must be <= 62 so the Morton code fits a 64-bit integer")
-    structure(list(curve = curve, cols = cols, bits = bits),
+    prefix <- if (is.null(prefix)) character(0L) else as.character(prefix)
+    if (anyNA(prefix) || !all(nzchar(prefix)))
+        stop("'by' must name existing columns")
+    structure(list(curve = curve, cols = cols, bits = bits, prefix = prefix),
               class = "DuckDBClusterSpec")
+}
+
+# The prefix (categorical/key columns ordered lexicographically before the
+# space-filling curve); character(0) for none.
+.clusterPrefix <- function(spec) {
+    if (is.null(spec$prefix)) character(0L) else spec$prefix
 }
 
 # Normalize a user `cluster_by` into a spec: NULL passes through; a character /
@@ -101,7 +123,8 @@ hilbert <- function(cols, bits = 16L) .clusterSpec("hilbert", cols, bits)
     cols <- as.character(unlist(cluster_by, use.names = FALSE))
     if (!length(cols))
         return(NULL)
-    structure(list(curve = "lexicographic", cols = cols, bits = NA_integer_),
+    structure(list(curve = "lexicographic", cols = cols, bits = NA_integer_,
+                   prefix = character(0L)),
               class = "DuckDBClusterSpec")
 }
 
@@ -174,8 +197,9 @@ hilbert <- function(cols, bits = 16L) .clusterSpec("hilbert", cols, bits)
 .clusterOrderSQL <- function(conn, subquery_sql, spec, available = NULL) {
     if (is.null(spec))
         return(NULL)
+    prefix <- .clusterPrefix(spec)
     if (!is.null(available)) {
-        miss <- setdiff(spec$cols, available)
+        miss <- setdiff(c(prefix, spec$cols), available)
         if (length(miss))
             stop("cluster_by column(s) not found in the table: ",
                  paste(miss, collapse = ", "))
@@ -185,18 +209,27 @@ hilbert <- function(cols, bits = 16L) .clusterSpec("hilbert", cols, bits)
                       function(c) as.character(dbQuoteIdentifier(conn, c)),
                       character(1L)))
     extents <- .columnExtents(conn, subquery_sql, spec$cols)
-    if (identical(spec$curve, "zorder"))
-        return(.mortonOrderSQL(conn, spec$cols, extents, spec$bits))
-    # Hilbert needs the DuckDB spatial extension (ST_Hilbert). Pre-check so a
-    # missing extension gives a guided error rather than a raw catalog error.
-    have <- tryCatch(
-        nrow(DBI::dbGetQuery(conn, paste0("SELECT 1 FROM duckdb_functions() ",
-            "WHERE function_name = 'ST_Hilbert' LIMIT 1"))) > 0L,
-        error = function(e) FALSE)
-    if (!have)
-        stop("hilbert clustering requires the DuckDB spatial extension ",
-             "(ST_Hilbert); load it (e.g. via DuckDBSpatial) or use zorder()")
-    .hilbertOrderSQL(conn, spec$cols, extents)
+    if (identical(spec$curve, "zorder")) {
+        curve_sql <- .mortonOrderSQL(conn, spec$cols, extents, spec$bits)
+    } else {
+        # Hilbert needs the DuckDB spatial extension (ST_Hilbert). Pre-check so a
+        # missing extension gives a guided error rather than a raw catalog error.
+        have <- tryCatch(
+            nrow(DBI::dbGetQuery(conn, paste0("SELECT 1 FROM duckdb_functions() ",
+                "WHERE function_name = 'ST_Hilbert' LIMIT 1"))) > 0L,
+            error = function(e) FALSE)
+        if (!have)
+            stop("hilbert clustering requires the DuckDB spatial extension ",
+                 "(ST_Hilbert); load it (e.g. via DuckDBSpatial) or use zorder()")
+        curve_sql <- .hilbertOrderSQL(conn, spec$cols, extents)
+    }
+    # A `by` prefix orders lexicographically before the curve: ORDER BY cat...,
+    # (curve). Prefix identifiers do not enter the Morton code, so they cost
+    # none of the 62-bit budget.
+    prefix_sql <- vapply(prefix,
+                         function(c) as.character(dbQuoteIdentifier(conn, c)),
+                         character(1L))
+    c(prefix_sql, curve_sql)
 }
 
 #' @rdname parquet-io-cluster
@@ -212,15 +245,19 @@ clusterSort <- function(df, cluster_by) {
 .clusterSortHost <- function(df, spec) {
     if (is.null(spec) || !nrow(df))
         return(df)
+    prefix <- .clusterPrefix(spec)
     cols <- spec$cols
-    if (!all(cols %in% colnames(df)))
+    if (!all(c(prefix, cols) %in% colnames(df)))
         return(df)
     if (identical(spec$curve, "lexicographic"))
         return(df[do.call(order, as.list(as.data.frame(df)[cols])), ,
                   drop = FALSE])
     code <- .mortonCodeHost(lapply(cols, function(c) as.numeric(df[[c]])),
                             if (is.na(spec$bits)) 16L else spec$bits)
-    df[order(code), , drop = FALSE]
+    # order() sorts by the prefix columns first, then the Morton code within
+    # each group -- the composite categorical-prefix + space-filling key.
+    keys <- c(as.list(as.data.frame(df)[prefix]), list(code))
+    df[do.call(order, keys), , drop = FALSE]
 }
 
 # Host-side N-D Morton code (double precision, exact for

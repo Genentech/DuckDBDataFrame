@@ -7,9 +7,9 @@
 \alias{clusterSort}
 \title{Cluster-on-write keys and helpers}
 \usage{
-zorder(cols, bits = 16L)
+zorder(cols, bits = 16L, by = NULL)
 
-hilbert(cols, bits = 16L)
+hilbert(cols, bits = 16L, by = NULL)
 
 clusterSort(df, cluster_by)
 }
@@ -20,6 +20,10 @@ clusterSort(df, cluster_by)
 \item{bits}{Grid resolution per axis (default 16; a \eqn{2^{16}} grid).
 Higher = finer; keep \code{length(cols) * bits <= 62} so the Morton code
 fits a 64-bit integer.}
+
+\item{by}{Optional character vector of columns ordered lexicographically
+before the curve (a composite categorical-prefix key); \code{NULL} for a
+pure space-filling key.}
 
 \item{df}{A \code{data.frame} or \link[S4Vectors:DataFrame]{DataFrame}
 (\code{clusterSort}).}
@@ -57,6 +61,16 @@ double-precision Morton code is exact only for
 exact to 62, so for a total above 52 bits the two write paths may order rows
 differently. Keep \code{length(cols) * bits} at or below 52 when both paths
 must agree byte-for-byte.
+
+\code{by} adds a \emph{composite} key: the named (typically low-cardinality
+categorical) columns are ordered lexicographically \emph{before} the
+space-filling curve, i.e. \code{ORDER BY by..., curve(cols)}. This keeps each
+\code{by}-group's rows contiguous so the group's own zonemaps / run-length
+encoding stay tight (e.g. \code{zorder(c("x","y"), by = "gene")} for a
+viewport+gene workload, or \code{zorder(c("x","y"), by = "__sample__")} to
+keep a COO assay's sample-slice pruning). The prefix columns are \strong{not}
+interleaved into the Morton code, so they cost none of the \code{bits}
+budget.
 }
 \examples{
 zorder(c("x", "y"))
