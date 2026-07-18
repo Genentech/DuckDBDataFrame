@@ -134,7 +134,12 @@ hilbert <- function(cols, bits = 16L, by = NULL) .clusterSpec("hilbert", cols, b
 .columnExtents <- function(conn, subquery_sql, cols) {
     sel <- vapply(seq_along(cols), function(i) {
         q <- as.character(dbQuoteIdentifier(conn, cols[i]))
-        sprintf("MIN(%s) AS mn%d, MAX(%s) AS mx%d", q, i, q, i)
+        # Finite-only extents: DuckDB MIN/MAX return NaN when a NaN is present,
+        # which would collapse the whole axis to a constant sort key (one stray
+        # non-finite coordinate must not disable clustering).
+        sprintf(paste0("MIN(%s) FILTER (WHERE isfinite(CAST(%s AS DOUBLE))) AS mn%d, ",
+                       "MAX(%s) FILTER (WHERE isfinite(CAST(%s AS DOUBLE))) AS mx%d"),
+                q, q, i, q, q, i)
     }, character(1L))
     sql <- sprintf("SELECT %s FROM (%s) AS _ext",
                    paste(sel, collapse = ", "), subquery_sql)
@@ -146,14 +151,18 @@ hilbert <- function(cols, bits = 16L, by = NULL) .clusterSpec("hilbert", cols, b
 
 # SQL to quantize a column onto the integer grid [0, 2^bits) using baked
 # extents. A degenerate (constant / non-finite) axis collapses to the constant
-# 0.
+# 0; a per-row non-finite/NULL coordinate also maps to 0, matching the host
+# .mortonCodeHost path (DuckDB's FLOOR(NaN) would otherwise leak to the max
+# corner and diverge from the host order).
 .quantizeSQL <- function(qcol, vmin, vmax, bits) {
     span <- bitwShiftL(1L, bits) - 1L
     if (!is.finite(vmin) || !is.finite(vmax) || vmax <= vmin)
         return("CAST(0 AS UBIGINT)")
-    sprintf(paste0("CAST(LEAST(GREATEST(FLOOR((%s - %.17g) / %.17g * %d), 0), %d) ",
-                   "AS UBIGINT)"),
-            qcol, vmin, vmax - vmin, span, span)
+    sprintf(paste0("CASE WHEN %s IS NULL OR NOT isfinite(CAST(%s AS DOUBLE)) ",
+                   "THEN CAST(0 AS UBIGINT) ELSE ",
+                   "CAST(LEAST(GREATEST(FLOOR((%s - %.17g) / %.17g * %d), 0), %d) ",
+                   "AS UBIGINT) END"),
+            qcol, qcol, qcol, vmin, vmax - vmin, span, span)
 }
 
 # Morton (Z-order) ORDER BY expression: interleave the low `bits` of each

@@ -266,6 +266,32 @@ test_that("writeDuckDBTableParquet composite cluster_by = zorder(by=) groups the
         "not found")
 })
 
+test_that("cluster_by tolerates non-finite coordinates (no whole-axis collapse)", {
+    skip_if_not_installed("arrow")
+    set.seed(1)
+    n <- 2000
+    df <- data.frame(x = runif(n, 0, 100), y = runif(n, 0, 100))
+    df$x[c(5L, 500L, 1500L)] <- NA_real_             # NULL coordinates
+    df$y[10L] <- Inf                                 # +Inf coordinate
+    src <- tempfile(fileext = ".parquet"); on.exit(unlink(src), add = TRUE)
+    arrow::write_parquet(df, src)
+    ddf <- DuckDBDataFrame(src)
+
+    out <- tempfile()
+    writeDuckDBTableParquet(ddf, out, indexcol = NULL, keycol = NULL,
+                            cluster_by = zorder(c("x", "y")))
+    got <- as.data.frame(arrow::read_parquet(
+        file.path(out, list.files(out, pattern = "parquet$", recursive = TRUE))[1L]))
+    expect_equal(nrow(got), n)                        # all rows kept, incl. non-finite
+    # the SINGLE NaN/Inf must not collapse the extent: finite rows still cluster
+    fin <- got[is.finite(got$x) & is.finite(got$y), , drop = FALSE]
+    step <- mean(sqrt(diff(fin$x)^2 + diff(fin$y)^2))
+    base <- mean(sqrt(diff(df$x)^2 + diff(df$y)^2), na.rm = TRUE)
+    expect_lt(step, base / 2)
+    # host path agrees: no error, all rows preserved
+    expect_equal(nrow(clusterSort(df, zorder(c("x", "y")))), n)
+})
+
 test_that("writeDuckDBTableParquet clusters with cluster_by = hilbert() (native ST_Hilbert)", {
     skip_if_not_installed("arrow")
     have_spatial <- isTRUE(tryCatch({
