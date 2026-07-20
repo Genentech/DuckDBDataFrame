@@ -1,3 +1,23 @@
+# DuckDBDataFrame 0.9.29
+
+## New features
+
+- `configureCloud()` wires up remote object-storage reads on the shared
+  connection: it installs + loads the DuckDB `httpfs` extension up front (so a
+  firewalled environment fails early with actionable guidance rather than
+  mid-read) and applies `s3_*` credential / region settings (`s3_region`,
+  `s3_access_key_id`, `s3_secret_access_key`, `s3_session_token`, `s3_endpoint`,
+  `s3_url_style`, `s3_use_ssl`) resolved from R options (`DuckDBDataFrame.s3_*`)
+  or `BIOCDUCKDB_S3_*` environment variables, applied after `httpfs` loads
+  (DuckDB does not know the `s3_*` settings until then). See `?DuckDBConnection`.
+
+- A dataset backed by a **remote object-storage directory** (`s3://`, `gs://`,
+  `http(s)://`, …) now resolves correctly. Because the VFS cannot be listed with
+  `list.files()`, the connection wrapper detects a remote URI, calls
+  `configureCloud()`, and lets DuckDB's `httpfs` glob expand
+  `read_parquet('<uri>/**')` — reads only; writing to object storage stays
+  unsupported (see `BiocDuckDB::writeParquet`).
+
 # DuckDBDataFrame 0.9.28
 
 ## New features

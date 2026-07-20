@@ -218,6 +218,60 @@ configureOutOfCore <- function(conn) {
     invisible(NULL)
 }
 
+# Object-storage / HTTP schemes DuckDB httpfs can read.
+.isRemotePath <- function(x) {
+    is.character(x) && length(x) == 1L && !is.na(x) &&
+        grepl("^(s3|gs|gcs|az|azure|abfss|r2|http|https)://", x)
+}
+
+# Read an s3_* setting from an R option, falling back to an environment variable.
+.cloudSetting <- function(option, envvar) {
+    val <- getOption(option, default = NULL)
+    if (is.null(val)) {
+        ev <- Sys.getenv(envvar, unset = "")
+        if (nzchar(ev)) val <- ev
+    }
+    val
+}
+
+# (duckdb_setting, R option, env var). Mirrors configureOutOfCore's option->env
+# resolution. s3_use_ssl is boolean; the rest are strings.
+.CLOUD_SETTINGS <- list(
+    c("s3_region",            "DuckDBDataFrame.s3_region",            "BIOCDUCKDB_S3_REGION"),
+    c("s3_access_key_id",     "DuckDBDataFrame.s3_access_key_id",     "BIOCDUCKDB_S3_ACCESS_KEY_ID"),
+    c("s3_secret_access_key", "DuckDBDataFrame.s3_secret_access_key", "BIOCDUCKDB_S3_SECRET_ACCESS_KEY"),
+    c("s3_session_token",     "DuckDBDataFrame.s3_session_token",     "BIOCDUCKDB_S3_SESSION_TOKEN"),
+    c("s3_endpoint",          "DuckDBDataFrame.s3_endpoint",          "BIOCDUCKDB_S3_ENDPOINT"),
+    c("s3_url_style",         "DuckDBDataFrame.s3_url_style",         "BIOCDUCKDB_S3_URL_STYLE"),
+    c("s3_use_ssl",           "DuckDBDataFrame.s3_use_ssl",           "BIOCDUCKDB_S3_USE_SSL")
+)
+
+#' @export
+#' @rdname DuckDBConnection
+#' @importFrom DBI dbExecute
+configureCloud <- function(conn) {
+    # Ensure httpfs is installed + loaded up front (so a firewalled environment
+    # fails early with clear guidance, rather than deferring to a cryptic error
+    # mid-read); loadExtension is a no-op once httpfs is already installed and
+    # loaded.
+    loadExtension(conn, "httpfs", optional = FALSE)
+    # s3_* settings only exist once httpfs is loaded, so apply them after.
+    for (s in .CLOUD_SETTINGS) {
+        val <- .cloudSetting(s[[2L]], s[[3L]])
+        if (is.null(val)) next
+        if (identical(s[[1L]], "s3_use_ssl")) {
+            on <- tolower(as.character(val)) %in% c("true", "t", "1", "yes")
+            try(dbExecute(conn, sprintf("SET s3_use_ssl = %s;",
+                                        if (on) "true" else "false")), silent = TRUE)
+        } else {
+            try(dbExecute(conn, sprintf("SET %s = '%s';", s[[1L]],
+                                        gsub("'", "''", as.character(val)))),
+                silent = TRUE)
+        }
+    }
+    invisible(NULL)
+}
+
 #' @export
 #' @importFrom DBI dbConnect
 #' @importFrom duckdb duckdb

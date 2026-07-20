@@ -1043,6 +1043,9 @@ setValidity2("DuckDBTable", function(x) {
         x <- .wrapFile(x, "read_csv")
     } else if (all(grepl("(?i)\\.(parquet|pq)$", x))) {
         x <- .wrapFile(x, "read_parquet")
+    } else if (isSingleString(x) && .isRemotePath(x)) {
+            configureCloud(acquireDuckDBConn())
+            x <- .wrapFile(file.path(x, "**"), "read_parquet")
     } else if (isSingleString(x) && dir.exists(x)) {
             files <- list.files(x, recursive = TRUE)
             if (any(all(grepl("(?i)\\.(parquet|pq)$", files)))) {

@@ -6,11 +6,14 @@
 \alias{releaseDuckDBConn}
 \alias{loadExtension}
 \alias{configureOutOfCore}
+\alias{configureCloud}
 \title{Acquire and Release the DuckDB Connection}
 \usage{
 loadExtension(conn, extension, optional = FALSE)
 
 configureOutOfCore(conn)
+
+configureCloud(conn)
 
 acquireDuckDBConn(
   conn = dbConnect(duckdb(), bigint = "integer64", array = "matrix")
