@@ -1,3 +1,13 @@
+# DuckDBDataFrame 0.99.2
+
+## Bug fixes
+
+- The `transform()` test is now skipped on R (< 4.6.0). The package requires
+  R (>= 4.6.0); on older R the paired `S4Vectors` ships a `transform()` whose
+  internal evaluation-frame stack-walk fails when `transform()` is called as a
+  lazily-forced argument promise. This avoids a spurious test ERROR on the
+  R-oldrel build of an unsupported R version.
+
 # DuckDBDataFrame 0.99.1
 
 ## Bug fixes

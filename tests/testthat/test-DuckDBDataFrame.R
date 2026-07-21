@@ -375,6 +375,12 @@ test_that("column replacement works for a DuckDBDataFrame", {
 })
 
 test_that("transform works for a DuckDBDataFrame", {
+    # The package requires R (>= 4.6.0). On older R the paired S4Vectors ships a
+    # transform() that resolves the evaluation frame via an internal stack-walk
+    # (.find_named_arg_enclos), which fails when transform() is invoked as a
+    # lazily-forced argument promise (as it is here through checkDuckDBDataFrame).
+    # This was fixed upstream in the S4Vectors that pairs with R (>= 4.6.0).
+    skip_if(getRversion() < "4.6.0", "requires R (>= 4.6.0) for S4Vectors transform()")
     df <- DuckDBDataFrame(mtcars_parquet, datacols = colnames(mtcars), keycol = list(model = rownames(mtcars)))
     checkDuckDBDataFrame(transform(df, wt = wt * 1000, gpm = 1 / mpg),
                          transform(mtcars, wt = wt * 1000, gpm = 1 / mpg))
