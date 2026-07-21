@@ -884,12 +884,10 @@ setMethod("%in%", c(x = "DuckDBTable", table = "ANY"), function(x, table) {
 #' @export
 #' @importFrom dplyr group_by n summarize
 #' @importFrom stats setNames
-setMethod("table", "DuckDBTable", function(...) {
-    args <- list(...)
-    if (length(args) != 1L) {
+setMethod("table", "DuckDBTable", function(x, ...) {
+    if (...length() != 0L) {
         stop("\"table\" method for DuckDB data can only take one input object")
     }
-    x <- args[[1L]]
     conn <- tblconn(x, select = FALSE)
     groups <- as.list(x@datacols)
     counts <- as.data.frame(summarize(group_by(conn, !!!groups), count = n(), .groups = "drop"))

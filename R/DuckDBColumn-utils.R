@@ -524,8 +524,8 @@ setMethod("%in%", c(x = "DuckDBColumn", table = "ANY"), function(x, table) {
 })
 
 #' @export
-setMethod("table", "DuckDBColumn", function(...) {
-    callGeneric(cbind.DuckDBDataFrame(...))
+setMethod("table", "DuckDBColumn", function(x, ...) {
+    callGeneric(cbind.DuckDBDataFrame(x, ...))
 })
 
 ### - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -

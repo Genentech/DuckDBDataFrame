@@ -1,3 +1,17 @@
+# DuckDBDataFrame 0.99.1
+
+## Bug fixes
+
+- The `table()` methods for `DuckDBTable` and `DuckDBColumn` now declare `x` as
+  a formal argument (`function(x, ...)`), conforming to the `table` generic in
+  Bioconductor-devel `BiocGenerics`, which dispatches on `x`
+  (`setGeneric("table", signature = "x")`) rather than on `...`. Under the
+  previous `function(...)` definition the package failed to install on
+  Bioc-devel with a `conformMethod` error ("formal arguments ... omitted in the
+  method definition cannot be in the signature"). Behavior is unchanged, and the
+  new signature also conforms against the `...`-dispatch generic in the current
+  Bioconductor release.
+
 # DuckDBDataFrame 0.9.29
 
 ## New features
