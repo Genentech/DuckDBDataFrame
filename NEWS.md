@@ -1,3 +1,15 @@
+# DuckDBDataFrame 0.99.3
+
+## Bug fixes
+
+- `validateAppendOffset()` now accepts a whole-number append `offset` above the
+  32-bit integer range instead of coercing it via `as.integer()` (which produced
+  `NA`), and `buildTableSelectSQL()` emits the offset as a full integer literal
+  rather than a 32-bit `%d`. Together these let a resource with more than ~2.1e9
+  rows stream without the append offset overflowing to `NA`. Offsets within the
+  32-bit range are still returned as `integer`, so index-column narrowing is
+  unchanged for the common case.
+
 # DuckDBDataFrame 0.99.2
 
 ## Bug fixes

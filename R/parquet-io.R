@@ -127,10 +127,15 @@ NULL
 #' @importFrom S4Vectors isSingleNumber
 #' @rdname parquet-io
 validateAppendOffset <- function(offset) {
-    if (!isSingleNumber(offset) || offset != as.integer(offset) || offset < 0L) {
+    if (!isSingleNumber(offset) || is.na(offset) || offset < 0 ||
+        offset != round(offset)) {
         stop("'offset' must be a single non-negative integer")
     }
-    as.integer(offset)
+    # Keep 32-bit offsets as integer so index columns narrow exactly as before;
+    # widen to a whole-number double only when the offset exceeds the 32-bit
+    # range, so a resource with more than ~2.1e9 rows can stream without the
+    # as.integer() overflow that turns the offset into NA.
+    if (offset <= .Machine$integer.max) as.integer(offset) else offset
 }
 
 #' @export
@@ -298,11 +303,7 @@ function(path, append = FALSE, offset = 0L, part = NULL, part_digits = 0L,
         flat_part <- TRUE
     }
 
-    if (!is.null(indexcol)) {
-        offset <- validateAppendOffset(offset)
-    } else {
-        offset <- as.integer(offset)
-    }
+    offset <- validateAppendOffset(offset)
 
     if (isTRUE(append) && length(reconcile_columns)) {
         reconcileParquetSchema(
@@ -438,8 +439,8 @@ function(x, indexcol = NULL, keycol = NULL, dimtbl = NULL, offset = 0L,
     if (!is.null(indexcol)) {
         qidx <- as.character(dbQuoteIdentifier(conn, indexcol))
         select_parts <- c(select_parts,
-                          sprintf("(%d + row_number() OVER (ORDER BY (SELECT 1))) AS %s",
-                                  as.integer(offset), qidx))
+                          sprintf("(%s + row_number() OVER (ORDER BY (SELECT 1))) AS %s",
+                                  format(offset, scientific = FALSE, trim = TRUE), qidx))
         output_names <- c(output_names, indexcol)
     }
 
