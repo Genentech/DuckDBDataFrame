@@ -150,6 +150,7 @@ setMethod("t", "DuckDBDataFrame", t.DuckDBDataFrame)
 
 #' @export
 #' @importFrom bit64 is.integer64
+#' @importFrom S4Vectors as.matrix
 setMethod("as.matrix", "DuckDBTransposedDataFrame", function(x) {
     df <- as.data.frame(x@data, optional = TRUE)
     for (j in seq_along(df)) {

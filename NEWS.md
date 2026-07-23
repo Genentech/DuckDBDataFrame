@@ -1,3 +1,10 @@
+# DuckDBDataFrame 0.99.8
+
+## Bug fixes
+
+- Import `as.matrix` methods table from S4Vectors to ensure the methods
+  defined in this package are exported.
+
 # DuckDBDataFrame 0.99.7
 
 ## Bug fixes

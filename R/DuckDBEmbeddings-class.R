@@ -285,6 +285,7 @@ setMethod("[", "DuckDBEmbeddings", function(x, i, j, ..., drop = TRUE) {
 ###
 
 #' @export
+#' @importFrom S4Vectors as.matrix
 setMethod("as.matrix", "DuckDBEmbeddings", function(x, ...) {
     df <- as.data.frame(x@table, optional = TRUE)
     mat <- df[[1L]]
