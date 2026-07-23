@@ -1,3 +1,12 @@
+# DuckDBDataFrame 0.99.4
+
+## Bug fixes
+
+- `DuckDBSelfHits()` now fails loudly when `nnode` (or a supplied node id)
+  exceeds the 32-bit integer range, instead of letting `as.integer()` silently
+  coerce it to `NA` (which corrupted graph reconstruction). Graphs with more
+  than ~2.1e9 nodes are not yet supported; the error says so explicitly.
+
 # DuckDBDataFrame 0.99.3
 
 ## Bug fixes

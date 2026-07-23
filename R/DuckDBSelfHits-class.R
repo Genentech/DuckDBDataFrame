@@ -448,6 +448,14 @@ function(conn, from, to, nnode, mcols = NULL, keycol = NULL, dimtbl = NULL, node
         stop("'nnode' must be a single non-negative integer")
     }
 
+    # Node ids are held in 32-bit integer slots. Fail loudly on a > 2^31-node
+    # graph rather than letting as.integer() silently coerce nnode to NA (which
+    # would corrupt reconstruction at read time).
+    if (nnode > .Machine$integer.max) {
+        stop("'nnode' (", format(nnode, scientific = FALSE), ") exceeds the ",
+             "32-bit integer range; graphs with more than ",
+             .Machine$integer.max, " nodes are not yet supported.")
+    }
     if (!is.integer(nnode)) {
         nnode <- as.integer(nnode)
     }
@@ -457,6 +465,10 @@ function(conn, from, to, nnode, mcols = NULL, keycol = NULL, dimtbl = NULL, node
     } else if (!is.numeric(nodes)) {
         stop("'nodes' must be a numeric vector")
     } else {
+        if (any(nodes > .Machine$integer.max, na.rm = TRUE)) {
+            stop("'nodes' contains ids beyond the 32-bit integer range; node ",
+                 "ids above ", .Machine$integer.max, " are not yet supported.")
+        }
         if (!is.integer(nodes)) {
             nodes <- as.integer(nodes)
         }

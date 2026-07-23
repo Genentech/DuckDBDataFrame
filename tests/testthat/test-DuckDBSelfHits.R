@@ -351,3 +351,13 @@ test_that("isolated node subset produces empty result for a DuckDBSelfHits", {
     expect_identical(nnode(sub), 1L)
     expect_identical(nrow(as.data.frame(sub)), 0L)
 })
+
+test_that("nnode / node ids beyond the 32-bit range fail loudly (not silent NA)", {
+    expect_error(
+        DuckDBSelfHits(selfhits_parquet, from = "from", to = "to", nnode = 3e9),
+        "32-bit")
+    expect_error(
+        DuckDBSelfHits(selfhits_parquet, from = "from", to = "to", nnode = 5L,
+                       nodes = c(1, 3e9)),
+        "32-bit")
+})
