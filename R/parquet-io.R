@@ -348,7 +348,7 @@ quoteSQLColumns <- function(conn, cols) {
 #' @rdname parquet-io
 buildParquetCopySQL <-
 function(query_sql, target_path, order_cols = NULL, partition_by = NULL,
-         row_group_size = NULL)
+         row_group_size = NULL, append = FALSE)
 {
     order_clause <- if (!is.null(order_cols) && length(order_cols) > 0L) {
         sprintf(" ORDER BY %s", paste(order_cols, collapse = ", "))
@@ -368,6 +368,9 @@ function(query_sql, target_path, order_cols = NULL, partition_by = NULL,
     if (!is.null(partition_by) && length(partition_by) > 0L) {
         options <- c(options,
                      sprintf("PARTITION_BY (%s)", paste(partition_by, collapse = ", ")))
+    }
+    if (isTRUE(append)) {
+        options <- c(options, "APPEND")
     }
 
     sprintf(

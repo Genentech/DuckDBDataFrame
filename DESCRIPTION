@@ -1,5 +1,5 @@
 Package: DuckDBDataFrame
-Version: 0.99.5
+Version: 0.99.6
 Date: 2026-07-22
 Title: DuckDB-Backed DataFrame and Table Structures
 Description:

@@ -1,3 +1,12 @@
+# DuckDBDataFrame 0.99.6
+
+## New features
+
+- `buildParquetCopySQL()` gains an `append` argument that emits the DuckDB
+  `APPEND` copy option. This lets a `PARTITION_BY` write add new files to an
+  existing (hive-partitioned) directory instead of failing "directory is not
+  empty", which is what a coord-array append needs (DuckDBArray).
+
 # DuckDBDataFrame 0.99.5
 
 ## Bug fixes

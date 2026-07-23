@@ -57,7 +57,8 @@ buildParquetCopySQL(
   target_path,
   order_cols = NULL,
   partition_by = NULL,
-  row_group_size = NULL
+  row_group_size = NULL,
+  append = FALSE
 )
 
 writeDuckDBTableParquet(
