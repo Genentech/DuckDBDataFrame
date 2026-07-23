@@ -288,9 +288,15 @@ setMethod("[", "DuckDBEmbeddings", function(x, i, j, ..., drop = TRUE) {
 setMethod("as.matrix", "DuckDBEmbeddings", function(x, ...) {
     df <- as.data.frame(x@table, optional = TRUE)
     mat <- df[[1L]]
+
+    # Columns from SQL are ordered: datacols first, then keycols.
+    # Only for a real (named) key -- a row_number key has no cell names, and its
+    # integer64 column would be reinterpreted as garbage doubles by rownames<-.
     if (!.has_row_number(x@table)) {
-        rownames(mat) <- rownames(x@table)
+        rnames <- .map_keycol_names(x@table@keycols[[1L]], df[[ncol(df)]])
+        rownames(mat) <- rnames
     }
+
     mat
 })
 

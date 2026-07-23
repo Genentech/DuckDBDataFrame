@@ -1,3 +1,16 @@
+# DuckDBDataFrame 0.99.7
+
+## Bug fixes
+
+- `as.matrix(<DuckDBEmbeddings>)` now derives row names from the same
+  materialized query as the matrix (the keycol column) rather than from the
+  stored keycol slot via `rownames()`. For a named key, `rownames()` returns
+  `keydimnames()` = the stored `keycols` vector, whose length can diverge from
+  the materialized row count (e.g. a subset filtered through a dimtbl, or
+  aliased / duplicate keys). That divergence made `show()`/`as.matrix()` on a
+  large embedding fail with "length of 'dimnames' [1] not equal to array
+  extent". Row names are now consistent with the row count by construction.
+
 # DuckDBDataFrame 0.99.6
 
 ## New features
