@@ -1,3 +1,17 @@
+# DuckDBDataFrame 0.99.5
+
+## Bug fixes
+
+- The lazy SQL write path (`writeDuckDBTableParquet()` / `buildTableSelectSQL()`)
+  now types the `__index__` column the same way the in-memory writer does,
+  instead of always emitting a BIGINT `row_number()`. It `CAST`s the index to a
+  type chosen by range (narrowed on a fresh write, `index_max` honored, or pinned
+  to part 0's on-disk type on append), so a resource written or appended across
+  both write paths keeps one consistent `__index__` type. Previously an
+  in-memory part 0 (narrowed) plus a lazy append (BIGINT) produced a
+  schema-inconsistent, unreadable resource, and the same table had a different
+  index type depending on which path wrote it.
+
 # DuckDBDataFrame 0.99.4
 
 ## Bug fixes

@@ -71,6 +71,7 @@ writeDuckDBTableParquet(
   part = NULL,
   part_digits = 0L,
   cluster_by = NULL,
+  index_max = NULL,
   ...
 )
 }

@@ -424,3 +424,47 @@ test_that("reading wide numeric types warns about possible precision loss", {
     expect_no_warning(DuckDBDataFrame(tf2, datacols = "d", keycol = "id"),
                       message = "precision")
 })
+
+.f1IndexType <- function(dir) {
+    fs <- sort(list.files(dir, pattern = "parquet$", recursive = TRUE,
+                          full.names = TRUE))
+    vapply(fs, function(p)
+        arrow::ParquetFileReader$create(p)$GetSchema()$
+            GetFieldByName("__index__")$type$ToString(), character(1L))
+}
+
+test_that("lazy writeParquet narrows __index__ and honors index_max", {
+    skip_if_not_installed("arrow")
+    src <- tempfile(fileext = ".parquet"); on.exit(unlink(src), add = TRUE)
+    arrow::write_parquet(data.frame(v = 1:5), src)
+    ddf <- DuckDBDataFrame(src)
+
+    # Small lazy write narrows (uint8), no longer defaults to int64/BIGINT.
+    out <- tempfile()
+    writeDuckDBTableParquet(ddf, out, indexcol = "__index__", keycol = NULL)
+    expect_identical(unname(.f1IndexType(out)), "uint8")
+
+    # index_max = Inf forces int64 (parity with the in-memory writer).
+    out2 <- tempfile()
+    writeDuckDBTableParquet(ddf, out2, indexcol = "__index__", keycol = NULL,
+                            index_max = Inf)
+    expect_identical(unname(.f1IndexType(out2)), "int64")
+})
+
+test_that("lazy append pins __index__ to part 0's type (schema-consistent parts)", {
+    skip_if_not_installed("arrow")
+    src <- tempfile(fileext = ".parquet"); on.exit(unlink(src), add = TRUE)
+    arrow::write_parquet(data.frame(v = 1:5), src)
+    ddf <- DuckDBDataFrame(src)
+
+    dir <- tempfile()
+    writeDuckDBTableParquet(ddf, dir, indexcol = "__index__", keycol = NULL,
+                            part = 0L, part_digits = 2L, append = FALSE,
+                            index_max = Inf)                      # part 0 int64
+    writeDuckDBTableParquet(ddf, dir, indexcol = "__index__", keycol = NULL,
+                            offset = 5, part = 1L, part_digits = 2L,
+                            append = TRUE)                        # no index_max
+    types <- .f1IndexType(dir)
+    expect_length(types, 2L)
+    expect_true(all(types == "int64"))    # append pinned to part 0, not narrowed
+})

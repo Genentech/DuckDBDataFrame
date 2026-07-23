@@ -420,11 +420,25 @@ function(query_sql, target_path, order_cols = NULL, partition_by = NULL,
     }, character(1L))
 }
 
+.duckdbIntTypeName <- function(arrow_type) {
+    switch(arrowTypeToName(arrow_type),
+           "int8"   = "TINYINT",
+           "int16"  = "SMALLINT",
+           "int32"  = "INTEGER",
+           "int64"  = "BIGINT",
+           "uint8"  = "UTINYINT",
+           "uint16" = "USMALLINT",
+           "uint32" = "UINTEGER",
+           "uint64" = "UBIGINT",
+           stop("unsupported __index__ integer type: ",
+                arrowTypeToName(arrow_type)))
+}
+
 #' @importFrom dbplyr sql_render
 #' @importFrom DBI dbQuoteIdentifier
 buildTableSelectSQL <-
 function(x, indexcol = NULL, keycol = NULL, dimtbl = NULL, offset = 0L,
-         conn = dbconn(x))
+         index_type = NULL, conn = dbconn(x))
 {
     if (!inherits(x, "DuckDBTable"))
         stop("'x' must be a DuckDBTable")
@@ -438,9 +452,11 @@ function(x, indexcol = NULL, keycol = NULL, dimtbl = NULL, offset = 0L,
 
     if (!is.null(indexcol)) {
         qidx <- as.character(dbQuoteIdentifier(conn, indexcol))
-        select_parts <- c(select_parts,
-                          sprintf("(%s + row_number() OVER (ORDER BY (SELECT 1))) AS %s",
-                                  format(offset, scientific = FALSE, trim = TRUE), qidx))
+        idx_expr <- sprintf("(%s + row_number() OVER (ORDER BY (SELECT 1)))",
+                            format(offset, scientific = FALSE, trim = TRUE))
+        if (!is.null(index_type))
+            idx_expr <- sprintf("CAST(%s AS %s)", idx_expr, index_type)
+        select_parts <- c(select_parts, sprintf("%s AS %s", idx_expr, qidx))
         output_names <- c(output_names, indexcol)
     }
 
@@ -501,7 +517,7 @@ function(x, indexcol = NULL, keycol = NULL, dimtbl = NULL, offset = 0L,
 writeDuckDBTableParquet <-
 function(x, path, indexcol = "__index__", keycol = "__name__", dimtbl = NULL,
          append = FALSE, offset = 0L, part = NULL, part_digits = 0L,
-         cluster_by = NULL, ...)
+         cluster_by = NULL, index_max = NULL, ...)
 {
     if (!inherits(x, "DuckDBTable"))
         stop("'x' must be a DuckDBTable")
@@ -513,9 +529,24 @@ function(x, path, indexcol = "__index__", keycol = "__name__", dimtbl = NULL,
         create = TRUE)
 
     conn <- dbconn(x)
+
+    n <- nrow(x)
+    index_type <- NULL
+    if (!is.null(indexcol)) {
+        idx_arrow <- if (isTRUE(append)) {
+            readParquetSchema(prep$path,
+                              columns = indexcol)$GetFieldByName(indexcol)$type
+        } else if (!is.null(index_max)) {
+            arrowIntType(c(0, index_max))
+        } else {
+            arrowIntType(c(0, prep$offset + n))
+        }
+        index_type <- .duckdbIntTypeName(idx_arrow)
+    }
+
     built <- buildTableSelectSQL(x, indexcol = indexcol, keycol = keycol,
                                  dimtbl = dimtbl, offset = prep$offset,
-                                 conn = conn)
+                                 index_type = index_type, conn = conn)
     # A clustering key (cluster_by) chooses the physical row order to make
     # row-group zonemaps prune range queries on its columns.
     spec <- .asClusterSpec(cluster_by)
@@ -530,7 +561,6 @@ function(x, path, indexcol = "__index__", keycol = "__name__", dimtbl = NULL,
                                     order_cols = order_cols)
     DBI::dbExecute(conn, copy_sql)
 
-    n <- nrow(x)
     sample_n <- min(100L, max(1L, n))
     sample_df <- as.data.frame(arrow::read_parquet(prep$pq_path))
     if (nrow(sample_df) > sample_n)
