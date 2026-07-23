@@ -60,6 +60,14 @@ reg.finalizer(.duckdb, function(env) {
 #' FALSE} avoids buffering a whole result to preserve row order on a Tahoe-scale
 #' export where order is not significant.
 #'
+#' The spill \code{temp_directory} is always set and created (recursively): when
+#' neither the option nor the environment variable is given it defaults to a
+#' \code{temp} subdirectory of \code{R_user_dir("DuckDBDataFrame", "cache")}
+#' rather than DuckDB's default under the R session tempdir, which on batch
+#' schedulers (e.g. SLURM's per-job \code{/tmp}) can be small or cleaned
+#' mid-session and make a spill fail to create its directory. Point
+#' \code{BIOCDUCKDB_TEMP_DIRECTORY} at roomy scratch for large out-of-core sorts.
+#'
 #' @examples
 #' releaseDuckDBConn()
 #' conn <- acquireDuckDBConn()
@@ -197,10 +205,12 @@ configureOutOfCore <- function(conn) {
                                     gsub("'", "''", ml))), silent = TRUE)
     }
     td <- .outOfCoreSetting("DuckDBDataFrame.temp_directory", "BIOCDUCKDB_TEMP_DIRECTORY")
-    if (!is.null(td)) {
-        try(dbExecute(conn, sprintf("SET temp_directory = '%s';",
-                                    gsub("'", "''", td))), silent = TRUE)
+    if (is.null(td)) {
+        td <- file.path(R_user_dir("DuckDBDataFrame", which = "cache"), "temp")
     }
+    dir.create(td, recursive = TRUE, showWarnings = FALSE)
+    try(dbExecute(conn, sprintf("SET temp_directory = '%s';",
+                                gsub("'", "''", td))), silent = TRUE)
     th <- .outOfCoreSetting("DuckDBDataFrame.threads", "BIOCDUCKDB_THREADS")
     if (!is.null(th)) {
         th_int <- suppressWarnings(as.integer(th))

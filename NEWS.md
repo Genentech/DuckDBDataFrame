@@ -1,3 +1,17 @@
+# DuckDBDataFrame 0.99.9
+
+## Bug fixes
+
+- `configureOutOfCore()` now always sets and creates (recursively) the DuckDB
+  spill `temp_directory`. When neither `DuckDBDataFrame.temp_directory` nor
+  `BIOCDUCKDB_TEMP_DIRECTORY` is set it defaults to a `temp` subdirectory of
+  `R_user_dir("DuckDBDataFrame", "cache")` instead of relying on DuckDB's
+  default under the R session tempdir, and a configured path is created before
+  `SET temp_directory`. On batch schedulers whose per-job tempdir (e.g. SLURM
+  `/tmp`) is small or cleaned mid-session, a large out-of-core sort/aggregation
+  previously failed with "IO Error: Failed to create directory ... No such file
+  or directory"; the spill directory is now guaranteed to exist.
+
 # DuckDBDataFrame 0.99.8
 
 ## Bug fixes

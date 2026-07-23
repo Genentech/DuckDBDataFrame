@@ -74,6 +74,14 @@ Setting \code{memory_limit} (e.g. \code{"16GB"} or \code{"80\%"}) and
 can spill a large aggregation/sort/join; \code{preserve_insertion_order =
 FALSE} avoids buffering a whole result to preserve row order on a Tahoe-scale
 export where order is not significant.
+
+The spill \code{temp_directory} is always set and created (recursively): when
+neither the option nor the environment variable is given it defaults to a
+\code{temp} subdirectory of \code{R_user_dir("DuckDBDataFrame", "cache")}
+rather than DuckDB's default under the R session tempdir, which on batch
+schedulers (e.g. SLURM's per-job \code{/tmp}) can be small or cleaned
+mid-session and make a spill fail to create its directory. Point
+\code{BIOCDUCKDB_TEMP_DIRECTORY} at roomy scratch for large out-of-core sorts.
 }
 \examples{
 releaseDuckDBConn()
