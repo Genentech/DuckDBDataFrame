@@ -1,3 +1,21 @@
+# DuckDBDataFrame 0.99.11
+
+## Bug fixes
+
+- `as.vector(<DuckDBColumn>)`, `as.list(<DuckDBAtomicList>)`, and
+  `as.data.frame(<DuckDBDataFrame>)` now reorder their query result into the
+  object's canonical stored-key order length-safely, extending the
+  `as.matrix(<DuckDBEmbeddings>)` fix (0.99.7) to its siblings. They previously
+  re-indexed by the stored key vector (`result[rownames(x@table)]`) after
+  labelling from the materialized keycol; when the stored key set diverged from
+  the materialized rows (a subset filtered through a dimension table, or
+  aliased / duplicate keys) that silently NA-padded, first-matched a duplicate,
+  or truncated. The reorder now happens only when the stored keys and
+  materialized names are a clean 1:1 correspondence and otherwise falls back to
+  query order with every value kept paired with its true name; a `row_number`
+  key keeps query order (and no longer triggers a full key scan just to
+  reorder). New internal helpers `.storedKeysBijective()` / `.reindexByStoredKeys()`.
+
 # DuckDBDataFrame 0.99.10
 
 ## Bug fixes

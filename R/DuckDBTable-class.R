@@ -434,6 +434,24 @@ setMethod("dbconn", "DuckDBTable", function(x) x@conn$src$con)
     }
 }
 
+# Determine if a stored key set and a query result's materialized names form a
+# clean 1:1 correspondence (same multiset, no duplicates on either side)
+.storedKeysBijective <- function(keys, nm) {
+    length(keys) == length(nm) &&
+        !anyDuplicated(keys) && !anyDuplicated(nm) &&
+        setequal(keys, nm)
+}
+
+# Reorder a query-materialized, query-labeled result into an object's canonical
+# (stored-key) row order WITHOUT relabelling.
+.reindexByStoredKeys <- function(result, keys) {
+    if (.storedKeysBijective(keys, names(result))) {
+        result[keys]
+    } else {
+        result
+    }
+}
+
 #' @importFrom dplyr filter
 .filter_tblconn <- function(conn, keycols, dimtbls) {
     for (i in names(keycols)) {

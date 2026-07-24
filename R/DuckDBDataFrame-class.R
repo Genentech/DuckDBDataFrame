@@ -577,7 +577,12 @@ function(x, row.names = NULL, optional = FALSE, ...) {
         rnames <- .map_keycol_names(x@keycols[[1L]], df[[ncol(df)]])
         rownames(df) <- rnames
 
-        df <- df[rownames(x), seq_along(x@datacols), drop = FALSE]
+        cols <- seq_along(x@datacols)
+        if (!.has_row_number(x) && .storedKeysBijective(rownames(x), rnames)) {
+            df <- df[rownames(x), cols, drop = FALSE]
+        } else {
+            df <- df[, cols, drop = FALSE]
+        }
 
         # Downcast 64-bit to 32-bit integer where appropriate
         if (nrow(df) > 0L) {

@@ -259,7 +259,9 @@ setMethod("as.vector", "DuckDBColumn", function(x, mode = "any") {
     # Columns are ordered: datacol (column 1), then keycol (column 2)
     names <- .map_keycol_names(x@table@keycols[[1L]], df[[2L]])
     vec <- setNames(df[[1L]], names)
-    vec <- vec[rownames(x@table)]
+    if (!.has_row_number(x@table)) {
+        vec <- .reindexByStoredKeys(vec, rownames(x@table))
+    }
 
     # Restore a factor column recorded in the schema (no-op when none). factor()
     # drops names, so re-attach them.
