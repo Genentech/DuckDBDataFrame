@@ -1,3 +1,17 @@
+# DuckDBDataFrame 0.99.10
+
+## Bug fixes
+
+- `configureOutOfCore()` now defaults the DuckDB `memory_limit` to 80% of the
+  most-restrictive detected ceiling when neither `DuckDBDataFrame.memory_limit`
+  nor `BIOCDUCKDB_MEMORY_LIMIT` is set: an explicit SLURM allocation
+  (`SLURM_MEM_PER_NODE`, or `SLURM_MEM_PER_CPU` times `SLURM_CPUS_ON_NODE`), the
+  cgroup limit (v2 `memory.max` then v1 `memory.limit_in_bytes`), then physical
+  RAM (`/proc/meminfo`). DuckDB's own default is 80% of *physical* RAM, which
+  ignores a SLURM / cgroup cap and over-commits — nearly OOM-ing on the first
+  large scan of a big out-of-core aggregation instead of spilling. When nothing
+  can be detected (e.g. macOS) DuckDB's default is left in place.
+
 # DuckDBDataFrame 0.99.9
 
 ## Bug fixes

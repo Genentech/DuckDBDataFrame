@@ -82,6 +82,16 @@ rather than DuckDB's default under the R session tempdir, which on batch
 schedulers (e.g. SLURM's per-job \code{/tmp}) can be small or cleaned
 mid-session and make a spill fail to create its directory. Point
 \code{BIOCDUCKDB_TEMP_DIRECTORY} at roomy scratch for large out-of-core sorts.
+
+The \code{memory_limit} likewise gets a package default when unset: 80\% of
+the most-restrictive detected ceiling -- an explicit SLURM allocation
+(\code{SLURM_MEM_PER_NODE}, or \code{SLURM_MEM_PER_CPU} times
+\code{SLURM_CPUS_ON_NODE}), the cgroup limit (v2 \code{memory.max} then v1
+\code{memory.limit_in_bytes}), then physical RAM. DuckDB's own default is 80\%
+of *physical* RAM, which ignores a SLURM / cgroup cap and can over-commit
+(near-OOM on the first large scan); the detected default keeps a big
+aggregation spilling within the job's allocation. When nothing can be detected
+(e.g. macOS) DuckDB's default is left in place.
 }
 \examples{
 releaseDuckDBConn()

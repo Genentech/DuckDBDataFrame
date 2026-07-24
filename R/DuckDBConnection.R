@@ -68,6 +68,16 @@ reg.finalizer(.duckdb, function(env) {
 #' mid-session and make a spill fail to create its directory. Point
 #' \code{BIOCDUCKDB_TEMP_DIRECTORY} at roomy scratch for large out-of-core sorts.
 #'
+#' The \code{memory_limit} likewise gets a package default when unset: 80\% of
+#' the most-restrictive detected ceiling -- an explicit SLURM allocation
+#' (\code{SLURM_MEM_PER_NODE}, or \code{SLURM_MEM_PER_CPU} times
+#' \code{SLURM_CPUS_ON_NODE}), the cgroup limit (v2 \code{memory.max} then v1
+#' \code{memory.limit_in_bytes}), then physical RAM. DuckDB's own default is 80\%
+#' of *physical* RAM, which ignores a SLURM / cgroup cap and can over-commit
+#' (near-OOM on the first large scan); the detected default keeps a big
+#' aggregation spilling within the job's allocation. When nothing can be detected
+#' (e.g. macOS) DuckDB's default is left in place.
+#'
 #' @examples
 #' releaseDuckDBConn()
 #' conn <- acquireDuckDBConn()
@@ -195,11 +205,88 @@ setExtensionDirectory <- function(conn) {
     NULL
 }
 
+# Memory ceiling (bytes) from an explicit SLURM allocation: per-node memory if
+# set, else per-CPU memory times the CPUs on this node. NULL when unset.
+.slurmMemoryBytes <- function() {
+    mb <- suppressWarnings(as.numeric(Sys.getenv("SLURM_MEM_PER_NODE", "")))
+    if (!is.na(mb) && mb > 0) {
+        return(mb * 2^20)
+    }
+    pc <- suppressWarnings(as.numeric(Sys.getenv("SLURM_MEM_PER_CPU", "")))
+    nc <- suppressWarnings(as.numeric(Sys.getenv("SLURM_CPUS_ON_NODE", "")))
+    if (!is.na(pc) && pc > 0 && !is.na(nc) && nc > 0) {
+        return(pc * nc * 2^20)
+    }
+    NULL
+}
+
+# Memory ceiling (bytes) from the cgroup limit (v2 then v1). NULL when
+# unconstrained ("max", the v1 huge sentinel, or the files are absent).
+.cgroupMemoryBytes <- function() {
+    read_limit <- function(path) {
+        if (!file.exists(path)) {
+            return(NULL)
+        }
+        val <- tryCatch(readLines(path, n = 1L, warn = FALSE),
+                        error = function(e) character())
+        if (!length(val) || !nzchar(val[1L]) || val[1L] == "max") {
+            return(NULL)
+        }
+        b <- suppressWarnings(as.numeric(val[1L]))
+        # cgroup v1 "unlimited" is a huge sentinel (~PAGE_COUNTER_MAX); treat an
+        # implausibly large value (>= 1 EiB) as unset.
+        if (is.na(b) || b <= 0 || b >= 2^60) {
+            return(NULL)
+        }
+        b
+    }
+    read_limit("/sys/fs/cgroup/memory.max") %||%                    # cgroup v2
+        read_limit("/sys/fs/cgroup/memory/memory.limit_in_bytes")  # cgroup v1
+}
+
+# Physical RAM (bytes) from /proc/meminfo (Linux only). NULL elsewhere.
+.physicalMemoryBytes <- function() {
+    if (!file.exists("/proc/meminfo")) {
+        return(NULL)
+    }
+    ln <- tryCatch(readLines("/proc/meminfo", warn = FALSE),
+                   error = function(e) character())
+    kb <- grep("^MemTotal:", ln, value = TRUE)
+    if (!length(kb)) {
+        return(NULL)
+    }
+    b <- suppressWarnings(as.numeric(sub("^MemTotal:[[:space:]]*([0-9]+).*",
+                                         "\\1", kb[1L]))) * 1024
+    if (is.na(b) || b <= 0) {
+        return(NULL)
+    }
+    b
+}
+
+# Default DuckDB memory_limit when the user has not configured one: 80% of the
+# most-restrictive detected ceiling (SLURM allocation, cgroup limit, physical
+# RAM), as a DuckDB byte size (e.g. "51539607552B"). NULL when nothing can be
+# detected (e.g. macOS), leaving DuckDB's own default in place. The 80% leaves
+# headroom for R and the driver so a large aggregation spills within the job's
+# allocation instead of over-committing against a cgroup cap the DuckDB default
+# (80% of *physical* RAM) ignores.
+.defaultMemoryLimit <- function() {
+    caps <- c(.slurmMemoryBytes(), .cgroupMemoryBytes(), .physicalMemoryBytes())
+    caps <- caps[!is.na(caps) & caps > 0]
+    if (!length(caps)) {
+        return(NULL)
+    }
+    sprintf("%.0fB", floor(min(caps) * 0.8))
+}
+
 #' @export
 #' @importFrom DBI dbExecute
 #' @rdname DuckDBConnection
 configureOutOfCore <- function(conn) {
     ml <- .outOfCoreSetting("DuckDBDataFrame.memory_limit", "BIOCDUCKDB_MEMORY_LIMIT")
+    if (is.null(ml)) {
+        ml <- .defaultMemoryLimit()
+    }
     if (!is.null(ml)) {
         try(dbExecute(conn, sprintf("SET memory_limit = '%s';",
                                     gsub("'", "''", ml))), silent = TRUE)
