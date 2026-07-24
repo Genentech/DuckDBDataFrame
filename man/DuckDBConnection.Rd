@@ -87,7 +87,8 @@ The \code{memory_limit} likewise gets a package default when unset: 80\% of
 the most-restrictive detected ceiling -- an explicit SLURM allocation
 (\code{SLURM_MEM_PER_NODE}, or \code{SLURM_MEM_PER_CPU} times
 \code{SLURM_CPUS_ON_NODE}), the cgroup limit (v2 \code{memory.max} then v1
-\code{memory.limit_in_bytes}), then physical RAM. DuckDB's own default is 80\%
+\code{memory.limit_in_bytes}, read from the job's own cgroup resolved via
+\code{/proc/self/cgroup} before the mount root), then physical RAM. DuckDB's own default is 80\%
 of *physical* RAM, which ignores a SLURM / cgroup cap and can over-commit
 (near-OOM on the first large scan); the detected default keeps a big
 aggregation spilling within the job's allocation. When nothing can be detected
@@ -96,7 +97,8 @@ aggregation spilling within the job's allocation. When nothing can be detected
 \code{threads} is likewise defaulted when unset: the most-restrictive detected
 CPU allocation -- a SLURM allocation (\code{SLURM_CPUS_PER_TASK}, or
 \code{SLURM_CPUS_ON_NODE}) then the cgroup CFS quota (v2 \code{cpu.max}, v1
-\code{cpu.cfs_quota_us}/\code{cpu.cfs_period_us}). DuckDB otherwise defaults to
+\code{cpu.cfs_quota_us}/\code{cpu.cfs_period_us}, read from the job's own
+cgroup subpath before the mount root). DuckDB otherwise defaults to
 hardware concurrency, which ignores a SLURM/cgroup cpuset and over-subscribes
 on a shared node (each extra thread also carries working memory against the
 memory cap). When no allocation is detected, DuckDB's default is left in place.

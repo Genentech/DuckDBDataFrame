@@ -72,7 +72,8 @@ reg.finalizer(.duckdb, function(env) {
 #' the most-restrictive detected ceiling -- an explicit SLURM allocation
 #' (\code{SLURM_MEM_PER_NODE}, or \code{SLURM_MEM_PER_CPU} times
 #' \code{SLURM_CPUS_ON_NODE}), the cgroup limit (v2 \code{memory.max} then v1
-#' \code{memory.limit_in_bytes}), then physical RAM. DuckDB's own default is 80\%
+#' \code{memory.limit_in_bytes}, read from the job's own cgroup resolved via
+#' \code{/proc/self/cgroup} before the mount root), then physical RAM. DuckDB's own default is 80\%
 #' of *physical* RAM, which ignores a SLURM / cgroup cap and can over-commit
 #' (near-OOM on the first large scan); the detected default keeps a big
 #' aggregation spilling within the job's allocation. When nothing can be detected
@@ -81,7 +82,8 @@ reg.finalizer(.duckdb, function(env) {
 #' \code{threads} is likewise defaulted when unset: the most-restrictive detected
 #' CPU allocation -- a SLURM allocation (\code{SLURM_CPUS_PER_TASK}, or
 #' \code{SLURM_CPUS_ON_NODE}) then the cgroup CFS quota (v2 \code{cpu.max}, v1
-#' \code{cpu.cfs_quota_us}/\code{cpu.cfs_period_us}). DuckDB otherwise defaults to
+#' \code{cpu.cfs_quota_us}/\code{cpu.cfs_period_us}, read from the job's own
+#' cgroup subpath before the mount root). DuckDB otherwise defaults to
 #' hardware concurrency, which ignores a SLURM/cgroup cpuset and over-subscribes
 #' on a shared node (each extra thread also carries working memory against the
 #' memory cap). When no allocation is detected, DuckDB's default is left in place.
@@ -228,37 +230,73 @@ setExtensionDirectory <- function(conn) {
     NULL
 }
 
-# Memory ceiling (bytes) from the cgroup limit (v2 then v1). NULL when
-# unconstrained ("max", the v1 huge sentinel, or the files are absent).
-.cgroupMemoryBytes <- function() {
-    read_limit <- function(path) {
-        if (!file.exists(path)) {
-            return(NULL)
-        }
-        val <- tryCatch(readLines(path, n = 1L, warn = FALSE),
-                        error = function(e) character())
-        if (!length(val) || !nzchar(val[1L]) || val[1L] == "max") {
-            return(NULL)
-        }
-        b <- suppressWarnings(as.numeric(val[1L]))
-        # cgroup v1 "unlimited" is a huge sentinel (~PAGE_COUNTER_MAX); treat an
-        # implausibly large value (>= 1 EiB) as unset.
-        if (is.na(b) || b <= 0 || b >= 2^60) {
-            return(NULL)
-        }
-        b
+# Ordered candidate cgroup directories for a controller, most specific first
+.cgroupDirs <- function(controller,
+                        proc_cgroup = "/proc/self/cgroup",
+                        root = "/sys/fs/cgroup") {
+    dirs <- character(0)
+    lines <- if (file.exists(proc_cgroup)) {
+        tryCatch(readLines(proc_cgroup, warn = FALSE), error = function(e) character())
+    } else {
+        character(0)
     }
-    read_limit("/sys/fs/cgroup/memory.max") %||%                    # cgroup v2
-        read_limit("/sys/fs/cgroup/memory/memory.limit_in_bytes")  # cgroup v1
+    for (ln in lines) {
+        parts <- strsplit(ln, ":", fixed = TRUE)[[1L]]
+        if (length(parts) < 3L) {
+            next
+        }
+        ctrls <- parts[2L]
+        sub <- sub("^/", "", paste(parts[-(1:2)], collapse = ":"))  # path may hold ':'
+        if (!nzchar(ctrls)) {
+            # v2 unified: files live directly under root/<path>
+            dirs <- c(dirs, if (nzchar(sub)) file.path(root, sub) else root)
+        } else if (controller %in% strsplit(ctrls, ",", fixed = TRUE)[[1L]]) {
+            # v1: files under root/<mount>/<path>; the mount may be the combined
+            # controller string ("cpu,cpuacct") or a per-controller symlink.
+            for (mnt in unique(c(ctrls, controller))) {
+                dirs <- c(dirs,
+                          if (nzchar(sub)) file.path(root, mnt, sub) else file.path(root, mnt))
+            }
+        }
+    }
+    dirs <- c(dirs, root, file.path(root, controller))  # root fallbacks
+    unique(dirs[dir.exists(dirs)])
+}
+
+# Parse a cgroup byte-limit file (v2 memory.max / v1 memory.limit_in_bytes)
+.readCgroupBytes <- function(path) {
+    if (!file.exists(path)) {
+        return(NULL)
+    }
+    val <- tryCatch(readLines(path, n = 1L, warn = FALSE), error = function(e) character())
+    if (!length(val) || !nzchar(val[1L]) || val[1L] == "max") {
+        return(NULL)
+    }
+    b <- suppressWarnings(as.numeric(val[1L]))
+    if (is.na(b) || b <= 0 || b >= 2^60) {
+        return(NULL)
+    }
+    b
+}
+
+# Memory ceiling (bytes) from the job's cgroup (v2 then v1)
+.cgroupMemoryBytes <- function(dirs = .cgroupDirs("memory")) {
+    for (d in dirs) {
+        b <- .readCgroupBytes(file.path(d, "memory.max")) %||%          # v2
+            .readCgroupBytes(file.path(d, "memory.limit_in_bytes"))     # v1
+        if (!is.null(b)) {
+            return(b)
+        }
+    }
+    NULL
 }
 
 # Physical RAM (bytes) from /proc/meminfo (Linux only). NULL elsewhere.
-.physicalMemoryBytes <- function() {
-    if (!file.exists("/proc/meminfo")) {
+.physicalMemoryBytes <- function(path = "/proc/meminfo") {
+    if (!file.exists(path)) {
         return(NULL)
     }
-    ln <- tryCatch(readLines("/proc/meminfo", warn = FALSE),
-                   error = function(e) character())
+    ln <- tryCatch(readLines(path, warn = FALSE), error = function(e) character())
     kb <- grep("^MemTotal:", ln, value = TRUE)
     if (!length(kb)) {
         return(NULL)
@@ -301,37 +339,39 @@ setExtensionDirectory <- function(conn) {
     NULL
 }
 
-# CPU count from the cgroup CFS quota (v2 `cpu.max`, then v1
-# `cpu.cfs_quota_us`/`cpu.cfs_period_us`) = floor(quota / period). NULL when
-# unconstrained ("max", quota <= 0, or the files are absent).
-.cgroupCpus <- function() {
-    quota_cpus <- function(q, p) {
-        if (is.na(q) || is.na(p) || q <= 0 || p <= 0) {
-            return(NULL)
-        }
-        max(1L, as.integer(floor(q / p)))
+# floor(quota / period) as a CPU count, or NULL when either is non-positive/NA.
+.cgroupQuotaCpus <- function(quota, period) {
+    if (is.na(quota) || is.na(period) || quota <= 0 || period <= 0) {
+        return(NULL)
     }
-    v2 <- "/sys/fs/cgroup/cpu.max"
-    if (file.exists(v2)) {
-        val <- tryCatch(strsplit(trimws(readLines(v2, n = 1L, warn = FALSE)),
-                                 "[[:space:]]+")[[1L]],
-                        error = function(e) character())
-        if (length(val) >= 2L && val[1L] != "max") {
-            n <- quota_cpus(suppressWarnings(as.numeric(val[1L])),
-                            suppressWarnings(as.numeric(val[2L])))
+    max(1L, as.integer(floor(quota / period)))
+}
+
+# CPU count from the job's cgroup CFS quota
+.cgroupCpus <- function(dirs = .cgroupDirs("cpu")) {
+    for (d in dirs) {
+        v2 <- file.path(d, "cpu.max")
+        if (file.exists(v2)) {
+            val <- tryCatch(strsplit(trimws(readLines(v2, n = 1L, warn = FALSE)),
+                                     "[[:space:]]+")[[1L]],
+                            error = function(e) character())
+            if (length(val) >= 2L && val[1L] != "max") {
+                n <- .cgroupQuotaCpus(suppressWarnings(as.numeric(val[1L])),
+                                      suppressWarnings(as.numeric(val[2L])))
+                if (!is.null(n)) {
+                    return(n)
+                }
+            }
+        }
+        qf <- file.path(d, "cpu.cfs_quota_us")
+        pf <- file.path(d, "cpu.cfs_period_us")
+        if (file.exists(qf) && file.exists(pf)) {
+            n <- .cgroupQuotaCpus(
+                suppressWarnings(as.numeric(readLines(qf, n = 1L, warn = FALSE))),
+                suppressWarnings(as.numeric(readLines(pf, n = 1L, warn = FALSE))))
             if (!is.null(n)) {
                 return(n)
             }
-        }
-    }
-    qf <- "/sys/fs/cgroup/cpu/cpu.cfs_quota_us"
-    pf <- "/sys/fs/cgroup/cpu/cpu.cfs_period_us"
-    if (file.exists(qf) && file.exists(pf)) {
-        n <- quota_cpus(
-            suppressWarnings(as.numeric(readLines(qf, n = 1L, warn = FALSE))),
-            suppressWarnings(as.numeric(readLines(pf, n = 1L, warn = FALSE))))
-        if (!is.null(n)) {
-            return(n)
         }
     }
     NULL

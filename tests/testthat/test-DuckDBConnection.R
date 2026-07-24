@@ -109,3 +109,63 @@ test_that("configureOutOfCore defaults threads to the SLURM allocation when unse
         DBI::dbGetQuery(con, "SELECT current_setting('threads') AS v")$v)
     expect_identical(thr, 1L)
 })
+
+test_that(".cgroupDirs / cgroup detectors resolve the job subpath then fall back", {
+    mk <- function(p, txt) {
+        dir.create(dirname(p), recursive = TRUE, showWarnings = FALSE)
+        writeLines(txt, p)
+    }
+
+    # cgroup v2: the job's own subpath must win over the mount root
+    b <- tempfile("v2_"); root <- file.path(b, "cg"); proc <- file.path(b, "proc")
+    on.exit(unlink(b, recursive = TRUE), add = TRUE)
+    mk(file.path(root, "myjob", "memory.max"), "8589934592")   # 8 GiB (job)
+    mk(file.path(root, "memory.max"), "68719476736")           # 64 GiB (root)
+    mk(file.path(root, "myjob", "cpu.max"), "200000 100000")   # 2 cpus (job)
+    mk(file.path(root, "cpu.max"), "800000 100000")            # 8 cpus (root)
+    writeLines("0::/myjob", proc)
+    expect_identical(
+        DuckDBDataFrame:::.cgroupMemoryBytes(DuckDBDataFrame:::.cgroupDirs("memory", proc, root)),
+        8 * 2^30)
+    expect_identical(
+        DuckDBDataFrame:::.cgroupCpus(DuckDBDataFrame:::.cgroupDirs("cpu", proc, root)),
+        2L)
+
+    # cgroup v1 with a combined controller mount (cpu,cpuacct) + subpath
+    b <- tempfile("v1_"); root <- file.path(b, "cg"); proc <- file.path(b, "proc")
+    on.exit(unlink(b, recursive = TRUE), add = TRUE)
+    mk(file.path(root, "memory", "mygrp", "memory.limit_in_bytes"), "4294967296") # 4 GiB
+    mk(file.path(root, "cpu,cpuacct", "mygrp", "cpu.cfs_quota_us"), "300000")
+    mk(file.path(root, "cpu,cpuacct", "mygrp", "cpu.cfs_period_us"), "100000")    # 3 cpus
+    writeLines(c("7:memory:/mygrp", "5:cpu,cpuacct:/mygrp"), proc)
+    expect_identical(
+        DuckDBDataFrame:::.cgroupMemoryBytes(DuckDBDataFrame:::.cgroupDirs("memory", proc, root)),
+        4 * 2^30)
+    expect_identical(
+        DuckDBDataFrame:::.cgroupCpus(DuckDBDataFrame:::.cgroupDirs("cpu", proc, root)),
+        3L)
+
+    # root fallback: no /proc/self/cgroup -> the mount root is still searched
+    b <- tempfile("rt_"); root <- file.path(b, "cg"); proc <- file.path(b, "absent")
+    on.exit(unlink(b, recursive = TRUE), add = TRUE)
+    mk(file.path(root, "memory.max"), "1073741824")            # 1 GiB at root
+    expect_identical(
+        DuckDBDataFrame:::.cgroupMemoryBytes(DuckDBDataFrame:::.cgroupDirs("memory", proc, root)),
+        2^30)
+
+    # unconstrained ("max") -> NULL
+    b <- tempfile("mx_"); root <- file.path(b, "cg"); proc <- file.path(b, "proc")
+    on.exit(unlink(b, recursive = TRUE), add = TRUE)
+    mk(file.path(root, "memory.max"), "max")
+    writeLines("0::/", proc)
+    expect_null(
+        DuckDBDataFrame:::.cgroupMemoryBytes(DuckDBDataFrame:::.cgroupDirs("memory", proc, root)))
+})
+
+test_that(".physicalMemoryBytes parses an injected /proc/meminfo", {
+    mi <- tempfile()
+    on.exit(unlink(mi), add = TRUE)
+    writeLines(c("MemTotal:       16307188 kB", "SwapTotal:  0 kB"), mi)
+    expect_identical(DuckDBDataFrame:::.physicalMemoryBytes(mi), 16307188 * 1024)
+    expect_null(DuckDBDataFrame:::.physicalMemoryBytes(tempfile()))
+})

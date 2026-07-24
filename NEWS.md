@@ -1,3 +1,20 @@
+# DuckDBDataFrame 0.99.13
+
+## Bug fixes
+
+- The cgroup `memory_limit` / `threads` detectors used by `configureOutOfCore()`
+  now resolve the job's **own** cgroup subpath from `/proc/self/cgroup` (both
+  cgroup v2 unified and v1 per-controller, including combined mounts like
+  `cpu,cpuacct`) before falling back to the mount root. A cgroup-constrained
+  **non-SLURM** job was previously undetected — the fixed root paths
+  (`/sys/fs/cgroup/memory.max`, …) only match when the process runs in the root
+  cgroup — so it silently fell back to physical RAM / hardware concurrency, the
+  over-commit the defaults are meant to prevent. The mount root stays in the
+  search list, so detection never regresses where it already worked. The
+  detectors (`.cgroupDirs()`, `.cgroupMemoryBytes()`, `.cgroupCpus()`,
+  `.physicalMemoryBytes()`) take injectable path parameters and are now covered
+  by fixture-based unit tests.
+
 # DuckDBDataFrame 0.99.12
 
 ## Bug fixes
