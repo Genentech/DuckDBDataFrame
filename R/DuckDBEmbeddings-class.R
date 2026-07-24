@@ -293,8 +293,12 @@ setMethod("as.matrix", "DuckDBEmbeddings", function(x, ...) {
     # Columns from SQL are ordered: datacols first, then keycols.
     # Only for a real (named) key -- a row_number key has no cell names, and its
     # integer64 column would be reinterpreted as garbage doubles by rownames<-.
+    # unname() the keys: for an aliased keycol .map_keycol_names() returns a
+    # NAMED character vector, and unlike names<-, rownames<-/dimnames<- keeps
+    # that inner names attribute, leaving stray names on the matrix's
+    # dimnames[[1]].
     if (!.has_row_number(x@table)) {
-        rnames <- .map_keycol_names(x@table@keycols[[1L]], df[[ncol(df)]])
+        rnames <- unname(.map_keycol_names(x@table@keycols[[1L]], df[[ncol(df)]]))
         rownames(mat) <- rnames
     }
 

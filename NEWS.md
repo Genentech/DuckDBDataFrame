@@ -1,3 +1,15 @@
+# DuckDBDataFrame 0.99.14
+
+## Bug fixes
+
+- `as.matrix(<DuckDBEmbeddings>)` now `unname()`s the row keys before assigning
+  them, so an aliased keycol no longer leaves a stray `names` attribute on the
+  matrix's `dimnames[[1]]`. `.map_keycol_names()` returns a NAMED character
+  vector for an aliased key, and unlike `names<-`, `rownames<-`/`dimnames<-`
+  keeps that inner attribute — which broke equality against a plain-rownames
+  matrix (e.g. a reduced-dimension round-trip). Regression from the 0.99.7
+  query-order label fix.
+
 # DuckDBDataFrame 0.99.13
 
 ## Bug fixes

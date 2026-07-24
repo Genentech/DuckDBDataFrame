@@ -144,3 +144,25 @@ test_that("getListElement works for DuckDBEmbeddings", {
 
     expect_equal(object[[1]], expected[1, , drop = FALSE], tolerance = 1e-10)
 })
+
+test_that("as.matrix strips aliased-keycol names from matrix dimnames", {
+    # An aliased keycol (db codes -> display-name aliases) makes
+    # .map_keycol_names() return a NAMED character vector; rownames<- keeps that
+    # inner names attribute (unlike names<-), which used to leave stray names on
+    # the matrix's dimnames[[1]] and break equality with a plain-rownames matrix.
+    tf <- tempfile(fileext = ".parquet")
+    on.exit(unlink(tf), add = TRUE)
+    n <- 5L
+    mat <- matrix(rnorm(n * 4), n, 4)
+    df <- data.frame(code = seq_len(n), pca = I(asplit(mat, 1L)))
+    arrow::write_parquet(df, tf)
+
+    kc <- list(code = setNames(seq_len(n), sprintf("cell%02d", seq_len(n))))
+    emb <- DuckDBDataFrame(tf, keycol = kc)[["pca"]]
+    expect_false(is.null(names(emb@table@keycols[[1L]])))   # keycol is aliased
+
+    m <- as.matrix(emb)
+    expect_identical(rownames(m), sprintf("cell%02d", seq_len(n)))
+    expect_null(names(rownames(m)))          # no stray inner names
+    expect_null(names(dimnames(m)[[1L]]))
+})
