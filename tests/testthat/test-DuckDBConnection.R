@@ -73,3 +73,39 @@ test_that("configureOutOfCore leaves settings at defaults when unset", {
     on.exit(Sys.unsetenv("BIOCDUCKDB_THREADS"), add = TRUE)
     expect_s4_class(acquireDuckDBConn(), "duckdb_connection")
 })
+
+test_that(".slurmCpus / .defaultThreads read the SLURM CPU allocation", {
+    Sys.unsetenv("SLURM_CPUS_PER_TASK")
+    Sys.unsetenv("SLURM_CPUS_ON_NODE")
+    on.exit({
+        Sys.unsetenv("SLURM_CPUS_PER_TASK")
+        Sys.unsetenv("SLURM_CPUS_ON_NODE")
+    }, add = TRUE)
+
+    expect_null(DuckDBDataFrame:::.slurmCpus())
+    Sys.setenv(SLURM_CPUS_ON_NODE = "4")
+    expect_identical(DuckDBDataFrame:::.slurmCpus(), 4L)
+    Sys.setenv(SLURM_CPUS_PER_TASK = "6")            # per-task takes precedence
+    expect_identical(DuckDBDataFrame:::.slurmCpus(), 6L)
+
+    # A SLURM floor of 1 makes the detected default deterministically 1 --
+    # min() with any cgroup CFS quota (>= 1) or with nothing detected.
+    Sys.setenv(SLURM_CPUS_PER_TASK = "1")
+    expect_identical(DuckDBDataFrame:::.defaultThreads(), 1L)
+})
+
+test_that("configureOutOfCore defaults threads to the SLURM allocation when unset", {
+    releaseDuckDBConn()
+    old <- options(DuckDBDataFrame.threads = NULL)
+    Sys.setenv(SLURM_CPUS_PER_TASK = "1")
+    on.exit({
+        options(old)
+        Sys.unsetenv("SLURM_CPUS_PER_TASK")
+        releaseDuckDBConn()
+    }, add = TRUE)
+
+    con <- acquireDuckDBConn()
+    thr <- as.integer(
+        DBI::dbGetQuery(con, "SELECT current_setting('threads') AS v")$v)
+    expect_identical(thr, 1L)
+})

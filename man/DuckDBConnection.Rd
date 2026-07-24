@@ -92,6 +92,14 @@ of *physical* RAM, which ignores a SLURM / cgroup cap and can over-commit
 (near-OOM on the first large scan); the detected default keeps a big
 aggregation spilling within the job's allocation. When nothing can be detected
 (e.g. macOS) DuckDB's default is left in place.
+
+\code{threads} is likewise defaulted when unset: the most-restrictive detected
+CPU allocation -- a SLURM allocation (\code{SLURM_CPUS_PER_TASK}, or
+\code{SLURM_CPUS_ON_NODE}) then the cgroup CFS quota (v2 \code{cpu.max}, v1
+\code{cpu.cfs_quota_us}/\code{cpu.cfs_period_us}). DuckDB otherwise defaults to
+hardware concurrency, which ignores a SLURM/cgroup cpuset and over-subscribes
+on a shared node (each extra thread also carries working memory against the
+memory cap). When no allocation is detected, DuckDB's default is left in place.
 }
 \examples{
 releaseDuckDBConn()

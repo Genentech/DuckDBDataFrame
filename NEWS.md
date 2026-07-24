@@ -1,3 +1,18 @@
+# DuckDBDataFrame 0.99.12
+
+## Bug fixes
+
+- `configureOutOfCore()` now also defaults DuckDB `threads` to the job's CPU
+  allocation when neither `DuckDBDataFrame.threads` nor `BIOCDUCKDB_THREADS` is
+  set: the most-restrictive of a SLURM allocation (`SLURM_CPUS_PER_TASK`, or
+  `SLURM_CPUS_ON_NODE`) and the cgroup CFS quota (v2 `cpu.max`, v1
+  `cpu.cfs_quota_us`/`cpu.cfs_period_us`). DuckDB otherwise defaults threads to
+  hardware concurrency, which ignores a SLURM/cgroup cpuset and over-subscribes
+  on a shared node — and each extra thread's working memory pushes against the
+  same cgroup the `memory_limit` default (0.99.10) targets. When no allocation
+  is detected, DuckDB's default is left in place. New internal helpers
+  `.slurmCpus()` / `.cgroupCpus()` / `.defaultThreads()`.
+
 # DuckDBDataFrame 0.99.11
 
 ## Bug fixes

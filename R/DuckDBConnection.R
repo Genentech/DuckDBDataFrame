@@ -78,6 +78,14 @@ reg.finalizer(.duckdb, function(env) {
 #' aggregation spilling within the job's allocation. When nothing can be detected
 #' (e.g. macOS) DuckDB's default is left in place.
 #'
+#' \code{threads} is likewise defaulted when unset: the most-restrictive detected
+#' CPU allocation -- a SLURM allocation (\code{SLURM_CPUS_PER_TASK}, or
+#' \code{SLURM_CPUS_ON_NODE}) then the cgroup CFS quota (v2 \code{cpu.max}, v1
+#' \code{cpu.cfs_quota_us}/\code{cpu.cfs_period_us}). DuckDB otherwise defaults to
+#' hardware concurrency, which ignores a SLURM/cgroup cpuset and over-subscribes
+#' on a shared node (each extra thread also carries working memory against the
+#' memory cap). When no allocation is detected, DuckDB's default is left in place.
+#'
 #' @examples
 #' releaseDuckDBConn()
 #' conn <- acquireDuckDBConn()
@@ -279,6 +287,67 @@ setExtensionDirectory <- function(conn) {
     sprintf("%.0fB", floor(min(caps) * 0.8))
 }
 
+# CPU count from an explicit SLURM allocation (per-task, else per-node). NULL
+# when unset.
+.slurmCpus <- function() {
+    n <- suppressWarnings(as.integer(Sys.getenv("SLURM_CPUS_PER_TASK", "")))
+    if (!is.na(n) && n > 0) {
+        return(n)
+    }
+    n <- suppressWarnings(as.integer(Sys.getenv("SLURM_CPUS_ON_NODE", "")))
+    if (!is.na(n) && n > 0) {
+        return(n)
+    }
+    NULL
+}
+
+# CPU count from the cgroup CFS quota (v2 `cpu.max`, then v1
+# `cpu.cfs_quota_us`/`cpu.cfs_period_us`) = floor(quota / period). NULL when
+# unconstrained ("max", quota <= 0, or the files are absent).
+.cgroupCpus <- function() {
+    quota_cpus <- function(q, p) {
+        if (is.na(q) || is.na(p) || q <= 0 || p <= 0) {
+            return(NULL)
+        }
+        max(1L, as.integer(floor(q / p)))
+    }
+    v2 <- "/sys/fs/cgroup/cpu.max"
+    if (file.exists(v2)) {
+        val <- tryCatch(strsplit(trimws(readLines(v2, n = 1L, warn = FALSE)),
+                                 "[[:space:]]+")[[1L]],
+                        error = function(e) character())
+        if (length(val) >= 2L && val[1L] != "max") {
+            n <- quota_cpus(suppressWarnings(as.numeric(val[1L])),
+                            suppressWarnings(as.numeric(val[2L])))
+            if (!is.null(n)) {
+                return(n)
+            }
+        }
+    }
+    qf <- "/sys/fs/cgroup/cpu/cpu.cfs_quota_us"
+    pf <- "/sys/fs/cgroup/cpu/cpu.cfs_period_us"
+    if (file.exists(qf) && file.exists(pf)) {
+        n <- quota_cpus(
+            suppressWarnings(as.numeric(readLines(qf, n = 1L, warn = FALSE))),
+            suppressWarnings(as.numeric(readLines(pf, n = 1L, warn = FALSE))))
+        if (!is.null(n)) {
+            return(n)
+        }
+    }
+    NULL
+}
+
+# Default DuckDB `threads` when the user has not configured one: the most-
+# restrictive detected CPU allocation (SLURM, then cgroup CFS quota).
+.defaultThreads <- function() {
+    caps <- c(.slurmCpus(), .cgroupCpus())
+    caps <- caps[!is.na(caps) & caps > 0]
+    if (!length(caps)) {
+        return(NULL)
+    }
+    max(1L, min(caps))
+}
+
 #' @export
 #' @importFrom DBI dbExecute
 #' @rdname DuckDBConnection
@@ -299,9 +368,15 @@ configureOutOfCore <- function(conn) {
     try(dbExecute(conn, sprintf("SET temp_directory = '%s';",
                                 gsub("'", "''", td))), silent = TRUE)
     th <- .outOfCoreSetting("DuckDBDataFrame.threads", "BIOCDUCKDB_THREADS")
+    if (is.null(th)) {
+        dt <- .defaultThreads()
+        if (!is.null(dt)) {
+            th <- as.character(dt)
+        }
+    }
     if (!is.null(th)) {
         th_int <- suppressWarnings(as.integer(th))
-        if (!is.na(th_int)) {
+        if (!is.na(th_int) && th_int > 0L) {
             try(dbExecute(conn, sprintf("SET threads = %d;", th_int)), silent = TRUE)
         }
     }
