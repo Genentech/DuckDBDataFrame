@@ -662,12 +662,15 @@ function(x, BACKEND = getAutoRealizationBackend()) {
 #' @export
 #' @importFrom S4Vectors nnode
 setMethod("show", "DuckDBSelfHits", function(object) {
-    cat("DuckDBSelfHits object with ", length(object), " hit",
-        if (length(object) != 1L) "s" else "", " and ",
-        nnode(object), " node", if (nnode(object) != 1L) "s" else "", ":\n",
+    # nh/nn may be bit64 integer64 for a graph with > 2^31 hits/nodes
+    nh <- length(object)
+    nn <- nnode(object)
+    cat("DuckDBSelfHits object with ", format(nh), " hit",
+        if (nh != 1L) "s" else "", " and ",
+        format(nn), " node", if (nn != 1L) "s" else "", ":\n",
         sep = "")
 
-    if (length(object) > 0L) {
+    if (nh > 0L) {
         # Display edge list with mcols
         m <- .makePrettyCharacterMatrixForDisplay(as(object, "DuckDBDataFrame"))
 

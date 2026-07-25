@@ -1,3 +1,15 @@
+# DuckDBDataFrame 0.99.15
+
+## Bug fixes
+
+- `show(<DuckDBSelfHits>)` now `format()`s the hit and node counts before printing
+  them, so a graph with more than 2^31 hits (or nodes) reports the true count
+  instead of a denormalized double. `nrow()` returns a bit64 `integer64` once the
+  count exceeds `.Machine$integer.max`, and `cat()` prints an `integer64`'s
+  underlying bit pattern (e.g. `1.377174e-314`) rather than its value; a k=100
+  neighbor graph over ~28M cells (~2.78e9 edges) tripped this, while a sub-2^31
+  graph printed correctly. Display-only: the edge data was always correct.
+
 # DuckDBDataFrame 0.99.14
 
 ## Bug fixes
