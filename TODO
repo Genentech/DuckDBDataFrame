@@ -1,0 +1,30 @@
+o writeParquet() for lazy DuckDBTable objects drops row-group sizing.
+  writeDuckDBTableParquet() calls buildParquetCopySQL() without a row_group_size
+  (R/parquet-io.R, in the writeDuckDBTableParquet body), so lazy-written
+  resources fall to DuckDB's 122880 default while every other path targets
+  491520 (240 x the 2048 STANDARD_VECTOR_SIZE, benchmarked in DuckDBArray). This
+  affects the wide colData table and lazy graph edge lists.
+  buildParquetCopySQL() already accepts a row_group_size option; just thread it
+  through the caller with a matching default. Faithful (repacks row groups
+  only): no descriptor or reader change; regenerate byte-exact goldens if any
+  exist for a lazy resource.
+
+o Targeted bloom filters on equality-key columns. buildParquetCopySQL()'s option
+  list (FORMAT / COMPRESSION / COMPRESSION_LEVEL / ROW_GROUP_SIZE / PARTITION_BY
+  / APPEND in R/parquet-io.R) has no WRITE_BLOOM_FILTER; coverage is currently
+  path-dependent: DuckDB COPY paths write blooms on ALL columns (footer bloat),
+  while the arrow paths (write_parquet / write_dataset) write NONE. Add a
+  bloom_columns argument defaulting to the integer key spine (indexcol,
+  __sample__, __feature__, from, to) that emits WRITE_BLOOM_FILTER on the COPY
+  paths and the equivalent arrow option, for uniform, targeted coverage instead
+  of all-or-nothing. Faithful (footer metadata only). Bounded value: blooms help
+  rare-value equality lookups substantially but do nothing for common values, so
+  this is hygiene/consistency, not a headline win.
+
+o Export a documented low-level space-filling-curve ordering API (Morton N-D /
+  Hilbert 2-D / lexicographic; currently zorder() / hilbert() / the internal
+  .clusterOrderSQL) and .columnExtents(), so that DuckDBArray's COO writer (see
+  DuckDBArray/TODO) and any downstream serving-layer builder reuse ONE curve
+  implementation rather than re-deriving it. The codebase already treats "single
+  Morton implementation" as a tenet (DuckDBSpatial R/points-coord-index.R); this
+  promotes it to a stable API.
