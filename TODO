@@ -1,11 +1,13 @@
-o Targeted bloom filters on equality-key columns. buildParquetCopySQL()'s option
-  list (FORMAT / COMPRESSION / COMPRESSION_LEVEL / ROW_GROUP_SIZE / PARTITION_BY
-  / APPEND in R/parquet-io.R) has no WRITE_BLOOM_FILTER; coverage is currently
-  path-dependent: DuckDB COPY paths write blooms on ALL columns (footer bloat),
-  while the arrow paths (write_parquet / write_dataset) write NONE. Add a
-  bloom_columns argument defaulting to the integer key spine (indexcol,
-  __sample__, __feature__, from, to) that emits WRITE_BLOOM_FILTER on the COPY
-  paths and the equivalent arrow option, for uniform, targeted coverage instead
-  of all-or-nothing. Faithful (footer metadata only). Bounded value: blooms help
-  rare-value equality lookups substantially but do nothing for common values, so
-  this is hygiene/consistency, not a headline win.
+o Bloom filters on equality-key columns: LARGELY A NON-ISSUE (verified).
+  DuckDB's COPY TO writes bloom filters BY DEFAULT and selectively per DuckDB's
+  own cardinality heuristic (e.g. a low-cardinality integer key gets one, a
+  unique or float column does not), and WRITE_BLOOM_FILTER is boolean-only (no
+  per-column list), so there is nothing to add or "target" on the DuckDB write
+  path. The one real gap is the arrow write paths (write_dataset for flat
+  colData in BiocDuckDB::writeParquet, write_parquet for the empty / non-DuckDB
+  coord block in DuckDBArray): R arrow (25.0.0) exposes no bloom-filter option
+  at all, so those files carry no blooms. Options if this ever matters: route
+  those writes through a DuckDB COPY (larger change; risks byte-parity with
+  existing goldens), or accept it (blooms only help RARE-value equality lookups
+  and do nothing for common values, so the practical cost is small). Revisit if
+  R arrow gains bloom support.
