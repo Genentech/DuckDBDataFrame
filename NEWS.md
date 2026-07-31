@@ -1,3 +1,17 @@
+# DuckDBDataFrame 0.99.17
+
+## New features
+
+- Exported `clusterOrderSQL()` and `columnExtents()`, the SQL-side primitives
+  behind the `cluster_by` write path. `clusterOrderSQL(conn, subquery_sql,
+  cluster_by, available)` lowers a `zorder()` / `hilbert()` / character spec into
+  `ORDER BY` expressions for `buildParquetCopySQL(order_cols=)`; `columnExtents()`
+  returns per-column finite `[min, max]` over a subquery. These let another
+  package (e.g. `DuckDBArray`'s coord-array writer, and a future serving-layout
+  builder) cluster a `COPY TO` without re-deriving the Morton / Hilbert generator,
+  keeping a single curve implementation across the suite. No behavior change to
+  existing exports; this only surfaces internals as a documented API.
+
 # DuckDBDataFrame 0.99.16
 
 ## Bug fixes

@@ -9,11 +9,3 @@ o Targeted bloom filters on equality-key columns. buildParquetCopySQL()'s option
   of all-or-nothing. Faithful (footer metadata only). Bounded value: blooms help
   rare-value equality lookups substantially but do nothing for common values, so
   this is hygiene/consistency, not a headline win.
-
-o Export a documented low-level space-filling-curve ordering API (Morton N-D /
-  Hilbert 2-D / lexicographic; currently zorder() / hilbert() / the internal
-  .clusterOrderSQL) and .columnExtents(), so that DuckDBArray's COO writer (see
-  DuckDBArray/TODO) and any downstream serving-layer builder reuse ONE curve
-  implementation rather than re-deriving it. The codebase already treats "single
-  Morton implementation" as a tenet (DuckDBSpatial R/points-coord-index.R); this
-  promotes it to a stable API.

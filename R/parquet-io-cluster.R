@@ -70,6 +70,11 @@
 #'   \item{\code{clusterSort}}{\code{df} reordered by the clustering key (same
 #'     class, same columns); a no-op when \code{cluster_by} is \code{NULL},
 #'     \code{df} is empty, or a key column is absent.}
+#'   \item{\code{clusterOrderSQL}}{Character vector of \code{ORDER BY}
+#'     expressions for \code{buildParquetCopySQL(order_cols=)}, or \code{NULL}
+#'     when \code{cluster_by} is \code{NULL}.}
+#'   \item{\code{columnExtents}}{List (one element per column) of numeric
+#'     \code{c(min, max)} finite extents.}
 #' }
 #'
 #' @examples
@@ -245,6 +250,38 @@ hilbert <- function(cols, bits = 16L, by = NULL) .clusterSpec("hilbert", cols, b
 #' @export
 clusterSort <- function(df, cluster_by) {
     .clusterSortHost(df, .asClusterSpec(cluster_by))
+}
+
+#' @rdname parquet-io-cluster
+#' @export
+#' @param conn A DuckDB \code{DBIConnection} (\code{clusterOrderSQL},
+#'   \code{columnExtents}).
+#' @param subquery_sql A SQL \code{SELECT} string whose output rows are to be
+#'   ordered (\code{clusterOrderSQL}) or measured (\code{columnExtents}).
+#' @param available Optional character vector of the subquery's output column
+#'   names, used to validate that the \code{cluster_by} columns exist
+#'   (\code{clusterOrderSQL}).
+#' @details
+#' \code{clusterOrderSQL()} is the SQL-side counterpart of \code{clusterSort()}:
+#' it lowers a \code{cluster_by} spec (from \code{zorder()} / \code{hilbert()} or
+#' a plain character vector) plus an inner \code{subquery_sql} into a character
+#' vector of \code{ORDER BY} expressions suitable for
+#' \code{\link{buildParquetCopySQL}}'s \code{order_cols}. It is the primitive a
+#' lazy or coordinate-array writer (e.g. \pkg{DuckDBArray}) calls to cluster a
+#' \code{COPY TO} without re-deriving the Morton/Hilbert generator, so the whole
+#' suite keeps one curve implementation. Returns \code{NULL} for a \code{NULL}
+#' spec. \code{columnExtents()} returns each column's finite \code{[min, max]}
+#' over the subquery (one cheap scalar pass), useful for building bounding-box
+#' windows or grid resolutions downstream.
+clusterOrderSQL <- function(conn, subquery_sql, cluster_by, available = NULL) {
+    .clusterOrderSQL(conn, subquery_sql, .asClusterSpec(cluster_by),
+                     available = available)
+}
+
+#' @rdname parquet-io-cluster
+#' @export
+columnExtents <- function(conn, subquery_sql, cols) {
+    .columnExtents(conn, subquery_sql, cols)
 }
 
 # Host-side row reorder by a cluster spec, for the materializing (data.frame /
