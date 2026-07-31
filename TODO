@@ -1,14 +1,3 @@
-o writeParquet() for lazy DuckDBTable objects drops row-group sizing.
-  writeDuckDBTableParquet() calls buildParquetCopySQL() without a row_group_size
-  (R/parquet-io.R, in the writeDuckDBTableParquet body), so lazy-written
-  resources fall to DuckDB's 122880 default while every other path targets
-  491520 (240 x the 2048 STANDARD_VECTOR_SIZE, benchmarked in DuckDBArray). This
-  affects the wide colData table and lazy graph edge lists.
-  buildParquetCopySQL() already accepts a row_group_size option; just thread it
-  through the caller with a matching default. Faithful (repacks row groups
-  only): no descriptor or reader change; regenerate byte-exact goldens if any
-  exist for a lazy resource.
-
 o Targeted bloom filters on equality-key columns. buildParquetCopySQL()'s option
   list (FORMAT / COMPRESSION / COMPRESSION_LEVEL / ROW_GROUP_SIZE / PARTITION_BY
   / APPEND in R/parquet-io.R) has no WRITE_BLOOM_FILTER; coverage is currently

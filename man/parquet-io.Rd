@@ -73,6 +73,7 @@ writeDuckDBTableParquet(
   part_digits = 0L,
   cluster_by = NULL,
   index_max = NULL,
+  row_group_size = 491520L,
   ...
 )
 }
@@ -133,7 +134,13 @@ append.}
 \item{partition_by}{Optional character vector of hive partition column names
 (pre-quoted identifiers) for \code{PARTITION_BY}.}
 
-\item{row_group_size}{Optional integer \code{ROW_GROUP_SIZE} (coord arrays).}
+\item{row_group_size}{Optional integer \code{ROW_GROUP_SIZE}. Used by
+\code{\link{buildParquetCopySQL}} and by
+\code{\link{writeDuckDBTableParquet}}, which defaults it to \code{491520L}
+(240 x the 2048 DuckDB \code{STANDARD_VECTOR_SIZE}) to match the convention
+used by the coord-array
+and flat arrow writers; previously the lazy export fell back to DuckDB's
+122880 default.}
 
 \item{x}{A \linkS4class{DuckDBTable} object
 (\code{\link{writeDuckDBTableParquet}}).}

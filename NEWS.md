@@ -1,3 +1,15 @@
+# DuckDBDataFrame 0.99.16
+
+## Bug fixes
+
+- `writeDuckDBTableParquet()` no longer drops the row-group size. It gains a
+  `row_group_size` argument defaulting to `491520L` (240 x the 2048 DuckDB
+  `STANDARD_VECTOR_SIZE`) and threads it into `buildParquetCopySQL()`; previously
+  the lazy `DuckDBTable` export passed no size and fell back to DuckDB's 122880
+  default while every other writer path (coord arrays, flat arrow) already
+  targeted 491520. This affected the wide colData table and lazy-written graph
+  edge lists. Faithful repack (row-group count only); the data is unchanged.
+
 # DuckDBDataFrame 0.99.15
 
 ## Bug fixes

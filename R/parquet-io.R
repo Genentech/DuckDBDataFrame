@@ -43,7 +43,13 @@
 #'   (pre-quoted identifiers or SQL expressions).
 #' @param partition_by Optional character vector of hive partition column names
 #'   (pre-quoted identifiers) for \code{PARTITION_BY}.
-#' @param row_group_size Optional integer \code{ROW_GROUP_SIZE} (coord arrays).
+#' @param row_group_size Optional integer \code{ROW_GROUP_SIZE}. Used by
+#'   \code{\link{buildParquetCopySQL}} and by
+#'   \code{\link{writeDuckDBTableParquet}}, which defaults it to \code{491520L}
+#'   (240 x the 2048 DuckDB \code{STANDARD_VECTOR_SIZE}) to match the convention
+#'   used by the coord-array
+#'   and flat arrow writers; previously the lazy export fell back to DuckDB's
+#'   122880 default.
 #' @param x A \linkS4class{DuckDBTable} object
 #'   (\code{\link{writeDuckDBTableParquet}}).
 #' @param indexcol Optional index column name for lazy table export.
@@ -520,7 +526,7 @@ function(x, indexcol = NULL, keycol = NULL, dimtbl = NULL, offset = 0L,
 writeDuckDBTableParquet <-
 function(x, path, indexcol = "__index__", keycol = "__name__", dimtbl = NULL,
          append = FALSE, offset = 0L, part = NULL, part_digits = 0L,
-         cluster_by = NULL, index_max = NULL, ...)
+         cluster_by = NULL, index_max = NULL, row_group_size = 491520L, ...)
 {
     if (!inherits(x, "DuckDBTable"))
         stop("'x' must be a DuckDBTable")
@@ -561,7 +567,8 @@ function(x, path, indexcol = "__index__", keycol = "__name__", dimtbl = NULL,
         NULL
     }
     copy_sql <- buildParquetCopySQL(built$sql, prep$pq_path,
-                                    order_cols = order_cols)
+                                    order_cols = order_cols,
+                                    row_group_size = row_group_size)
     DBI::dbExecute(conn, copy_sql)
 
     sample_n <- min(100L, max(1L, n))
