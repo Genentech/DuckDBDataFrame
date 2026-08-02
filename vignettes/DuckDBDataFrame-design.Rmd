@@ -18,7 +18,6 @@ output:
 ---
 
 ```{r setup, include=FALSE}
-library(BiocStyle)
 knitr::opts_chunk$set(collapse = TRUE, comment = "#>",
                       error = FALSE, warning = FALSE, message = FALSE)
 ```
@@ -83,6 +82,28 @@ tbl <- DuckDBTable(path, datacols = colnames(mtcars),
 dim(tbl)
 ```
 
+Only `path` is required; `datacols` and `keycols` are optional. `datacols`
+selects and orders the value columns (default: all columns of the source).
+`keycols` (or the singular `keycol` on `DuckDBDataFrame`) defines the dimension
+index --- the row-name equivalent --- and accepts two forms:
+
+- a **column name** in the source, e.g. `keycol = "model"`, which *promotes* that
+  stored column to be the key; or
+- a **named list of values**, e.g. `keycol = list(model = mtcars_df$model)`, which
+  *supplies* the key from R (useful when the key is not a stored column).
+
+Both yield a table keyed by `model` with the same key names, but they are not
+`all.equal()`: the key is sourced differently (an on-disk column versus a supplied
+vector), so the resulting row order can differ.
+
+```{r construct-keycol}
+d_str  <- DuckDBDataFrame(path, datacols = colnames(mtcars), keycol = "model")
+d_list <- DuckDBDataFrame(path, datacols = colnames(mtcars),
+                          keycol = list(model = mtcars_df$model))
+setequal(rownames(d_str), rownames(d_list))   # same key set
+isTRUE(all.equal(d_str, d_list))               # but not all.equal (row order)
+```
+
 ## The contract
 
 Classes that extend `DuckDBTable` or use it as a backend rely on:
@@ -94,11 +115,28 @@ materialization.
 
 The number of key dimensions determines the shape: 0 → no row names (row numbers
 generated), 1 → a `DuckDBDataFrame`, ≥2 → an array. With no `keycols`, `DuckDBTable`
-uses a compact row-number encoding:
+uses a compact row-number encoding; supplying a 1-D key instead names the rows and
+drops the generated row number:
 
 ```{r rownum}
 tbl0 <- DuckDBTable(path, datacols = colnames(mtcars))
-.has_row_number(tbl0)
+.has_row_number(tbl0)   # unkeyed: rows addressed by generated number
+
+dfk <- DuckDBDataFrame(path, datacols = colnames(mtcars),
+                       keycol = list(model = mtcars_df$model))
+.has_row_number(dfk)    # keyed DataFrame: row names, no row number
+```
+
+A `DuckDBDataFrame` is a `DuckDBTable` constrained to `nkey <= 1` and carrying
+`DataFrame` semantics. Without a key the two hold identical data but differ in
+class and behavior --- `identical()` is `FALSE` (distinct classes) while
+`all.equal()` is `TRUE` (same underlying table):
+
+```{r table-vs-df}
+tbl1 <- DuckDBTable(path, datacols = colnames(mtcars))
+df1  <- DuckDBDataFrame(path, datacols = colnames(mtcars))
+identical(tbl1, df1)
+isTRUE(all.equal(tbl1, df1))
 ```
 
 # From R to SQL
@@ -127,8 +165,16 @@ R libraries. Advanced callers can run arbitrary SQL through `dbconn()` with
 
 # Dimension tables
 
-For partitioned data, dimension tables map index values to partition groups so a
-query can prune to the relevant Parquet partitions:
+Dimension tables help when the data is **physically partitioned** on disk (for
+example Hive-style `region=West/...` directories, or separate Parquet files per
+group). A `dimtbl` maps each key value to the partition attribute(s) it belongs to
+(here, each `state` to a `region`). When a query filters or groups on a partition
+attribute, DuckDB can then read **only the matching partition files** and skip the
+rest --- so the cost scales with the partitions touched rather than the full
+dataset. For a small single-file table like the one below there is nothing to prune
+and hence no speedup; the benefit appears at scale, when the alternative is scanning
+every partition. The dimension table is what carries the key→partition mapping that
+makes that pruning possible:
 
 ```{r dimtbls}
 state_df <- data.frame(
@@ -147,7 +193,25 @@ names(dimtbls(tbl2))
 
 # Extending DuckDBDataFrame
 
-Other suite packages build directly on this foundation:
+The simplest way to build on `DuckDBDataFrame` is to define an S4 class that
+`contains` it. The subclass inherits the lazy backend, SQL translation, and the
+full `DataFrame` API for free, and adds only its own slots or methods:
+
+```{r extend}
+setClass("AnnotatedDuckDBDataFrame",
+         contains = "DuckDBDataFrame",
+         representation(annotation = "character"))
+
+df  <- DuckDBDataFrame(path, datacols = colnames(mtcars),
+                       keycol = list(model = mtcars_df$model))
+adf <- new("AnnotatedDuckDBDataFrame", df, annotation = "mtcars demo")
+
+is(adf, "DuckDBDataFrame")   # inherits the backend
+dim(adf)                     # inherited, still lazy
+adf@annotation               # the added slot
+```
+
+The suite's own packages extend the foundation at the `DuckDBTable` level:
 
 - `r Biocpkg("DuckDBArray")` wraps a `DuckDBTable` with `nkey >= 2` as a
   `DelayedArray` backend (see that package's *Implementing the DuckDBArray backend*

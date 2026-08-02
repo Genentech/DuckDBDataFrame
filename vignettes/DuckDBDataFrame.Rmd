@@ -18,7 +18,6 @@ output:
 ---
 
 ```{r setup, include=FALSE}
-library(BiocStyle)
 knitr::opts_chunk$set(collapse = TRUE, comment = "#>",
                       error = FALSE, warning = FALSE, message = FALSE)
 ```
@@ -37,6 +36,11 @@ operations are recorded as lazy SQL queries: you can subset, add computed column
 and aggregate **without loading the table into memory**. Each column read comes back
 only when you ask for it.
 
+The typical pattern is that an upstream tool (or an earlier pipeline step) writes a
+table --- often larger than memory --- to Parquet, and `DuckDBDataFrame` opens it in
+place: you explore and query it with the familiar `DataFrame` API while DuckDB reads
+only the columns and rows each operation touches.
+
 It is the tabular foundation of the **BiocDuckDB** suite: `r Biocpkg("DuckDBArray")`
 (DuckDB-backed `DelayedArray`) and `r Biocpkg("DuckDBGRanges")` (DuckDB-backed
 `GRanges`) both build on it.
@@ -44,6 +48,26 @@ It is the tabular foundation of the **BiocDuckDB** suite: `r Biocpkg("DuckDBArra
 This vignette is a practical introduction. For the design of the underlying
 `DuckDBTable` and how other packages extend it, see
 *Design and extension of DuckDBDataFrame*.
+
+## Relationship to arrow
+
+If you have used `r CRANpkg("arrow")`, a `DuckDBDataFrame` is lazy over Parquet in
+much the same way as an Arrow `FileSystemDataset`: the data stays on disk and
+operations are deferred. The differences are in the interface and the engine:
+
+- **No explicit `collect()`.** An Arrow dataset requires `collect()` (or
+  `as.data.frame()`) to realize results before most R operations. A
+  `DuckDBDataFrame` presents the full `DataFrame` API directly --- `head()`, `[`,
+  `$`, arithmetic, `mean()`, aggregation all work on the lazy object, and only the
+  values you actually extract (e.g. `as.vector()`, `as.data.frame()`) are pulled
+  into memory. Each operation is pushed down to DuckDB and evaluated on demand.
+- **DuckDB engine, DataFrame API.** Computation runs in DuckDB's SQL engine rather
+  than the Arrow compute kernels, and the object behaves like a Bioconductor
+  `DataFrame` (so it drops into `SingleCellExperiment`, `SummarizedExperiment`,
+  etc.) rather than a dplyr/Arrow pipeline. The tradeoff is a dependency on DuckDB
+  and that results are materialized through it.
+- **Multi-file datasets** are supported: point the constructor at a directory or a
+  glob (e.g. `"data/*.parquet"`) and DuckDB scans the parts as one table.
 
 ## Installation
 
@@ -60,7 +84,7 @@ library(DuckDBDataFrame)
 # Quick start
 
 We write the built-in `mtcars` table to Parquet and open it as a
-`DuckDBDataFrame`. The `keycol` argument names the column that supplies row names.
+`DuckDBDataFrame`.
 
 ```{r quickstart}
 library(arrow)
@@ -72,6 +96,20 @@ df <- DuckDBDataFrame(path, datacols = colnames(mtcars),
                       keycol = list(model = mtcars_df$model))
 df
 ```
+
+Only the `path` is required --- `DuckDBDataFrame(path)` opens every column and uses
+generated row numbers. The other arguments are optional refinements:
+
+- **`datacols`** selects (and orders) which columns to expose; omit it to take all.
+- **`keycol`** designates the *row key* --- the `DuckDBDataFrame` equivalent of a
+  `DataFrame`'s row names. It takes two forms: a **column name** already in the file
+  (`keycol = "model"`), which promotes that column to the key; or a **named list of
+  values** (`keycol = list(model = mtcars_df$model)`), which supplies the key from R
+  --- handy when the key is not stored as a column. Both give a `DataFrame` keyed by
+  `model`; they differ only in where the key comes from (and therefore its row
+  order). With no `keycol`, rows are addressed by generated numbers instead of names.
+  The deeper key-dimension model is covered in *Design and extension of
+  DuckDBDataFrame*.
 
 It looks and behaves like a `DataFrame`, but the values live in the Parquet file:
 
@@ -109,6 +147,13 @@ df$efficiency <- df$mpg / df$hp
 df[1:3, c("mpg", "hp", "efficiency")]
 ```
 
+This changes only the in-memory `DuckDBDataFrame` object: `efficiency` is stored as
+a SQL expression (`mpg / hp`) in the object's query and computed on demand. **The
+Parquet file on disk is not modified** --- the new column exists only for this
+object and any results derived from it. To persist a derived table (including
+computed columns) back to disk, materialize it (`as.data.frame()`) and write it out
+explicitly, e.g. with `arrow::write_parquet()`.
+
 ## Column metadata
 
 `mcols()` works as it does for any `DataFrame`:
@@ -142,7 +187,7 @@ Because the backend is DuckDB, its full SQL function library is available.
 `sql_fun()` lists functions applicable to a column, and `sql_call()` applies one:
 
 ```{r sql}
-sql_call(df$mpg, "round", 1)[1:5]
+sql_call(df$mpg, "round", 0)[1:5]
 ```
 
 For custom work you can reach the shared connection with `dbconn(df)` and run

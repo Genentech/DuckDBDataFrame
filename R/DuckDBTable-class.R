@@ -667,21 +667,6 @@ setReplaceMethod("colnames", "DuckDBTable", function(x, value) {
 ### R-based type detection (for atomic types)
 ###
 
-#' @importFrom bit64 is.integer64
-.get_type <- function(column) {
-    if (is.integer64(column)) {
-        "integer64"
-    } else if (inherits(column, "Date")) {
-        "Date"
-    } else if (inherits(column, "POSIXct")) {
-        "POSIXct"
-    } else if (is.list(column)) {
-        "raw" # one of DuckDB LIST/ARRAY/GEOMETRY/MAP/STRUCT/BLOB
-    } else {
-        DelayedArray::type(column)
-    }
-}
-
 .duckdb_type_to_r <- function(duckdb_type) {
     type <- tolower(duckdb_type)
     if (grepl("^(list<.*>|struct[<(].*[>)]|map<.*,.*>)$", type)) {

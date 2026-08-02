@@ -1,3 +1,28 @@
+# DuckDBDataFrame 0.99.18
+
+## Documentation
+
+- Addressed the Bioconductor review of DuckDBDataFrame:
+  - Added `URL` and `BugReports` fields to DESCRIPTION.
+  - Added a package-level man page (`?DuckDBDataFrame`).
+  - Added runnable, demonstrative examples to `sql_call()` and `sql_fun()`.
+  - Introduction vignette: added a "Relationship to arrow" section; explained
+    construction (a bare path suffices; `datacols`/`keycol` are optional) and the
+    `keycol = "model"` versus `keycol = list(model = ...)` forms; clarified that
+    adding a computed column changes only the in-memory object (a lazy SQL
+    expression) and does not modify the Parquet file; changed the `sql_call()`
+    rounding example to `round(., 0)`.
+  - Design vignette: expanded construction detail; contrasted `DuckDBTable` with a
+    keyless `DuckDBDataFrame` (`identical()` FALSE, `all.equal()` TRUE) and added
+    `.has_row_number()` under key-dimension semantics; clarified how dimension
+    tables enable partition pruning; added a minimal example of extending
+    `DuckDBDataFrame`.
+  - Removed the redundant `library(BiocStyle)` call from both vignettes.
+
+## Internal
+
+- Removed the unused internal helper `.get_type()`.
+
 # DuckDBDataFrame 0.99.17
 
 ## New features

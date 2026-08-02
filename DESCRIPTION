@@ -1,6 +1,6 @@
 Package: DuckDBDataFrame
-Version: 0.99.17
-Date: 2026-07-31
+Version: 0.99.18
+Date: 2026-08-01
 Title: DuckDB-Backed DataFrame and Table Structures
 Description:
     Provides DuckDB-backed implementations of core tabular data structures
@@ -15,6 +15,8 @@ Authors@R:
         person("Genentech, Inc.", role="cph")
     )
 License: MIT + file LICENSE
+URL: https://github.com/Genentech/DuckDBDataFrame
+BugReports: https://github.com/Genentech/DuckDBDataFrame/issues
 Depends:
     R (>= 4.6.0),
     methods,
@@ -61,6 +63,7 @@ Collate:
     'DuckDBColumn-utils.R'
     'DuckDBEmbeddings-class.R'
     'DuckDBDataFrame-class.R'
+    'DuckDBDataFrame-package.R'
     'DuckDBDataFrameList-class.R'
     'DuckDBSelfHits-class.R'
     'DuckDBTransposedDataFrame-class.R'

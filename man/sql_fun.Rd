@@ -47,8 +47,17 @@ The results are grouped by function name with distinct return types collected
 into a list for functions that have multiple overloads.
 }
 \examples{
-sql_fun
+# sql_fun() lists the DuckDB SQL functions applicable to a column
+df <- data.frame(x = c(1.4, 2.6, 3.5), y = c(-1, 2, -3))
+path <- tempfile(fileext = ".parquet")
+arrow::write_parquet(df, path)
+ddf <- DuckDBDataFrame(path, datacols = c("x", "y"))
+
+head(sql_fun(ddf$x))                            # all applicable functions
+head(sql_fun(ddf$x, function_type = "scalar"))  # filter by function type
+
 showMethods("sql_fun")
+unlink(path)
 
 }
 \author{

@@ -49,8 +49,17 @@ Arguments in \code{...} are converted to SQL expressions as follows:
 }
 
 \examples{
-sql_call
+# sql_call() applies any DuckDB SQL function to a column
+df <- data.frame(x = c(1.4, 2.6, 3.5), y = c(-1, 2, -3))
+path <- tempfile(fileext = ".parquet")
+arrow::write_parquet(df, path)
+ddf <- DuckDBDataFrame(path, datacols = c("x", "y"))
+
+sql_call(ddf$x, "round", 0)   # ROUND(x, 0)
+sql_call(ddf$y, "abs")        # ABS(y)
+
 showMethods("sql_call")
+unlink(path)
 
 }
 \author{
