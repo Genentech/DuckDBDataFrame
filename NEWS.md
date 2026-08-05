@@ -1,3 +1,9 @@
+# DuckDBDataFrame 0.99.20
+
+## Documentation
+
+- Replaced em dashes with commas or colons in the vignettes.
+
 # DuckDBDataFrame 0.99.19
 
 ## Follow-up review changes

@@ -31,13 +31,13 @@ wasteful when a workflow only ever reads a few columns or a filtered subset of r
 
 `r Biocpkg("DuckDBDataFrame")` is a `r Biocpkg("S4Vectors")` `DataFrame` backed by
 [DuckDB](https://duckdb.org) over columnar **Parquet**. It behaves like an ordinary
-`DataFrame` --- `$`, `[`, `mcols()`, `cbind()` --- but the data stays **on disk** and
+`DataFrame`, `$`, `[`, `mcols()`, `cbind()`, but the data stays **on disk** and
 operations are recorded as lazy SQL queries: you can subset, add computed columns,
 and aggregate **without loading the table into memory**. Each column read comes back
 only when you ask for it.
 
 The typical pattern is that an upstream tool (or an earlier pipeline step) writes a
-table --- often larger than memory --- to Parquet, and `DuckDBDataFrame` opens it in
+table, often larger than memory, to Parquet, and `DuckDBDataFrame` opens it in
 place: you explore and query it with the familiar `DataFrame` API while DuckDB reads
 only the columns and rows each operation touches.
 
@@ -57,7 +57,7 @@ operations are deferred. The differences are in the interface and the engine:
 
 - **No explicit `collect()`.** An Arrow dataset requires `collect()` (or
   `as.data.frame()`) to realize results before most R operations. A
-  `DuckDBDataFrame` presents the full `DataFrame` API directly --- `head()`, `[`,
+  `DuckDBDataFrame` presents the full `DataFrame` API directly, `head()`, `[`,
   `$`, arithmetic, `mean()`, aggregation all work on the lazy object, and only the
   values you actually extract (e.g. `as.vector()`, `as.data.frame()`) are pulled
   into memory. Each operation is pushed down to DuckDB and evaluated on demand.
@@ -97,15 +97,15 @@ df <- DuckDBDataFrame(path, datacols = colnames(mtcars),
 df
 ```
 
-Only the `path` is required --- `DuckDBDataFrame(path)` opens every column and uses
+Only the `path` is required, `DuckDBDataFrame(path)` opens every column and uses
 generated row numbers. The other arguments are optional refinements:
 
 - **`datacols`** selects (and orders) which columns to expose; omit it to take all.
-- **`keycol`** designates the *row key* --- the `DuckDBDataFrame` equivalent of a
+- **`keycol`** designates the *row key*, the `DuckDBDataFrame` equivalent of a
   `DataFrame`'s row names. It takes two forms: a **column name** already in the file
   (`keycol = "model"`), which promotes that column to the key; or a **named list of
-  values** (`keycol = list(model = mtcars_df$model)`), which supplies the key from R
-  --- handy when the key is not stored as a column. Both give a `DataFrame` keyed by
+  values** (`keycol = list(model = mtcars_df$model)`), which supplies the key from R,
+  handy when the key is not stored as a column. Both give a `DataFrame` keyed by
   `model`; they differ only in where the key comes from (and therefore its row
   order). With no `keycol`, rows are addressed by generated numbers instead of names.
   The deeper key-dimension model is covered in *Design and extension of
@@ -149,7 +149,7 @@ df[1:3, c("mpg", "hp", "efficiency")]
 
 This changes only the in-memory `DuckDBDataFrame` object: `efficiency` is stored as
 a SQL expression (`mpg / hp`) in the object's query and computed on demand. **The
-Parquet file on disk is not modified** --- the new column exists only for this
+Parquet file on disk is not modified**, the new column exists only for this
 object and any results derived from it. To persist a derived table (including
 computed columns) back to disk, materialize it (`as.data.frame()`) and write it out
 explicitly, e.g. with `arrow::write_parquet()`.
@@ -168,7 +168,7 @@ mcols(df)[1:3, , drop = FALSE]
 
 Depending on the underlying Parquet type, extracting a column yields:
 
-- a **`DuckDBColumn`** for atomic columns --- vector-like and lazy
+- a **`DuckDBColumn`** for atomic columns, vector-like and lazy
   (`length()`, `[`, arithmetic, `mean()`), materialized with `as.vector()`;
 - a **`DuckDBAtomicList`** for DuckDB `LIST[]` columns (variable-length list
   columns), supporting `elementNROWS()`, `[[`, `unlist()`;

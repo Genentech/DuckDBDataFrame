@@ -53,14 +53,14 @@ what `r Biocpkg("DuckDBArray")` wraps for arrays.
 
 A `DuckDBTable` records a *query*, not data. Its slots are:
 
-- **`conn`** --- a `tbl_duckdb_connection` (dplyr/dbplyr) over a DuckDB relation:
+- **`conn`**: a `tbl_duckdb_connection` (dplyr/dbplyr) over a DuckDB relation:
   Parquet/CSV files or an in-memory table.
-- **`datacols`** --- a named `expression`; each element is a column reference
+- **`datacols`**: a named `expression`; each element is a column reference
   (`as.name("mpg")`) or a computation (`call("/", as.name("mpg"), as.name("hp"))`)
   that translates to SQL.
-- **`keycols`** --- a named `list` of dimension index vectors: length 0 (row numbers
+- **`keycols`**: a named `list` of dimension index vectors: length 0 (row numbers
   generated internally), 1 (row names, a `DuckDBDataFrame`), or ≥2 (array indices).
-- **`dimtbls`** --- an optional locked environment of dimension lookup tables for
+- **`dimtbls`**: an optional locked environment of dimension lookup tables for
   partition pruning.
 
 Operations build up `datacols`/`keycols` and the `conn` query lazily; materialization
@@ -87,7 +87,7 @@ dim(tbl)
 Only `path` is required; `datacols` and `keycols` are optional. `datacols`
 selects and orders the value columns (default: all columns of the source).
 `keycols` (or the singular `keycol` on `DuckDBDataFrame`) defines the dimension
-index --- the row-name equivalent --- and accepts two forms:
+index, the row-name equivalent, and accepts two forms:
 
 - a **column name** in the source, e.g. `keycol = "model"`, which *promotes* that
   stored column to be the key; or
@@ -131,7 +131,7 @@ has_row_number(dfk)    # keyed DataFrame: row names, no row number
 
 A `DuckDBDataFrame` is a `DuckDBTable` constrained to `nkey <= 1` and carrying
 `DataFrame` semantics. Without a key the two hold identical data but differ in
-class and behavior --- `identical()` is `FALSE` (distinct classes) while
+class and behavior, `identical()` is `FALSE` (distinct classes) while
 `all.equal()` is `TRUE` (same underlying table):
 
 ```{r table-vs-df}
@@ -172,7 +172,7 @@ example Hive-style `region=West/...` directories, or separate Parquet files per
 group). A `dimtbl` maps each key value to the partition attribute(s) it belongs to
 (here, each `state` to a `region`). When a query filters or groups on a partition
 attribute, DuckDB can then read **only the matching partition files** and skip the
-rest --- so the cost scales with the partitions touched rather than the full
+rest, so the cost scales with the partitions touched rather than the full
 dataset. For a small single-file table like the one below there is nothing to prune
 and hence no speedup; the benefit appears at scale, when the alternative is scanning
 every partition. The dimension table is what carries the key→partition mapping that
