@@ -4,8 +4,8 @@
 \alias{DuckDBColumn-class}
 \alias{dbconn,DuckDBColumn-method}
 \alias{tblconn,DuckDBColumn-method}
-\alias{.keycols,DuckDBColumn-method}
-\alias{.has_row_number,DuckDBColumn-method}
+\alias{keycols,DuckDBColumn-method}
+\alias{has_row_number,DuckDBColumn-method}
 \alias{dimtbls,DuckDBColumn-method}
 \alias{dimtbls<-,DuckDBColumn-method}
 \alias{length,DuckDBColumn-method}

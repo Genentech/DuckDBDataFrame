@@ -204,8 +204,8 @@
 #'
 #' @aliases dbconn,DuckDBSelfHits-method
 #' @aliases tblconn,DuckDBSelfHits-method
-#' @aliases .keycols,DuckDBSelfHits-method
-#' @aliases .has_row_number,DuckDBSelfHits-method
+#' @aliases keycols,DuckDBSelfHits-method
+#' @aliases has_row_number,DuckDBSelfHits-method
 #' @aliases dimtbls,DuckDBSelfHits-method
 #' @aliases dimtbls<-,DuckDBSelfHits-method
 #' @aliases length,DuckDBSelfHits-method
@@ -285,13 +285,13 @@ setMethod("tblconn", "DuckDBSelfHits", function(x, select = TRUE, filter = TRUE)
 })
 
 #' @export
-setMethod(".keycols", "DuckDBSelfHits", function(x) {
+setMethod("keycols", "DuckDBSelfHits", function(x) {
     frame <- as(x, "DuckDBDataFrame")
     callGeneric(frame)
 })
 
 #' @export
-setMethod(".has_row_number", "DuckDBSelfHits", function(x) callGeneric(x@frame))
+setMethod("has_row_number", "DuckDBSelfHits", function(x) callGeneric(x@frame))
 
 setGeneric(".has_implicit_nodes", function(x) {
     standardGeneric(".has_implicit_nodes")
@@ -672,7 +672,7 @@ setMethod("show", "DuckDBSelfHits", function(object) {
 
     if (nh > 0L) {
         # Display edge list with mcols
-        m <- .makePrettyCharacterMatrixForDisplay(as(object, "DuckDBDataFrame"))
+        m <- makePrettyCharacterMatrixForDisplay(as(object, "DuckDBDataFrame"))
 
         # Mark from/to columns
         nc <- ncol(m)

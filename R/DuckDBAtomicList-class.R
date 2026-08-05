@@ -159,8 +159,8 @@ setClass("DuckDBFactorList",
 
 # dbconn method inherited from DuckDBColumn
 # tblconn method inherited from DuckDBColumn
-# .keycols method inherited from DuckDBColumn
-# .has_row_number method inherited from DuckDBColumn
+# keycols method inherited from DuckDBColumn
+# has_row_number method inherited from DuckDBColumn
 # dimtbls method inherited from DuckDBColumn
 # dimtbls<- method inherited from DuckDBColumn
 # length method inherited from DuckDBColumn
@@ -281,7 +281,7 @@ setMethod("as.list", "DuckDBAtomicList", function(x, use.names = TRUE) {
     # Columns are ordered: datacol (column 1), then keycol (column 2)
     names <- .map_keycol_names(x@table@keycols[[1L]], df[[2L]])
     result <- setNames(df[[1L]], names)
-    if (!.has_row_number(x@table)) {
+    if (!has_row_number(x@table)) {
         result <- .reindexByStoredKeys(result, rownames(x@table))
     }
 
@@ -314,7 +314,7 @@ setMethod("show", "DuckDBAtomicList", function(object) {
     if (length(object@table@conn) == 0L) {
         return(invisible(NULL))
     }
-    if (.has_row_number(object)) {
+    if (has_row_number(object)) {
         n1 <- 5L
         n2 <- 0L
     } else {

@@ -4,8 +4,8 @@
 \alias{DuckDBSelfHits-class}
 \alias{dbconn,DuckDBSelfHits-method}
 \alias{tblconn,DuckDBSelfHits-method}
-\alias{.keycols,DuckDBSelfHits-method}
-\alias{.has_row_number,DuckDBSelfHits-method}
+\alias{keycols,DuckDBSelfHits-method}
+\alias{has_row_number,DuckDBSelfHits-method}
 \alias{dimtbls,DuckDBSelfHits-method}
 \alias{dimtbls<-,DuckDBSelfHits-method}
 \alias{length,DuckDBSelfHits-method}

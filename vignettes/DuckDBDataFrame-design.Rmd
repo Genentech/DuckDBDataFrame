@@ -65,8 +65,10 @@ A `DuckDBTable` records a *query*, not data. Its slots are:
 
 Operations build up `datacols`/`keycols` and the `conn` query lazily; materialization
 (`as.data.frame()`, `as.vector()`) is deferred until values are needed. This is what
-lets a `DuckDBTable` describe data larger than memory and push filters and arithmetic
-into DuckDB's columnar engine (predicate pushdown, direct Parquet scans).
+lets a `DuckDBTable` describe data larger than memory: filters and arithmetic are
+pushed down into DuckDB's columnar engine, so a row filter (a *predicate*, such as
+`mpg > 25`) is applied while scanning the Parquet file and only the matching rows and
+requested columns are read, rather than loading the whole table first.
 
 ## Construction
 
@@ -120,11 +122,11 @@ drops the generated row number:
 
 ```{r rownum}
 tbl0 <- DuckDBTable(path, datacols = colnames(mtcars))
-.has_row_number(tbl0)   # unkeyed: rows addressed by generated number
+has_row_number(tbl0)   # unkeyed: rows addressed by generated number
 
 dfk <- DuckDBDataFrame(path, datacols = colnames(mtcars),
                        keycol = list(model = mtcars_df$model))
-.has_row_number(dfk)    # keyed DataFrame: row names, no row number
+has_row_number(dfk)    # keyed DataFrame: row names, no row number
 ```
 
 A `DuckDBDataFrame` is a `DuckDBTable` constrained to `nkey <= 1` and carrying

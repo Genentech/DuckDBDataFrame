@@ -141,13 +141,10 @@
 #'
 #' @aliases DuckDBTable-class
 #'
-#' @aliases .set_row_number
 #' @aliases dbconn,DuckDBTable-method
 #' @aliases tblconn,DuckDBTable-method
-#' @aliases .keycols
-#' @aliases .keycols,DuckDBTable-method
-#' @aliases .has_row_number
-#' @aliases .has_row_number,DuckDBTable-method
+#' @aliases keycols,DuckDBTable-method
+#' @aliases has_row_number,DuckDBTable-method
 #' @aliases nrow,DuckDBTable-method
 #' @aliases ncol,DuckDBTable-method
 #' @aliases rownames,DuckDBTable-method
@@ -201,10 +198,11 @@ setOldClass("tbl_duckdb_connection")
 
 replaceSlots <- BiocGenerics:::replaceSlots
 
+#' @rdname DuckDBDataFrame-internals
 #' @export
 #' @importFrom bit64 NA_integer64_
 #' @importFrom dplyr n pull summarize
-.set_row_number <- function(conn) {
+set_row_number <- function(conn) {
     c(NA_integer64_, - pull(summarize(conn, n = n())))
 }
 
@@ -523,7 +521,7 @@ setMethod("tblconn", "DuckDBTable", function(x, select = TRUE, filter = TRUE) {
     conn <- x@conn
 
     if (length(conn) > 0L) {
-        if (filter && !.has_row_number(x) && !.is_aggregated(conn)) {
+        if (filter && !has_row_number(x) && !.is_aggregated(conn)) {
             conn <- .filter_tblconn(conn, keycols = x@keycols, dimtbls = dimtbls(x))
         }
 
@@ -548,18 +546,20 @@ setMethod("tblconn", "DuckDBTable", function(x, select = TRUE, filter = TRUE) {
         length(lazy_query[["group_by"]]) > 0L
 }
 
+#' @rdname DuckDBDataFrame-internals
 #' @export
-setGeneric(".keycols", function(x) standardGeneric(".keycols"))
+setGeneric("keycols", function(x) standardGeneric("keycols"))
 
 #' @export
-setMethod(".keycols", "DuckDBTable", function(x) x@keycols)
+setMethod("keycols", "DuckDBTable", function(x) x@keycols)
 
+#' @rdname DuckDBDataFrame-internals
 #' @export
-setGeneric(".has_row_number", function(x) standardGeneric(".has_row_number"))
+setGeneric("has_row_number", function(x) standardGeneric("has_row_number"))
 
 #' @export
 #' @importFrom bit64 as.integer64 is.integer64
-setMethod(".has_row_number", "DuckDBTable", function(x) {
+setMethod("has_row_number", "DuckDBTable", function(x) {
     if (length(x@keycols) == 1L) {
         key1 <- x@keycols[[1L]]
         is.integer64(key1) && (length(key1) == 2L) && is.na(key1[1L]) && (key1[2L] <= as.integer64(0L))
@@ -570,14 +570,14 @@ setMethod(".has_row_number", "DuckDBTable", function(x) {
 
 #' @export
 setMethod("nkey", "DuckDBTable", function(x) {
-    if (.has_row_number(x)) 0L else length(x@keycols)
+    if (has_row_number(x)) 0L else length(x@keycols)
 })
 
 #' @export
 setMethod("nkeydim", "DuckDBTable", function(x) {
     if (length(x@conn) == 0L) {
         0L
-    } else if (.has_row_number(x)) {
+    } else if (has_row_number(x)) {
         abs(x@keycols[[1L]][2L])
     } else {
         lengths(x@keycols, use.names = FALSE)
@@ -600,13 +600,13 @@ setMethod("ncol", "DuckDBTable", function(x) length(x@datacols))
 
 #' @export
 setMethod("keynames", "DuckDBTable", function(x) {
-    if (.has_row_number(x)) character(0L) else names(x@keycols)
+    if (has_row_number(x)) character(0L) else names(x@keycols)
 })
 
 #' @export
 #' @importFrom dplyr pull select
 setMethod("keydimnames", "DuckDBTable", function(x) {
-    if (.has_row_number(x)) {
+    if (has_row_number(x)) {
         list(as.character(pull(select(x@conn, !!as.name(names(x@keycols))))))
     } else {
         lapply(x@keycols, function(y) names(y) %||% as.character(y))
@@ -1144,7 +1144,7 @@ function(conn, datacols = colnames(conn), keycols = NULL, dimtbls = NULL, type =
         keycols <- tail(make.unique(c(colnames(conn), "row_number"), sep = "_"), 1L)
         keycols <- setNames(list(call("row_number")), keycols)
         conn <- mutate(conn, !!!keycols)
-        keycols[[1L]] <- .set_row_number(conn)
+        keycols[[1L]] <- set_row_number(conn)
     } else {
         if (is.character(keycols)) {
             keycols <- unname(cols[keycols])
@@ -1234,11 +1234,11 @@ all.equal.DuckDBTable <- function(target, current, check.datacols = FALSE, ...) 
                 sub <- as.integer(sub)
             }
             if (is.atomic(sub)) {
-                if (.has_row_number(x)) {
+                if (has_row_number(x)) {
                     if (is.numeric(sub)) {
                         keep <- call("%in%", as.name(k), as.integer64(sub))
                         conn <- filter(conn, !!keep)
-                        keycols[[1L]] <- .set_row_number(conn)
+                        keycols[[1L]] <- set_row_number(conn)
                     } else {
                         stop("unsupported 'i' for row subsetting with row_number")
                     }
@@ -1252,11 +1252,11 @@ all.equal.DuckDBTable <- function(target, current, check.datacols = FALSE, ...) 
                        isTRUE(all.equal(as(x, "DuckDBTable"), sub@table))) {
                 keep <- sub@table@datacols[[1L]]
                 conn <- filter(conn, !!keep)
-                if (.has_row_number(x)) {
+                if (has_row_number(x)) {
                     # Recompute row_number after filtering so indices are 1..N
                     # instead of the original row numbers from before filtering
                     conn <- .recompute_row_number(conn, k)
-                    keycols[[1L]] <- .set_row_number(conn)
+                    keycols[[1L]] <- set_row_number(conn)
                 } else {
                     for (kname in names(keycols)) {
                         kdnames <- pull(distinct(select(conn, !!as.name(kname))))
@@ -1306,7 +1306,7 @@ setMethod("extractCOLS", "DuckDBTable", function(x, i) {
 .head_conn <- function(x, n) {
     conn <- head(x@conn, n)
     keycols <- x@keycols
-    keycols[[1L]] <- .set_row_number(conn)
+    keycols[[1L]] <- set_row_number(conn)
     replaceSlots(x, conn = conn, keycols = keycols, check = FALSE)
 }
 
@@ -1316,7 +1316,7 @@ setMethod("head", "DuckDBTable", function(x, n = 6L, ...) {
     if (!isSingleNumber(n)) {
         stop("'n' must be a single number")
     }
-    if (.has_row_number(x)) {
+    if (has_row_number(x)) {
         return(.head_conn(x, n))
     }
     n <- as.integer(n)
@@ -1337,7 +1337,7 @@ setMethod("tail", "DuckDBTable", function(x, n = 6L, ...) {
     if (!isSingleNumber(n)) {
         stop("'n' must be a single number")
     }
-    if ((n > 0L) && .has_row_number(x)) {
+    if ((n > 0L) && has_row_number(x)) {
         stop("tail requires a keycols to be efficient")
     }
     n <- as.integer(n)

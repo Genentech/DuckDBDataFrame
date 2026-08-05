@@ -155,8 +155,8 @@ setClass("DuckDBEmbeddings",
 
 # dbconn method inherited from DuckDBNumericList
 # tblconn method inherited from DuckDBNumericList
-# .keycols method inherited from DuckDBNumericList
-# .has_row_number method inherited from DuckDBNumericList
+# keycols method inherited from DuckDBNumericList
+# has_row_number method inherited from DuckDBNumericList
 # dimtbls method inherited from DuckDBNumericList
 # dimtbls<- method inherited from DuckDBNumericList
 # length method inherited from DuckDBNumericList
@@ -297,7 +297,7 @@ setMethod("as.matrix", "DuckDBEmbeddings", function(x, ...) {
     # NAMED character vector, and unlike names<-, rownames<-/dimnames<- keeps
     # that inner names attribute, leaving stray names on the matrix's
     # dimnames[[1]].
-    if (!.has_row_number(x@table)) {
+    if (!has_row_number(x@table)) {
         rnames <- unname(.map_keycol_names(x@table@keycols[[1L]], df[[ncol(df)]]))
         rownames(mat) <- rnames
     }
@@ -329,7 +329,7 @@ function(x, BACKEND = getAutoRealizationBackend()) {
 ###
 
 .makePrettyMatrixForDisplay_DuckDBEmbeddings <- function(x) {
-    if (.has_row_number(x)) {
+    if (has_row_number(x)) {
         nhead <- 5L
         ntail <- 0L
     } else {

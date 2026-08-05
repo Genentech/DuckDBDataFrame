@@ -21,7 +21,6 @@
 \alias{as.matrix,DuckDBDataFrame-method}
 \alias{coerce,DuckDBDataFrame,DFrame-method}
 \alias{realize,DuckDBDataFrame-method}
-\alias{.makePrettyCharacterMatrixForDisplay}
 \alias{makeNakedCharacterMatrixForDisplay,DuckDBDataFrame-method}
 \alias{show,DuckDBDataFrame-method}
 \title{DuckDBDataFrame objects}

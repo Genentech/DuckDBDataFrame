@@ -194,7 +194,7 @@ setMethod("show", "DuckDBTransposedDataFrame", function(object) {
         x_ncol, " column", ifelse(x_ncol == 1L, "", "s"), "\n", sep = "")
 
     if (x_nrow != 0L && x_ncol != 0L) {
-        m <- t(.makePrettyCharacterMatrixForDisplay(object@data))
+        m <- t(makePrettyCharacterMatrixForDisplay(object@data))
         print(m, quote = FALSE, right = TRUE)
     }
 

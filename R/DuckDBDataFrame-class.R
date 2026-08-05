@@ -217,7 +217,6 @@
 #' @aliases coerce,DuckDBDataFrame,DFrame-method
 #' @aliases realize,DuckDBDataFrame-method
 #'
-#' @aliases .makePrettyCharacterMatrixForDisplay
 #' @aliases makeNakedCharacterMatrixForDisplay,DuckDBDataFrame-method
 #' @aliases show,DuckDBDataFrame-method
 #'
@@ -265,7 +264,7 @@ setMethod("names", "DuckDBDataFrame", function(x) colnames(x))
 
 #' @export
 setReplaceMethod("rownames", "DuckDBDataFrame", function(x, value) {
-    if (.has_row_number(x)) {
+    if (has_row_number(x)) {
         stop("cannot replace row numbers with rownames")
     }
     keydimnames(x) <- list(value)
@@ -578,7 +577,7 @@ function(x, row.names = NULL, optional = FALSE, ...) {
         rownames(df) <- rnames
 
         cols <- seq_along(x@datacols)
-        if (!.has_row_number(x) && .storedKeysBijective(rownames(x), rnames)) {
+        if (!has_row_number(x) && .storedKeysBijective(rownames(x), rnames)) {
             df <- df[rownames(x), cols, drop = FALSE]
         } else {
             df <- df[, cols, drop = FALSE]
@@ -647,10 +646,11 @@ function(x, BACKEND = getAutoRealizationBackend()) {
 ### Display
 ###
 
+#' @rdname DuckDBDataFrame-internals
 #' @export
 #' @importFrom S4Vectors DataFrame get_showHeadLines get_showTailLines makeNakedCharacterMatrixForDisplay
-.makePrettyCharacterMatrixForDisplay <- function(x) {
-    if (.has_row_number(x)) {
+makePrettyCharacterMatrixForDisplay <- function(x) {
+    if (has_row_number(x)) {
         nhead <- get_showHeadLines() + get_showTailLines()
         ntail <- 0L
     } else {
@@ -717,7 +717,7 @@ setMethod("show", "DuckDBDataFrame", function(object) {
         x_ncol, " column", ifelse(x_ncol == 1L, "", "s"), "\n", sep = "")
 
     if (x_nrow != 0L && x_ncol != 0L) {
-        m <- .makePrettyCharacterMatrixForDisplay(object)
+        m <- makePrettyCharacterMatrixForDisplay(object)
         print(m, quote = FALSE, right = TRUE)
     }
 

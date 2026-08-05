@@ -2,13 +2,10 @@
 % Please edit documentation in R/DuckDBTable-class.R
 \name{DuckDBTable-class}
 \alias{DuckDBTable-class}
-\alias{.set_row_number}
 \alias{dbconn,DuckDBTable-method}
 \alias{tblconn,DuckDBTable-method}
-\alias{.keycols}
-\alias{.keycols,DuckDBTable-method}
-\alias{.has_row_number}
-\alias{.has_row_number,DuckDBTable-method}
+\alias{keycols,DuckDBTable-method}
+\alias{has_row_number,DuckDBTable-method}
 \alias{nrow,DuckDBTable-method}
 \alias{ncol,DuckDBTable-method}
 \alias{rownames,DuckDBTable-method}

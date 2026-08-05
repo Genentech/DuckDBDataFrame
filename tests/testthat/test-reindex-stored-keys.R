@@ -62,6 +62,6 @@ test_that("row_number-keyed column coerces without a stored-key reorder scan", {
     on.exit(unlink(tf))
     arrow::write_parquet(data.frame(val = c(5, 6, 7)), tf)
     col <- DuckDBDataFrame(tf)[["val"]]
-    expect_true(DuckDBDataFrame:::.has_row_number(col@table))
+    expect_true(DuckDBDataFrame:::has_row_number(col@table))
     expect_identical(unname(as.vector(col)), c(5, 6, 7))
 })

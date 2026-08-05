@@ -64,8 +64,8 @@
 #'
 #' @aliases dbconn,DuckDBColumn-method
 #' @aliases tblconn,DuckDBColumn-method
-#' @aliases .keycols,DuckDBColumn-method
-#' @aliases .has_row_number,DuckDBColumn-method
+#' @aliases keycols,DuckDBColumn-method
+#' @aliases has_row_number,DuckDBColumn-method
 #' @aliases dimtbls,DuckDBColumn-method
 #' @aliases dimtbls<-,DuckDBColumn-method
 #' @aliases length,DuckDBColumn-method
@@ -125,10 +125,10 @@ setMethod("tblconn", "DuckDBColumn", function(x, select = TRUE, filter = TRUE) {
 })
 
 #' @export
-setMethod(".keycols", "DuckDBColumn", function(x) callGeneric(x@table))
+setMethod("keycols", "DuckDBColumn", function(x) callGeneric(x@table))
 
 #' @export
-setMethod(".has_row_number", "DuckDBColumn", function(x) callGeneric(x@table))
+setMethod("has_row_number", "DuckDBColumn", function(x) callGeneric(x@table))
 
 #' @export
 setMethod("dimtbls", "DuckDBColumn", function(x, drop = TRUE) {
@@ -153,7 +153,7 @@ setMethod("names", "DuckDBColumn", function(x) {
 
 #' @export
 setReplaceMethod("names", "DuckDBColumn", function(x, value) {
-    if (.has_row_number(x)) {
+    if (has_row_number(x)) {
         stop("cannot replace row numbers with rownames")
     }
     keydimnames(x@table) <- list(value)
@@ -211,7 +211,7 @@ setMethod("head", "DuckDBColumn", function(x, n = 6L, ...) {
     if (!isSingleNumber(n)) {
         stop("'n' must be a single number")
     }
-    if (.has_row_number(x)) {
+    if (has_row_number(x)) {
         return(replaceSlots(x, table = .head_conn(x@table, n), check = FALSE))
     }
     n <- as.integer(n)
@@ -232,7 +232,7 @@ setMethod("tail", "DuckDBColumn", function(x, n = 6L, ...) {
     if (!isSingleNumber(n)) {
         stop("'n' must be a single number")
     }
-    if ((n > 0L) && .has_row_number(x)) {
+    if ((n > 0L) && has_row_number(x)) {
         stop("tail requires a keycols to be efficient")
     }
     n <- as.integer(n)
@@ -259,7 +259,7 @@ setMethod("as.vector", "DuckDBColumn", function(x, mode = "any") {
     # Columns are ordered: datacol (column 1), then keycol (column 2)
     names <- .map_keycol_names(x@table@keycols[[1L]], df[[2L]])
     vec <- setNames(df[[1L]], names)
-    if (!.has_row_number(x@table)) {
+    if (!has_row_number(x@table)) {
         vec <- .reindexByStoredKeys(vec, rownames(x@table))
     }
 
@@ -300,7 +300,7 @@ setMethod("show", "DuckDBColumn", function(object) {
     if (length(object@table@conn) == 0L) {
         return(invisible(NULL))
     }
-    if (.has_row_number(object)) {
+    if (has_row_number(object)) {
         n1 <- 5L
         n2 <- 0L
     } else {

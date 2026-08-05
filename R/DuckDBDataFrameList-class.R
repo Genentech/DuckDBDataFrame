@@ -352,7 +352,7 @@ function(x, recursive = TRUE, use.names = TRUE) {
     unlistData <- x@unlistData
     conn <- tblconn(unlistData, select = FALSE, filter = FALSE)
     datacols <- x@partitioning
-    keycols <- .keycols(unlistData)
+    keycols <- keycols(unlistData)
     dimtbls <- dimtbls(unlistData, drop = FALSE)
     table <- new2("DuckDBTable", conn = conn, datacols = datacols, keycols = keycols,
                   dimtbls = dimtbls, check = FALSE)
@@ -399,7 +399,7 @@ setMethod("getListElement", "DuckDBDataFrameList", function(x, i) {
     unlistData <- x@unlistData
     conn <- tblconn(unlistData, select = FALSE, filter = FALSE)
     datacols <- x@partitioning
-    keycols <- .keycols(unlistData)
+    keycols <- keycols(unlistData)
     dimtbls <- dimtbls(unlistData, drop = FALSE)
     table <- new2("DuckDBTable", conn = conn, datacols = datacols, keycols = keycols,
                   dimtbls = dimtbls, check = FALSE)

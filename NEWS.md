@@ -1,3 +1,20 @@
+# DuckDBDataFrame 0.99.19
+
+## Follow-up review changes
+
+- Renamed the exported low-level generics and helpers to drop the leading dot,
+  per the Bioconductor guideline that `.`-prefixed names should not be exported:
+  `.keycols` -> `keycols`, `.has_row_number` -> `has_row_number`,
+  `.set_row_number` -> `set_row_number`, and
+  `.makePrettyCharacterMatrixForDisplay` -> `makePrettyCharacterMatrixForDisplay`.
+  These remain the shared cross-package extension API and are now documented on a
+  dedicated internal man page (`?DuckDBDataFrame-internals`, marked
+  `\keyword{internal}`). Companion packages (DuckDBGRanges, and callers in
+  BiocDuckDB) are updated to the new names.
+- Design vignette: reworded the lazy-evaluation paragraph to integrate and
+  briefly define "predicate" (a row filter such as `mpg > 25`) rather than
+  trailing "predicate pushdown, direct Parquet scans".
+
 # DuckDBDataFrame 0.99.18
 
 ## Documentation

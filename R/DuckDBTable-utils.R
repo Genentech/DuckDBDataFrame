@@ -872,7 +872,7 @@ function (x, incomparables = FALSE, fromLast = FALSE, ...)  {
     keycols <- setNames(list(call("row_number")), keycols)
     conn <- distinct(conn, !!!as.list(datacols))
     conn <- mutate(conn, !!!keycols)
-    keycols[[1L]] <- .set_row_number(conn)
+    keycols[[1L]] <- set_row_number(conn)
     replaceSlots(x, conn = conn, keycols = keycols, check = FALSE)
 })
 
