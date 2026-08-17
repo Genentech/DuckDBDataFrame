@@ -212,6 +212,7 @@ test_that("clusterSort composite key groups by `by=` prefix then clusters within
 
 test_that("writeDuckDBTableParquet clusters rows with cluster_by = zorder()", {
     skip_if_not_installed("arrow")
+    skip_if_not(arrow::codec_is_available("zstd"), "arrow package was not built with zstd support")
     set.seed(1)
     df <- data.frame(x = runif(3000, 0, 100), y = runif(3000, 0, 100),
                      gene = sample(paste0("G", 0:19), 3000, replace = TRUE),
@@ -239,6 +240,7 @@ test_that("writeDuckDBTableParquet clusters rows with cluster_by = zorder()", {
 
 test_that("writeDuckDBTableParquet composite cluster_by = zorder(by=) groups then clusters", {
     skip_if_not_installed("arrow")
+    skip_if_not(arrow::codec_is_available("zstd"), "arrow package was not built with zstd support")
     set.seed(1)
     n <- 3000
     df <- data.frame(gene = sample(c("A", "B", "C"), n, replace = TRUE),
@@ -268,6 +270,7 @@ test_that("writeDuckDBTableParquet composite cluster_by = zorder(by=) groups the
 
 test_that("cluster_by tolerates non-finite coordinates (no whole-axis collapse)", {
     skip_if_not_installed("arrow")
+    skip_if_not(arrow::codec_is_available("zstd"), "arrow package was not built with zstd support")
     set.seed(1)
     n <- 2000
     df <- data.frame(x = runif(n, 0, 100), y = runif(n, 0, 100))
@@ -294,6 +297,7 @@ test_that("cluster_by tolerates non-finite coordinates (no whole-axis collapse)"
 
 test_that("writeDuckDBTableParquet clusters with cluster_by = hilbert() (native ST_Hilbert)", {
     skip_if_not_installed("arrow")
+    skip_if_not(arrow::codec_is_available("zstd"), "arrow package was not built with zstd support")
     have_spatial <- isTRUE(tryCatch({
         loadExtension(acquireDuckDBConn(), "spatial", optional = TRUE)
         "spatial" %in% DBI::dbGetQuery(
@@ -320,6 +324,8 @@ test_that("writeDuckDBTableParquet clusters with cluster_by = hilbert() (native 
 })
 
 test_that("writeDuckDBTableParquet exports lazy table via COPY TO", {
+    skip_if_not_installed("arrow")
+    skip_if_not(arrow::codec_is_available("zstd"), "arrow package was not built with zstd support")
     tf <- tempfile(fileext = ".parquet")
     on.exit(unlink(tf), add = TRUE)
     df <- data.frame(value = 1:5, key = letters[1:5])
@@ -341,6 +347,8 @@ test_that("writeDuckDBTableParquet exports lazy table via COPY TO", {
 })
 
 test_that("writeDuckDBTableParquet supports flat append with offset", {
+    skip_if_not_installed("arrow")
+    skip_if_not(arrow::codec_is_available("zstd"), "arrow package was not built with zstd support")
     tf <- tempfile(fileext = ".parquet")
     on.exit(unlink(tf), add = TRUE)
     df <- data.frame(value = 1:3)
@@ -435,6 +443,7 @@ test_that("reading wide numeric types warns about possible precision loss", {
 
 test_that("lazy writeParquet narrows __index__ and honors index_max", {
     skip_if_not_installed("arrow")
+    skip_if_not(arrow::codec_is_available("zstd"), "arrow package was not built with zstd support")
     src <- tempfile(fileext = ".parquet"); on.exit(unlink(src), add = TRUE)
     arrow::write_parquet(data.frame(v = 1:5), src)
     ddf <- DuckDBDataFrame(src)
@@ -453,6 +462,8 @@ test_that("lazy writeParquet narrows __index__ and honors index_max", {
 
 test_that("lazy append pins __index__ to part 0's type (schema-consistent parts)", {
     skip_if_not_installed("arrow")
+    skip_if_not(arrow::codec_is_available("zstd"), "arrow package was not built with zstd support")
+
     src <- tempfile(fileext = ".parquet"); on.exit(unlink(src), add = TRUE)
     arrow::write_parquet(data.frame(v = 1:5), src)
     ddf <- DuckDBDataFrame(src)
