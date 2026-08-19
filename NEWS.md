@@ -1,3 +1,25 @@
+# DuckDBDataFrame 0.99.21
+
+## New features
+
+- Added `splitParquetPart()`, a `parquet-io` helper that rebalances a
+  directory's single flat `part-*.parquet` file into `n_parts` smaller
+  ones, in place, e.g. after a writer emitted everything into a single
+  large `part-0.parquet`. Row order is preserved: part 0 gets the first
+  ~1/`n_parts` rows in on-disk order, part 1 the next ~1/`n_parts`, and so
+  on, as if the file had simply been cut into contiguous slices. Uses
+  DuckDB's `file_row_number` Parquet-reader option and an explicit
+  `ORDER BY` on both the bucket assignment and each part's write, since
+  neither a bare `ntile() OVER ()` nor an unordered read-back is
+  guaranteed to match on-disk order under DuckDB's parallel scan.
+
+## Documentation
+
+- Added the missing `@aliases coerce,DuckDBSelfHits,SelfHits-method` entry
+  in `?DuckDBSelfHits-class`; the `setAs("DuckDBSelfHits", "SelfHits", ...)`
+  coercion was implemented but not documented, which `R CMD check` flagged
+  as a missing documentation entry.
+
 # DuckDBDataFrame 0.99.20
 
 ## Documentation

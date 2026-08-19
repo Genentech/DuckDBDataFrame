@@ -14,6 +14,7 @@
 \alias{quoteSQLColumns}
 \alias{buildParquetCopySQL}
 \alias{writeDuckDBTableParquet}
+\alias{splitParquetPart}
 \title{Parquet I/O utilities for the DuckDB package suite}
 \usage{
 validateAppendOffset(offset)
@@ -76,6 +77,14 @@ writeDuckDBTableParquet(
   row_group_size = 491520L,
   ...
 )
+
+splitParquetPart(
+  path,
+  n_parts,
+  part_digits = 0L,
+  conn = acquireDuckDBConn(),
+  row_group_size = 491520L
+)
 }
 \arguments{
 \item{offset}{Non-negative integer scalar; global index shift for flat
@@ -118,7 +127,8 @@ append.}
 \item{create}{Logical; create \code{path} when missing
 (\code{\link{setupFlatParquetWrite}}).}
 
-\item{conn}{DBI connection for \code{\link{quoteSQLColumns}}.}
+\item{conn}{DBI connection for \code{\link{quoteSQLColumns}} and
+\code{\link{splitParquetPart}}.}
 
 \item{cols}{Character vector of column names to quote.}
 
@@ -148,6 +158,9 @@ and flat arrow writers; previously the lazy export fell back to DuckDB's
 \item{keycol}{Optional primary-key column name for lazy table export.}
 
 \item{dimtbl}{Optional single-row \linkS4class{DataFrame} of partition columns.}
+
+\item{n_parts}{Number of files to split into
+(\code{\link{splitParquetPart}}).}
 }
 \value{
 \describe{
@@ -168,6 +181,8 @@ and flat arrow writers; previously the lazy export fell back to DuckDB's
   \item{\code{writeDuckDBTableParquet}}{List with \code{path}, \code{dir},
     \code{nrow}, \code{sample_df}, \code{colnames}, \code{part},
     \code{append}, and \code{subsequent_part}.}
+  \item{\code{splitParquetPart}}{Character vector of the resulting
+    \code{part-*.parquet} paths, invisibly.}
 }
 }
 \description{
@@ -195,6 +210,10 @@ no silent overwrite):
 \itemize{
 \item \code{writeDuckDBTableParquet()}: Lazy DuckDBTable SQL Parquet export.
 
+\item \code{splitParquetPart()}: Split a directory's single flat
+\code{part-*.parquet} file into \code{n_parts} smaller ones, in place,
+preserving row order.
+
 }}
 \examples{
 path <- tempfile()
@@ -206,6 +225,13 @@ validateAppendOffset(0L)
 readParquetSchema(path, columns = c("x", "y"))
 tbl <- DuckDBTable(pq)
 quoteSQLColumns(dbconn(tbl), c("x", "y"))
+
+path2 <- tempfile()
+dir.create(path2)
+on.exit(unlink(path2, recursive = TRUE), add = TRUE)
+arrow::write_parquet(data.frame(x = 1:100L), file.path(path2, "part-0.parquet"))
+splitParquetPart(path2, n_parts = 4L)
+list.files(path2)
 
 }
 \seealso{

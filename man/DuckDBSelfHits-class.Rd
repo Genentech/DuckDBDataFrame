@@ -25,6 +25,7 @@
 \alias{coerce,DuckDBSelfHits,DuckDBDataFrame-method}
 \alias{coerce,DuckDBSelfHits,DFrame-method}
 \alias{as.data.frame,DuckDBSelfHits-method}
+\alias{coerce,DuckDBSelfHits,SelfHits-method}
 \alias{coerce,DuckDBSelfHits,dgCMatrix-method}
 \alias{realize,DuckDBSelfHits-method}
 \alias{show,DuckDBSelfHits-method}

@@ -45,6 +45,7 @@ export(reconcileParquetSchema)
 export(releaseDuckDBConn)
 export(set_row_number)
 export(setupFlatParquetWrite)
+export(splitParquetPart)
 export(sql_call)
 export(sql_fun)
 export(t.DuckDBDataFrame)
@@ -94,6 +95,7 @@ exportMethods(bindCOLS)
 exportMethods(bindROWS)
 exportMethods(cbind)
 exportMethods(chartr)
+exportMethods(coerce)
 exportMethods(colnames)
 exportMethods(coltypes)
 exportMethods(columnMetadata)
@@ -186,110 +188,132 @@ importClassesFrom(S4Vectors,RectangularData)
 importClassesFrom(S4Vectors,SelfHits)
 importClassesFrom(S4Vectors,TransposedDataFrame)
 importClassesFrom(S4Vectors,Vector)
-importFrom(DBI,dbConnect)
-importFrom(DBI,dbDisconnect)
-importFrom(DBI,dbExecute)
-importFrom(DBI,dbGetQuery)
-importFrom(DBI,dbQuoteIdentifier)
-importFrom(DBI,dbQuoteLiteral)
-importFrom(DelayedArray,getAutoRealizationBackend)
-importFrom(DelayedArray,realize)
-importFrom(IRanges,"columnMetadata<-")
-importFrom(IRanges,DataFrameList)
-importFrom(IRanges,columnMetadata)
-importFrom(IRanges,commonColnames)
+importFrom(DBI,
+  dbConnect,
+  dbDisconnect,
+  dbExecute,
+  dbGetQuery,
+  dbQuoteIdentifier,
+  dbQuoteLiteral
+)
+importFrom(DelayedArray,
+  getAutoRealizationBackend,
+  realize
+)
+importFrom(IRanges,
+  "columnMetadata<-",
+  DataFrameList,
+  columnMetadata,
+  commonColnames
+)
 importFrom(Matrix,sparseMatrix)
 importFrom(S4Arrays,is_sparse)
-importFrom(S4Vectors,"elementMetadata<-")
-importFrom(S4Vectors,"mcols<-")
-importFrom(S4Vectors,"metadata<-")
-importFrom(S4Vectors,DataFrame)
-importFrom(S4Vectors,SelfHits)
-importFrom(S4Vectors,as.env)
-importFrom(S4Vectors,as.matrix)
-importFrom(S4Vectors,bindCOLS)
-importFrom(S4Vectors,bindROWS)
-importFrom(S4Vectors,classNameForDisplay)
-importFrom(S4Vectors,combineRows)
-importFrom(S4Vectors,countLnodeHits)
-importFrom(S4Vectors,countRnodeHits)
-importFrom(S4Vectors,elementMetadata)
-importFrom(S4Vectors,elementNROWS)
-importFrom(S4Vectors,elementType)
-importFrom(S4Vectors,endoapply)
-importFrom(S4Vectors,extractCOLS)
-importFrom(S4Vectors,extractROWS)
-importFrom(S4Vectors,from)
-importFrom(S4Vectors,getListElement)
-importFrom(S4Vectors,get_showHeadLines)
-importFrom(S4Vectors,get_showTailLines)
-importFrom(S4Vectors,head)
-importFrom(S4Vectors,isSingleInteger)
-importFrom(S4Vectors,isSingleNumber)
-importFrom(S4Vectors,isSingleString)
-importFrom(S4Vectors,isTRUEorFALSE)
-importFrom(S4Vectors,makeNakedCharacterMatrixForDisplay)
-importFrom(S4Vectors,make_zero_col_DFrame)
-importFrom(S4Vectors,mcols)
-importFrom(S4Vectors,metadata)
-importFrom(S4Vectors,nLnode)
-importFrom(S4Vectors,nRnode)
-importFrom(S4Vectors,new2)
-importFrom(S4Vectors,nnode)
-importFrom(S4Vectors,normalizeDoubleBracketSubscript)
-importFrom(S4Vectors,normalizeSingleBracketReplacementValue)
-importFrom(S4Vectors,normalizeSingleBracketSubscript)
-importFrom(S4Vectors,replaceCOLS)
-importFrom(S4Vectors,replaceROWS)
-importFrom(S4Vectors,setValidity2)
-importFrom(S4Vectors,showAsCell)
-importFrom(S4Vectors,split)
-importFrom(S4Vectors,tail)
-importFrom(S4Vectors,to)
-importFrom(SparseArray,is_nonzero)
-importFrom(SparseArray,nzcount)
-importFrom(arrow,bool)
-importFrom(arrow,float32)
-importFrom(arrow,float64)
-importFrom(arrow,infer_type)
-importFrom(arrow,int16)
-importFrom(arrow,int32)
-importFrom(arrow,int64)
-importFrom(arrow,int8)
-importFrom(arrow,open_dataset)
-importFrom(arrow,read_parquet)
-importFrom(arrow,schema)
-importFrom(arrow,uint16)
-importFrom(arrow,uint32)
-importFrom(arrow,uint64)
-importFrom(arrow,uint8)
-importFrom(bit64,NA_integer64_)
-importFrom(bit64,as.integer64)
-importFrom(bit64,is.integer64)
-importFrom(dbplyr,lazy_select_query)
-importFrom(dbplyr,sql_render)
-importFrom(dplyr,anti_join)
-importFrom(dplyr,between)
-importFrom(dplyr,collect)
-importFrom(dplyr,distinct)
-importFrom(dplyr,filter)
-importFrom(dplyr,group_by)
-importFrom(dplyr,mutate)
-importFrom(dplyr,n)
-importFrom(dplyr,pull)
-importFrom(dplyr,rename)
-importFrom(dplyr,row_number)
-importFrom(dplyr,select)
-importFrom(dplyr,semi_join)
-importFrom(dplyr,sql)
-importFrom(dplyr,summarize)
-importFrom(dplyr,tbl)
-importFrom(duckdb,duckdb)
-importFrom(duckdb,duckdb_register)
+importFrom(S4Vectors,
+  "elementMetadata<-",
+  "mcols<-",
+  "metadata<-",
+  DataFrame,
+  SelfHits,
+  as.env,
+  as.matrix,
+  bindCOLS,
+  bindROWS,
+  classNameForDisplay,
+  combineRows,
+  countLnodeHits,
+  countRnodeHits,
+  elementMetadata,
+  elementNROWS,
+  elementType,
+  endoapply,
+  extractCOLS,
+  extractROWS,
+  from,
+  getListElement,
+  get_showHeadLines,
+  get_showTailLines,
+  head,
+  isSingleInteger,
+  isSingleNumber,
+  isSingleString,
+  isTRUEorFALSE,
+  makeNakedCharacterMatrixForDisplay,
+  make_zero_col_DFrame,
+  mcols,
+  metadata,
+  nLnode,
+  nRnode,
+  new2,
+  nnode,
+  normalizeDoubleBracketSubscript,
+  normalizeSingleBracketReplacementValue,
+  normalizeSingleBracketSubscript,
+  replaceCOLS,
+  replaceROWS,
+  setValidity2,
+  showAsCell,
+  split,
+  tail,
+  to
+)
+importFrom(SparseArray,
+  is_nonzero,
+  nzcount
+)
+importFrom(arrow,
+  bool,
+  float32,
+  float64,
+  infer_type,
+  int16,
+  int32,
+  int64,
+  int8,
+  open_dataset,
+  read_parquet,
+  schema,
+  uint16,
+  uint32,
+  uint64,
+  uint8
+)
+importFrom(bit64,
+  NA_integer64_,
+  as.integer64,
+  is.integer64
+)
+importFrom(dbplyr,
+  lazy_select_query,
+  sql_render
+)
+importFrom(dplyr,
+  anti_join,
+  between,
+  collect,
+  distinct,
+  filter,
+  group_by,
+  mutate,
+  n,
+  pull,
+  rename,
+  row_number,
+  select,
+  semi_join,
+  sql,
+  summarize,
+  tbl
+)
+importFrom(duckdb,
+  duckdb,
+  duckdb_register
+)
 importFrom(rlang,new_quosure)
-importFrom(stats,median)
-importFrom(stats,quantile)
-importFrom(stats,setNames)
+importFrom(stats,
+  median,
+  quantile,
+  setNames
+)
 importFrom(tibble,tibble)
 importFrom(tools,R_user_dir)
 importMethodsFrom(IRanges,chartr)

@@ -228,6 +228,7 @@
 #' @aliases coerce,DuckDBSelfHits,DuckDBDataFrame-method
 #' @aliases coerce,DuckDBSelfHits,DFrame-method
 #' @aliases as.data.frame,DuckDBSelfHits-method
+#' @aliases coerce,DuckDBSelfHits,SelfHits-method
 #' @aliases coerce,DuckDBSelfHits,dgCMatrix-method
 #' @aliases realize,DuckDBSelfHits-method
 #'

@@ -1,6 +1,6 @@
 Package: DuckDBDataFrame
-Version: 0.99.20
-Date: 2026-08-05
+Version: 0.99.21
+Date: 2026-08-18
 Title: DuckDB-Backed DataFrame and Table Structures
 Description:
     Provides DuckDB-backed implementations of core tabular data structures
@@ -71,4 +71,4 @@ Collate:
     'arrow-types.R'
     'parquet-io-cluster.R'
     'parquet-io.R'
-Config/roxygen2/version: 8.0.0
+Config/roxygen2/version: 8.1.0

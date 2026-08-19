@@ -33,8 +33,11 @@
 #'   \code{\link{reconcileParquetSchema}}.
 #' @param create Logical; create \code{path} when missing
 #'   (\code{\link{setupFlatParquetWrite}}).
-#' @param conn DBI connection for \code{\link{quoteSQLColumns}}.
+#' @param conn DBI connection for \code{\link{quoteSQLColumns}} and
+#'   \code{\link{splitParquetPart}}.
 #' @param cols Character vector of column names to quote.
+#' @param n_parts Number of files to split into
+#'   (\code{\link{splitParquetPart}}).
 #' @param query_sql Inner \code{SELECT} (or \code{SELECT ... WHERE ...}) for
 #'   \code{\link{buildParquetCopySQL}}.
 #' @param target_path Destination file or directory path for
@@ -75,6 +78,8 @@
 #'   \item{\code{writeDuckDBTableParquet}}{List with \code{path}, \code{dir},
 #'     \code{nrow}, \code{sample_df}, \code{colnames}, \code{part},
 #'     \code{append}, and \code{subsequent_part}.}
+#'   \item{\code{splitParquetPart}}{Character vector of the resulting
+#'     \code{part-*.parquet} paths, invisibly.}
 #' }
 #'
 #' @details
@@ -108,6 +113,7 @@
 #' @aliases quoteSQLColumns
 #' @aliases buildParquetCopySQL
 #' @aliases writeDuckDBTableParquet
+#' @aliases splitParquetPart
 #'
 #' @examples
 #' path <- tempfile()
@@ -119,6 +125,13 @@
 #' readParquetSchema(path, columns = c("x", "y"))
 #' tbl <- DuckDBTable(pq)
 #' quoteSQLColumns(dbconn(tbl), c("x", "y"))
+#'
+#' path2 <- tempfile()
+#' dir.create(path2)
+#' on.exit(unlink(path2, recursive = TRUE), add = TRUE)
+#' arrow::write_parquet(data.frame(x = 1:100L), file.path(path2, "part-0.parquet"))
+#' splitParquetPart(path2, n_parts = 4L)
+#' list.files(path2)
 #'
 #' @keywords internal
 #'
@@ -584,4 +597,83 @@ function(x, path, indexcol = "__index__", keycol = "__name__", dimtbl = NULL,
          part = prep$part,
          append = append,
          subsequent_part = prep$subsequent_part)
+}
+
+### - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+### Splitting an existing flat part file
+###
+### Rebalances a single large part-*.parquet file into several smaller ones,
+### in place, e.g. after a writer emitted everything into part-0.parquet and
+### it turned out too large for the row-group pruning a directory of several
+### moderately-sized files gets you. Row order is preserved: part 0 gets the
+### first ~1/n_parts rows in on-disk order, part 1 the next ~1/n_parts, and so
+### on, as if the original file had simply been cut into contiguous slices.
+###
+### This requires two explicit ORDER BYs, not one: ntile() OVER () and a bare
+### "read the temp table back" both have UNDOCUMENTED order with DuckDB's
+### parallel scan/join -- there's no guarantee either coincides with on-disk
+### file order, or is even the same from one query to the next. DuckDB's
+### Parquet reader can expose true on-disk position directly via
+### file_row_number=true, so both the ntile() bucketing and each part's COPY
+### explicitly ORDER BY that column instead of relying on incidental order.
+### The split assignment is still computed once and materialized into a temp
+### table before any part is written, so which rows land in which part
+### doesn't depend on DuckDB's scan order staying the same across the several
+### separate COPY statements that follow -- only the final ORDER BY does that
+### work now, not the bucketing itself.
+###
+
+#' @describeIn parquet-io Split a directory's single flat
+#'   \code{part-*.parquet} file into \code{n_parts} smaller ones, in place,
+#'   preserving row order.
+#' @export
+#' @importFrom DBI dbExecute
+#' @importFrom S4Vectors isSingleNumber
+splitParquetPart <-
+function(path, n_parts, part_digits = 0L, conn = acquireDuckDBConn(),
+         row_group_size = 491520L)
+{
+    if (!isSingleNumber(n_parts) || n_parts != as.integer(n_parts) ||
+        n_parts < 1L) {
+        stop("'n_parts' must be a single positive integer")
+    }
+    n_parts <- as.integer(n_parts)
+
+    files <- list.files(path, pattern = "^part-.*\\.parquet$", full.names = TRUE)
+    if (length(files) != 1L) {
+        stop("'path' must contain exactly one 'part-*.parquet' file to ",
+             "split; found ", length(files))
+    }
+    src <- files[1L]
+
+    if (n_parts == 1L) {
+        return(invisible(src))
+    }
+
+    tmp_tbl <- sprintf("splitParquetPart_%s",
+                       paste(sample(letters, 16L, replace = TRUE), collapse = ""))
+    dbExecute(conn, sprintf(
+        "CREATE TEMP TABLE %s AS SELECT *, ntile(%d) OVER (ORDER BY file_row_number) - 1 AS __split_part__ FROM read_parquet('%s', file_row_number = true)",
+        tmp_tbl, n_parts, escapeSQLPath(src)))
+    on.exit(dbExecute(conn, sprintf("DROP TABLE IF EXISTS %s", tmp_tbl)), add = TRUE)
+
+    tmp_dir <- tempfile("split-parquet-")
+    dir.create(tmp_dir)
+    on.exit(unlink(tmp_dir, recursive = TRUE), add = TRUE)
+
+    for (i in seq_len(n_parts) - 1L) {
+        target <- parquetPartPath(tmp_dir, i, part_digits)
+        select_sql <- sprintf(
+            "SELECT * EXCLUDE (__split_part__, file_row_number) FROM %s WHERE __split_part__ = %d",
+            tmp_tbl, i)
+        dbExecute(conn, buildParquetCopySQL(select_sql, target,
+                                            order_cols = "file_row_number",
+                                            row_group_size = row_group_size))
+    }
+
+    unlink(src)
+    file.copy(list.files(tmp_dir, full.names = TRUE), path)
+
+    invisible(sort(list.files(path, pattern = "^part-.*\\.parquet$",
+                              full.names = TRUE)))
 }
