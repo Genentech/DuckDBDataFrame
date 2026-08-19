@@ -46,8 +46,9 @@ In the code snippets below, \code{x} is a DuckDBColumn object:
   }
   \item{\code{type(x)}, \code{type(x) <- value}:}{
     Get or set the data type of the elements; one of \code{"logical"},
-    \code{"integer"}, \code{"integer64"}, \code{"double"}, or
-    \code{"character"}.
+    \code{"integer"}, \code{"integer64"}, \code{"double"},
+    \code{"character"}, or \code{"factor"} (a \code{"character"} column
+    with a recorded \code{collevels} entry).
   }
 }
 }

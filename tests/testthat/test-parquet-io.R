@@ -393,6 +393,9 @@ test_that("collevels restores factor columns on materialization", {
     expect_identical(levels(out[["g"]]), c("A", "B", "C"))
     # single-column materialization path (as.vector,DuckDBColumn)
     expect_true(is.factor(as.vector(ddf[["g"]])))
+    # coltypes()/type() report "factor" without materializing
+    expect_identical(unname(coltypes(ddf)["g"]), "factor")
+    expect_identical(type(ddf[["g"]]), "factor")
 
     ordered <- DuckDBDataFrame(tf, datacols = "g", keycol = "id",
                               collevels = list(g = list(levels = c("A", "B", "C"),
@@ -403,6 +406,7 @@ test_that("collevels restores factor columns on materialization", {
     recast <- ddf
     coltypes(recast) <- c(g = "character")
     expect_false(is.factor(as.data.frame(recast)[["g"]]))
+    expect_identical(unname(coltypes(recast)["g"]), "character")
 })
 
 test_that("reading wide numeric types warns about possible precision loss", {

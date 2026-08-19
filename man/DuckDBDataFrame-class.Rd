@@ -109,8 +109,9 @@ In the code snippets below, \code{x} is a DuckDBDataFrame object:
   }
   \item{\code{coltypes(x)}, \code{coltypes(x) <- value}:}{
     Get or set the data type of the columns; one of \code{"logical"},
-    \code{"integer"}, \code{"integer64"}, \code{"double"}, or
-    \code{"character"}.
+    \code{"integer"}, \code{"integer64"}, \code{"double"},
+    \code{"character"}, or \code{"factor"} (a \code{"character"} column
+    with a recorded \code{collevels} entry).
   }
   \item{\code{dimtbls(x, drop = TRUE)}, \code{dimtbls(x) <- value}:}{
     Get or set the list of dimension tables used to define partitions for

@@ -123,9 +123,13 @@ In the code snippets below, \code{x} is a DuckDBTable object:
   \item{\code{coltypes(x)}, \code{coltypes(x) <- value}:}{
     Get or set the data type of the columns. Getter returns one of
     \code{"logical"}, \code{"integer"}, \code{"integer64"}, \code{"double"},
-    \code{"character"}, or complex type strings like \code{"list<integer>"},
+    \code{"character"}, \code{"factor"} (a \code{"character"} column with a
+    recorded \code{collevels} entry; see \code{\link{DuckDBTable}}), or
+    complex type strings like \code{"list<integer>"},
     \code{"array<numeric,128>"}, \code{"struct"}, \code{"map"}, \code{"blob"},
-    or \code{"geometry"}. Setter accepts atomic types only.
+    or \code{"geometry"}. Setter accepts atomic types only (not
+    \code{"factor"}; recasting a factor column's underlying type drops its
+    \code{collevels} entry, per \code{coltypes<-}'s documented behavior).
   }
   \item{\code{dimtbls(x, drop = TRUE)}, \code{dimtbls(x) <- value}:}{
     Get or set the list of dimension tables used to define partitions for

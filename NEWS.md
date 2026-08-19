@@ -1,3 +1,20 @@
+# DuckDBDataFrame 0.99.23
+
+## Bug fixes
+
+- `coltypes()`/`type()` (and the `show()` header row they drive) now report
+  `"factor"` for a character column with a recorded `collevels` entry,
+  instead of `"character"`. `collevels` (set by `readParquet()` from the
+  schema's `categories`/`categoriesOrdered`, a standard Frictionless Table
+  Schema keyword) already correctly restored `factor` columns on
+  materialization (`as.data.frame()`, `as.vector()`); only the
+  non-materializing type-reporting methods hadn't been taught to look at
+  it, so a lazy `DuckDBDataFrame`'s `colData()` display showed
+  `<character>` for a column that was, in fact, a factor as soon as you
+  pulled it out. `coltypes<-` is unchanged: `"factor"` is not a settable
+  cast target, and recasting a factor column's underlying type still
+  drops its `collevels` entry as before.
+
 # DuckDBDataFrame 0.99.22
 
 ## Bug fixes
