@@ -212,7 +212,7 @@ no silent overwrite):
 
 \item \code{splitParquetPart()}: Split a directory's single flat
 \code{part-*.parquet} file into \code{n_parts} smaller ones, in place,
-preserving row order.
+preserving row order and factor columns.
 
 }}
 \examples{

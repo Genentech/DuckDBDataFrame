@@ -275,7 +275,8 @@ importFrom(arrow,
   uint16,
   uint32,
   uint64,
-  uint8
+  uint8,
+  write_parquet
 )
 importFrom(bit64,
   NA_integer64_,
@@ -287,6 +288,7 @@ importFrom(dbplyr,
   sql_render
 )
 importFrom(dplyr,
+  all_of,
   anti_join,
   between,
   collect,

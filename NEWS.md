@@ -1,3 +1,16 @@
+# DuckDBDataFrame 0.99.22
+
+## Bug fixes
+
+- `splitParquetPart()` was silently dropping factor columns to plain
+  character, and losing any factor level unused in the data outright
+  (unrecoverable from the written values alone), because DuckDB has no
+  categorical/dictionary SQL type and flattens an Arrow dictionary-encoded
+  column to `VARCHAR`. Factor columns (including ordered ones and unused
+  levels) are now detected from the source file's schema before the
+  DuckDB-based row split and restored on each output part afterward via a
+  small, per-part `arrow`-only read/rewrite.
+
 # DuckDBDataFrame 0.99.21
 
 ## New features

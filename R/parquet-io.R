@@ -611,7 +611,7 @@ function(x, path, indexcol = "__index__", keycol = "__name__", dimtbl = NULL,
 ###
 ### This requires two explicit ORDER BYs, not one: ntile() OVER () and a bare
 ### "read the temp table back" both have UNDOCUMENTED order with DuckDB's
-### parallel scan/join -- there's no guarantee either coincides with on-disk
+### parallel scan/join. There's no guarantee either coincides with on-disk
 ### file order, or is even the same from one query to the next. DuckDB's
 ### Parquet reader can expose true on-disk position directly via
 ### file_row_number=true, so both the ntile() bucketing and each part's COPY
@@ -619,13 +619,53 @@ function(x, path, indexcol = "__index__", keycol = "__name__", dimtbl = NULL,
 ### The split assignment is still computed once and materialized into a temp
 ### table before any part is written, so which rows land in which part
 ### doesn't depend on DuckDB's scan order staying the same across the several
-### separate COPY statements that follow -- only the final ORDER BY does that
+### separate COPY statements that follow; only the final ORDER BY does that
 ### work now, not the bucketing itself.
 ###
+### DuckDB has no categorical/dictionary SQL type, so it flattens an Arrow
+### dictionary-encoded column (an R factor, on write) to plain VARCHAR; the
+### output would silently become character, and any level unused in the data
+### (not recoverable from the written values alone) would be lost outright.
+### Columns like this are detected from the source schema before the DuckDB
+### step, and their factor()-ness is restored on each part afterward via a
+### small arrow-only read/rewrite. DuckDB does the (expensive) row split,
+### arrow does the (cheap, per-part, only-if-needed) factor fixup.
+###
+
+#' @importFrom arrow open_dataset
+.findFactorColumns <- function(path) {
+    sch <- open_dataset(path)$schema
+    nms <- names(sch)
+    is_dict <- vapply(nms, function(nm) {
+        inherits(sch$GetFieldByName(nm)$type, "DictionaryType")
+    }, logical(1L))
+    nms[is_dict]
+}
+
+#' @importFrom arrow read_parquet write_parquet
+#' @importFrom dplyr all_of
+.restoreFactorColumns <- function(files, src, factor_cols, row_group_size) {
+    levels_by_col <- lapply(factor_cols, function(col) {
+        x <- read_parquet(src, col_select = all_of(col))[[col]]
+        list(levels = levels(x), ordered = is.ordered(x))
+    })
+    names(levels_by_col) <- factor_cols
+    for (f in files) {
+        part <- read_parquet(f)
+        for (col in factor_cols) {
+            info <- levels_by_col[[col]]
+            part[[col]] <- factor(part[[col]], levels = info$levels,
+                                  ordered = info$ordered)
+        }
+        write_parquet(part, f, compression = "zstd", compression_level = 3L,
+                      chunk_size = row_group_size)
+    }
+    invisible(NULL)
+}
 
 #' @describeIn parquet-io Split a directory's single flat
 #'   \code{part-*.parquet} file into \code{n_parts} smaller ones, in place,
-#'   preserving row order.
+#'   preserving row order and factor columns.
 #' @export
 #' @importFrom DBI dbExecute
 #' @importFrom S4Vectors isSingleNumber
@@ -650,6 +690,8 @@ function(path, n_parts, part_digits = 0L, conn = acquireDuckDBConn(),
         return(invisible(src))
     }
 
+    factor_cols <- .findFactorColumns(src)
+
     tmp_tbl <- sprintf("splitParquetPart_%s",
                        paste(sample(letters, 16L, replace = TRUE), collapse = ""))
     dbExecute(conn, sprintf(
@@ -669,6 +711,11 @@ function(path, n_parts, part_digits = 0L, conn = acquireDuckDBConn(),
         dbExecute(conn, buildParquetCopySQL(select_sql, target,
                                             order_cols = "file_row_number",
                                             row_group_size = row_group_size))
+    }
+
+    if (length(factor_cols)) {
+        .restoreFactorColumns(list.files(tmp_dir, full.names = TRUE), src,
+                              factor_cols, row_group_size)
     }
 
     unlink(src)
