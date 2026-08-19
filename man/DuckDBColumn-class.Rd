@@ -14,6 +14,7 @@
 \alias{type,DuckDBColumn-method}
 \alias{type<-,DuckDBColumn-method}
 \alias{levels,DuckDBColumn-method}
+\alias{nlevels,DuckDBColumn-method}
 \alias{extractROWS,DuckDBColumn,ANY-method}
 \alias{head,DuckDBColumn-method}
 \alias{tail,DuckDBColumn-method}

@@ -82,6 +82,7 @@
 #' @aliases type,DuckDBColumn-method
 #' @aliases type<-,DuckDBColumn-method
 #' @aliases levels,DuckDBColumn-method
+#' @aliases nlevels,DuckDBColumn-method
 #'
 #' @aliases extractROWS,DuckDBColumn,ANY-method
 #' @aliases head,DuckDBColumn-method
@@ -186,7 +187,8 @@ setMethod("levels", "DuckDBColumn", function(x) {
     if (is.null(entry)) NULL else entry[["levels"]]
 })
 
-## S4Vectors does not export its nlevels generic, so we can't importFrom it
+# S4Vectors does not export its nlevels generic, so we can't importFrom it
+#' @export
 setMethod("nlevels", "DuckDBColumn", function(x) length(levels(x)))
 
 ### - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
