@@ -13,6 +13,7 @@
 \alias{names<-,DuckDBColumn-method}
 \alias{type,DuckDBColumn-method}
 \alias{type<-,DuckDBColumn-method}
+\alias{levels,DuckDBColumn-method}
 \alias{extractROWS,DuckDBColumn,ANY-method}
 \alias{head,DuckDBColumn-method}
 \alias{tail,DuckDBColumn-method}
@@ -49,6 +50,13 @@ In the code snippets below, \code{x} is a DuckDBColumn object:
     \code{"integer"}, \code{"integer64"}, \code{"double"},
     \code{"character"}, or \code{"factor"} (a \code{"character"} column
     with a recorded \code{collevels} entry).
+  }
+  \item{\code{levels(x)}, \code{nlevels(x)}:}{
+    Get the recorded factor levels (or their count), or \code{NULL}
+    (\code{0} for \code{nlevels}) if \code{x} is not a \code{"factor"}-typed
+    column. Does not materialize \code{x}. There is no \code{levels<-}
+    replacement method; relabeling levels would need to remap the
+    underlying stored values, not just the recorded level set.
   }
 }
 }

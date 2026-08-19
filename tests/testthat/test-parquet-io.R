@@ -396,6 +396,9 @@ test_that("collevels restores factor columns on materialization", {
     # coltypes()/type() report "factor" without materializing
     expect_identical(unname(coltypes(ddf)["g"]), "factor")
     expect_identical(type(ddf[["g"]]), "factor")
+    # levels()/nlevels() on the DuckDBColumn, also without materializing
+    expect_identical(levels(ddf[["g"]]), c("A", "B", "C"))
+    expect_identical(nlevels(ddf[["g"]]), 3L)
 
     ordered <- DuckDBDataFrame(tf, datacols = "g", keycol = "id",
                               collevels = list(g = list(levels = c("A", "B", "C"),
@@ -407,6 +410,16 @@ test_that("collevels restores factor columns on materialization", {
     coltypes(recast) <- c(g = "character")
     expect_false(is.factor(as.data.frame(recast)[["g"]]))
     expect_identical(unname(coltypes(recast)["g"]), "character")
+    expect_null(levels(recast[["g"]]))
+    expect_identical(nlevels(recast[["g"]]), 0L)
+
+    # a non-factor column has no levels
+    tf2 <- tempfile(fileext = ".parquet")
+    on.exit(unlink(tf2), add = TRUE)
+    arrow::write_parquet(data.frame(id = letters[1:3], plain = c("x", "y", "z")), tf2)
+    plain_ddf <- DuckDBDataFrame(tf2, datacols = "plain", keycol = "id")
+    expect_null(levels(plain_ddf[["plain"]]))
+    expect_identical(nlevels(plain_ddf[["plain"]]), 0L)
 })
 
 test_that("reading wide numeric types warns about possible precision loss", {

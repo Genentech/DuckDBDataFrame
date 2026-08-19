@@ -125,6 +125,7 @@ exportMethods(keycols)
 exportMethods(keydimnames)
 exportMethods(keynames)
 exportMethods(length)
+exportMethods(levels)
 exportMethods(mad)
 exportMethods(makeNakedCharacterMatrixForDisplay)
 exportMethods(mean)
@@ -237,6 +238,7 @@ importFrom(S4Vectors,
   isSingleNumber,
   isSingleString,
   isTRUEorFALSE,
+  levels,
   makeNakedCharacterMatrixForDisplay,
   make_zero_col_DFrame,
   mcols,

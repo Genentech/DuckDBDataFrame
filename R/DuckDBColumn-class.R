@@ -25,6 +25,13 @@
 #'     \code{"character"}, or \code{"factor"} (a \code{"character"} column
 #'     with a recorded \code{collevels} entry).
 #'   }
+#'   \item{\code{levels(x)}, \code{nlevels(x)}:}{
+#'     Get the recorded factor levels (or their count), or \code{NULL}
+#'     (\code{0} for \code{nlevels}) if \code{x} is not a \code{"factor"}-typed
+#'     column. Does not materialize \code{x}. There is no \code{levels<-}
+#'     replacement method; relabeling levels would need to remap the
+#'     underlying stored values, not just the recorded level set.
+#'   }
 #' }
 #'
 #' @section Coercion:
@@ -74,6 +81,7 @@
 #' @aliases names<-,DuckDBColumn-method
 #' @aliases type,DuckDBColumn-method
 #' @aliases type<-,DuckDBColumn-method
+#' @aliases levels,DuckDBColumn-method
 #'
 #' @aliases extractROWS,DuckDBColumn,ANY-method
 #' @aliases head,DuckDBColumn-method
@@ -170,6 +178,16 @@ setReplaceMethod("type", "DuckDBColumn", function(x, value) {
     coltypes(table) <- value
     replaceSlots(x, table = table, check = FALSE)
 })
+
+#' @export
+#' @importFrom S4Vectors levels
+setMethod("levels", "DuckDBColumn", function(x) {
+    entry <- x@table@collevels[[names(x@table@datacols)[1L]]]
+    if (is.null(entry)) NULL else entry[["levels"]]
+})
+
+## S4Vectors does not export its nlevels generic, so we can't importFrom it
+setMethod("nlevels", "DuckDBColumn", function(x) length(levels(x)))
 
 ### - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 ### Validity

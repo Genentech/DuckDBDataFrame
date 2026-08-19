@@ -15,6 +15,12 @@
   cast target, and recasting a factor column's underlying type still
   drops its `collevels` entry as before.
 
+## New features
+
+- Added `levels()`/`nlevels()` methods for `DuckDBColumn`, returning the
+  recorded `collevels` levels (or `NULL`/`0`) without materializing the
+  column.
+
 # DuckDBDataFrame 0.99.22
 
 ## Bug fixes
