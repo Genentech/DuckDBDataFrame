@@ -265,6 +265,7 @@ importFrom(SparseArray,
 )
 importFrom(arrow,
   ParquetFileReader,
+  ReadableFile,
   bool,
   float32,
   float64,

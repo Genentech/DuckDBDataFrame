@@ -640,9 +640,11 @@ function(x, path, indexcol = "__index__", keycol = "__name__", dimtbl = NULL,
 ### arrow does the (cheap, per-part, only-if-needed) factor fixup.
 ###
 
-#' @importFrom arrow ParquetFileReader
+#' @importFrom arrow ParquetFileReader ReadableFile
 .findFactorColumns <- function(path) {
-    sch <- ParquetFileReader$create(path, mmap = FALSE)$GetSchema()
+    con <- ReadableFile$create(path)
+    on.exit(try(con$close(), silent = TRUE), add = TRUE)
+    sch <- ParquetFileReader$create(con)$GetSchema()
     nms <- names(sch)
     is_dict <- vapply(nms, function(nm) {
         inherits(sch$GetFieldByName(nm)$type, "DictionaryType")
@@ -735,10 +737,13 @@ function(path, n_parts, part_digits = 0L, conn = acquireDuckDBConn(),
                               factor_cols, row_group_size)
     }
 
+    dbExecute(conn, sprintf("DROP TABLE IF EXISTS %s", tmp_tbl))
+
     new_files <- sort(list.files(tmp_dir, full.names = TRUE))
     backup <- paste0(src, ".bak")
     if (!suppressWarnings(file.rename(src, backup))) {
-        stop("failed to move aside '", src, "'; nothing was changed")
+        stop("failed to move aside '", src, "'; nothing was changed. ",
+             "On Windows this happens when a reader still holds the file open")
     }
 
     copied <- suppressWarnings(file.copy(new_files, path, overwrite = TRUE))

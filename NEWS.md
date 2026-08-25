@@ -28,18 +28,29 @@
   read back, so the caller's schema inference also sees the factors and can
   emit the `categories`/`categoriesOrdered` schema keywords correctly.
   Non-factor columns are untouched.
-- The factor-restoration path now reads with `mmap = FALSE` throughout. It
-  rewrites each parquet file in place, and `arrow`'s default memory-mapped
-  read leaves a mapping open that Windows refuses to write over, rename, or
-  unlink (`[Windows error 1224] The requested operation cannot be performed
-  on a file with a user-mapped section open`). Staging the write elsewhere
-  and renaming would not have helped, since replacing a mapped file is
-  blocked the same way. `.findFactorColumns()` switched from
-  `open_dataset()`, which offers no way to opt out of the mapping, to
-  `ParquetFileReader$create(mmap = FALSE)`; `splitParquetPart()` renames and
-  then unlinks the very file it inspects, so that read had to be unmapped
-  too. This affected the pre-existing `splitParquetPart()` restoration path
-  as well as the new one; it surfaced only now because that function had no
+- The factor-restoration path no longer leaves the parquet files it inspects
+  open, which made it fail on Windows. It rewrites each file in place, and
+  `splitParquetPart()` additionally renames and then unlinks its source file;
+  Windows refuses all three operations while any mapping or handle on the
+  file is still live. Two distinct leaks were involved:
+  - `arrow`'s default *memory-mapped* read (`[Windows error 1224] The
+    requested operation cannot be performed on a file with a user-mapped
+    section open`). All reads on this path now pass `mmap = FALSE`. Staging
+    the write elsewhere and renaming into place would not have helped, since
+    replacing a mapped file is blocked in the same way.
+  - An open *file handle*. `.findFactorColumns()` needs only the schema, but
+    `open_dataset()` cannot opt out of memory-mapping and `ParquetFileReader`
+    has no `Close()` method, so either one leaves the file open until the
+    reader is garbage-collected. It now creates its own `ReadableFile`,
+    passes that to `ParquetFileReader`, and closes it explicitly; the
+    returned `Schema` remains valid afterwards.
+
+  `splitParquetPart()` also drops its DuckDB temporary table before touching
+  the source file, rather than at function exit, so nothing on the DuckDB
+  side still refers to it either.
+
+  This affected the pre-existing `splitParquetPart()` restoration path as
+  well as the new one; it surfaced only now because that function had no
   test coverage before this release.
 
 # DuckDBDataFrame 0.99.23
