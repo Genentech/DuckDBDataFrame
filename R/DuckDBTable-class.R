@@ -1046,6 +1046,8 @@ setValidity2("DuckDBTable", function(x) {
     sprintf("%s(%s)", read, x)
 }
 
+.INCOMPLETE_MARKER <- "_INCOMPLETE"
+
 #' @importFrom S4Vectors isSingleString
 .wrapConn <- function(x) {
     if (all(grepl("(?i)\\.(csv|tsv)(\\.gz)?$", x))) {
@@ -1056,9 +1058,18 @@ setValidity2("DuckDBTable", function(x) {
             configureCloud(acquireDuckDBConn())
             x <- .wrapFile(file.path(x, "**"), "read_parquet")
     } else if (isSingleString(x) && dir.exists(x)) {
+            if (file.exists(file.path(x, .INCOMPLETE_MARKER))) {
+                stop("'", x, "' is marked incomplete: '", .INCOMPLETE_MARKER,
+                     "' is present, so the resource was still being written. ",
+                     "Re-run the writer, or delete the marker if the write is ",
+                     "known to have completed.")
+            }
             files <- list.files(x, recursive = TRUE)
-            if (any(all(grepl("(?i)\\.(parquet|pq)$", files)))) {
-                x <- .wrapFile(file.path(x, "**"), "read_parquet")
+            hits <- grepl("(?i)\\.(parquet|pq)$", files)
+            if (any(hits)) {
+                exts <- unique(sub(".*\\.", "", files[hits]))
+                x <- .wrapFile(file.path(x, "**", paste0("*.", exts)),
+                               "read_parquet")
             }
         }
     x

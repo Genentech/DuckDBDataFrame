@@ -277,3 +277,46 @@ test_that("Variadic numeric methods work as expected for a DuckDBTable", {
     checkDuckDBTable(pmax(tbl, tbl, tbl), as.data.frame(mapply(pmax, penguins, penguins, penguins)))
     checkDuckDBTable(pmin(tbl, tbl, tbl), as.data.frame(mapply(pmin, penguins, penguins, penguins)))
 })
+
+test_that("a directory with sibling files is still readable", {
+    skip_if_not_installed("arrow")
+    # A resource directory may legitimately carry non-parquet siblings
+    # (_SUCCESS, _common_metadata, a README). Requiring EVERY file to be
+    # parquet left such a directory unwrapped, to be resolved as a catalog
+    # table name, failing with a leaked SQL parser error naming the path.
+    dir <- tempfile(); dir.create(dir)
+    on.exit(unlink(dir, recursive = TRUE), add = TRUE)
+    arrow::write_parquet(data.frame(v = 1:3), file.path(dir, "part-0.parquet"))
+
+    expect_identical(nrow(as.data.frame(DuckDBDataFrame(dir))), 3L)
+
+    writeLines("notes", file.path(dir, "README.txt"))
+    file.create(file.path(dir, "_SUCCESS"))
+    expect_identical(nrow(as.data.frame(DuckDBDataFrame(dir))), 3L)
+
+    # nested (hive-style) parts still resolve, siblings and all
+    dir.create(file.path(dir, "sub"))
+    arrow::write_parquet(data.frame(v = 4L), file.path(dir, "sub", "p.parquet"))
+    expect_identical(nrow(as.data.frame(DuckDBDataFrame(dir))), 4L)
+
+    # a mixed .parquet/.pq directory globs both extensions
+    arrow::write_parquet(data.frame(v = 5:6), file.path(dir, "part-1.pq"))
+    expect_identical(nrow(as.data.frame(DuckDBDataFrame(dir))), 6L)
+})
+
+test_that("a directory marked _INCOMPLETE is refused explicitly", {
+    skip_if_not_installed("arrow")
+    # Protection against reading a half-written resource must not depend on
+    # the all()/any() wrap test above: that is what previously enforced it,
+    # as a side effect.
+    dir <- tempfile(); dir.create(dir)
+    on.exit(unlink(dir, recursive = TRUE), add = TRUE)
+    arrow::write_parquet(data.frame(v = 1:3), file.path(dir, "part-0.parquet"))
+    file.create(file.path(dir, "_INCOMPLETE"))
+
+    expect_error(DuckDBDataFrame(dir), "marked incomplete")
+
+    # removing the marker makes it readable again
+    unlink(file.path(dir, "_INCOMPLETE"))
+    expect_identical(nrow(as.data.frame(DuckDBDataFrame(dir))), 3L)
+})

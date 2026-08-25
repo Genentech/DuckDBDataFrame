@@ -2,6 +2,25 @@
 
 ## Bug fixes
 
+- Opening a directory required *every* file in it to be parquet, so a
+  resource directory carrying an ordinary sibling (`_SUCCESS`,
+  `_common_metadata`, a README) was left unwrapped and then resolved as a
+  catalog table name, failing with a leaked SQL parser error quoting the
+  path. The test was also written `any(all(...))`, which is just `all(...)`:
+  `all()` already returns a single logical. A directory is now opened when it
+  contains *any* parquet part, and the glob targets the parquet extensions
+  actually present rather than `**`, which would otherwise hand the siblings
+  to `read_parquet()`.
+
+- `DuckDBDataFrame()` now refuses a directory carrying an `_INCOMPLETE`
+  marker, naming it in the error. This has to ship together with the change
+  above: refusing such a directory was previously only a *side effect* of
+  requiring every file to be parquet, so relaxing that test on its own would
+  have made an interrupted multi-part write silently readable as partial
+  data (verified: it returns the parts written so far, with no error).
+  `_INCOMPLETE` is written by BiocDuckDB's `writeStreamingResource()` for the
+  duration of a stream.
+
 - `splitParquetPart()` could destroy the data it was splitting. It called
   `unlink()` on the source file *before* copying the new parts into place,
   discarded `file.copy()`'s return value, and left `overwrite = FALSE`, so a
