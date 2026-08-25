@@ -584,6 +584,12 @@ function(x, path, indexcol = "__index__", keycol = "__name__", dimtbl = NULL,
                                     row_group_size = row_group_size)
     DBI::dbExecute(conn, copy_sql)
 
+    # DuckDB has no categorical SQL type, so need to restore factor levels
+    collevels <- x@collevels[intersect(names(x@collevels), built$colnames)]
+    if (length(collevels) > 0L) {
+        .applyFactorLevels(prep$pq_path, collevels, row_group_size)
+    }
+
     sample_n <- min(100L, max(1L, n))
     sample_df <- as.data.frame(arrow::read_parquet(prep$pq_path))
     if (nrow(sample_df) > sample_n)
@@ -643,6 +649,21 @@ function(x, path, indexcol = "__index__", keycol = "__name__", dimtbl = NULL,
 }
 
 #' @importFrom arrow read_parquet write_parquet
+.applyFactorLevels <- function(files, levels_by_col, row_group_size) {
+    for (f in files) {
+        part <- read_parquet(f)
+        for (col in names(levels_by_col)) {
+            info <- levels_by_col[[col]]
+            part[[col]] <- factor(part[[col]], levels = info[["levels"]],
+                                  ordered = info[["ordered"]])
+        }
+        write_parquet(part, f, compression = "zstd", compression_level = 3L,
+                      chunk_size = row_group_size)
+    }
+    invisible(NULL)
+}
+
+#' @importFrom arrow read_parquet
 #' @importFrom dplyr all_of
 .restoreFactorColumns <- function(files, src, factor_cols, row_group_size) {
     levels_by_col <- lapply(factor_cols, function(col) {
@@ -650,17 +671,7 @@ function(x, path, indexcol = "__index__", keycol = "__name__", dimtbl = NULL,
         list(levels = levels(x), ordered = is.ordered(x))
     })
     names(levels_by_col) <- factor_cols
-    for (f in files) {
-        part <- read_parquet(f)
-        for (col in factor_cols) {
-            info <- levels_by_col[[col]]
-            part[[col]] <- factor(part[[col]], levels = info$levels,
-                                  ordered = info$ordered)
-        }
-        write_parquet(part, f, compression = "zstd", compression_level = 3L,
-                      chunk_size = row_group_size)
-    }
-    invisible(NULL)
+    .applyFactorLevels(files, levels_by_col, row_group_size)
 }
 
 #' @describeIn parquet-io Split a directory's single flat
@@ -718,8 +729,24 @@ function(path, n_parts, part_digits = 0L, conn = acquireDuckDBConn(),
                               factor_cols, row_group_size)
     }
 
-    unlink(src)
-    file.copy(list.files(tmp_dir, full.names = TRUE), path)
+    new_files <- sort(list.files(tmp_dir, full.names = TRUE))
+    backup <- paste0(src, ".bak")
+    if (!suppressWarnings(file.rename(src, backup))) {
+        stop("failed to move aside '", src, "'; nothing was changed")
+    }
+
+    copied <- suppressWarnings(file.copy(new_files, path, overwrite = TRUE))
+    if (!all(copied)) {
+        unlink(file.path(path, basename(new_files[copied])))
+        if (!suppressWarnings(file.rename(backup, src))) {
+            stop("failed to write the split parts into '", path,
+                 "', and the original could not be restored; it is at '",
+                 backup, "'")
+        }
+        stop("failed to write ", sum(!copied), " of ", length(copied),
+             " split parts into '", path, "'; the original file is unchanged")
+    }
+    unlink(backup)
 
     invisible(sort(list.files(path, pattern = "^part-.*\\.parquet$",
                               full.names = TRUE)))

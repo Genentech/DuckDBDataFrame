@@ -485,3 +485,112 @@ test_that("lazy append pins __index__ to part 0's type (schema-consistent parts)
     expect_length(types, 2L)
     expect_true(all(types == "int64"))    # append pinned to part 0, not narrowed
 })
+
+### - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+### Factor preservation on the lazy write path, and splitParquetPart safety
+###
+
+test_that("writeDuckDBTableParquet preserves factor levels recorded in collevels", {
+    skip_if_not_installed("arrow")
+    src <- tempfile(fileext = ".parquet"); on.exit(unlink(src), add = TRUE)
+    # 'zz' is deliberately unused: it cannot be recovered from the written
+    # values, so it only survives if collevels is consulted on write.
+    arrow::write_parquet(
+        data.frame(g = c("a", "b", "a", "c"), o = c("lo", "hi", "lo", "hi"),
+                   stringsAsFactors = FALSE),
+        src)
+    ddf <- DuckDBDataFrame(src, collevels = list(
+        g = list(levels = c("a", "b", "c", "zz"), ordered = FALSE),
+        o = list(levels = c("lo", "hi"), ordered = TRUE)))
+
+    dir <- tempfile(); on.exit(unlink(dir, recursive = TRUE), add = TRUE)
+    res <- writeDuckDBTableParquet(ddf, dir, indexcol = NULL, keycol = NULL)
+
+    pq <- arrow::read_parquet(res$path)
+    expect_s3_class(pq$g, "factor")
+    expect_identical(levels(pq$g), c("a", "b", "c", "zz"))
+    expect_false(is.ordered(pq$g))
+    expect_identical(as.character(pq$g), c("a", "b", "a", "c"))
+
+    expect_true(is.ordered(pq$o))
+    expect_identical(levels(pq$o), c("lo", "hi"))
+
+    # the returned sample_df drives the caller's schema inference, so it must
+    # see the factors too
+    expect_s3_class(res$sample_df$g, "factor")
+    expect_identical(levels(res$sample_df$g), c("a", "b", "c", "zz"))
+})
+
+test_that("writeDuckDBTableParquet leaves non-factor columns alone", {
+    skip_if_not_installed("arrow")
+    src <- tempfile(fileext = ".parquet"); on.exit(unlink(src), add = TRUE)
+    arrow::write_parquet(data.frame(v = 1:4, s = letters[1:4]), src)
+    ddf <- DuckDBDataFrame(src)
+
+    dir <- tempfile(); on.exit(unlink(dir, recursive = TRUE), add = TRUE)
+    res <- writeDuckDBTableParquet(ddf, dir, indexcol = NULL, keycol = NULL)
+
+    pq <- arrow::read_parquet(res$path)
+    expect_type(pq$s, "character")
+    expect_identical(pq$v, 1:4)
+})
+
+test_that("splitParquetPart preserves row order and factor levels", {
+    skip_if_not_installed("arrow")
+    dir <- tempfile(); dir.create(dir)
+    on.exit(unlink(dir, recursive = TRUE), add = TRUE)
+    df <- data.frame(
+        i = 1:12,
+        g = factor(rep(c("a", "b", "c"), 4L), levels = c("a", "b", "c", "zz")))
+    arrow::write_parquet(df, file.path(dir, "part-0.parquet"))
+
+    out <- splitParquetPart(dir, 3L)
+    expect_length(out, 3L)
+
+    back <- do.call(rbind, lapply(out, arrow::read_parquet))
+    expect_identical(back$i, 1:12)                    # contiguous, in order
+    expect_s3_class(back$g, "factor")
+    expect_identical(levels(back$g), c("a", "b", "c", "zz"))
+})
+
+test_that("splitParquetPart rolls back the source when the copy fails", {
+    skip_if_not_installed("arrow")
+    # The source file is the only copy of the data once the split parts are in
+    # a temp dir, so a failed copy must not leave the directory empty.
+    dir <- tempfile(); dir.create(dir)
+    on.exit(unlink(dir, recursive = TRUE), add = TRUE)
+    src <- file.path(dir, "part-0.parquet")
+    arrow::write_parquet(data.frame(i = 1:12), src)
+
+    local_mocked_bindings(file.copy = function(...) FALSE, .package = "base")
+    expect_error(splitParquetPart(dir, 3L), "original file is unchanged")
+
+    expect_true(file.exists(src))
+    expect_identical(arrow::read_parquet(src)$i, 1:12)
+    expect_identical(list.files(dir), "part-0.parquet")   # no stray .bak
+})
+
+test_that("splitParquetPart leaves the source intact when it cannot write", {
+    skip_if_not_installed("arrow")
+    skip_on_os("windows")
+
+    dir <- tempfile(); dir.create(dir)
+    on.exit({ Sys.chmod(dir, "0755"); unlink(dir, recursive = TRUE) }, add = TRUE)
+    src <- file.path(dir, "part-0.parquet")
+    df <- data.frame(i = 1:12)
+    arrow::write_parquet(df, src)
+
+    # Skip where the read-only bit does not actually deny writes, rather than
+    # probing for root: this also covers filesystems that ignore permissions.
+    Sys.chmod(dir, "0555")                            # no writes into 'dir'
+    skip_if(file.access(dir, mode = 2L) == 0L,
+            "directory permissions are not enforced here")
+
+    expect_error(splitParquetPart(dir, 3L))
+
+    # the original file must still be there, and still readable
+    Sys.chmod(dir, "0755")
+    expect_true(file.exists(src))
+    expect_identical(arrow::read_parquet(src)$i, 1:12)
+    expect_length(list.files(dir), 1L)                # no stray .bak left behind
+})

@@ -1,3 +1,34 @@
+# DuckDBDataFrame 0.99.24
+
+## Bug fixes
+
+- `splitParquetPart()` could destroy the data it was splitting. It called
+  `unlink()` on the source file *before* copying the new parts into place,
+  discarded `file.copy()`'s return value, and left `overwrite = FALSE`, so a
+  copy that failed for any reason (a full disk, a permission or filesystem
+  error) removed the only copy of the data and then returned **without
+  signalling an error**, leaving a manifest pointing at a resource that no
+  longer existed. The source file is now moved aside rather than deleted, the
+  copy's success is checked, and any failure rolls the directory back to
+  exactly its original contents before erroring. The move-aside is needed
+  because a newly written part can legitimately have the same name as the
+  source file; it stays within the resource directory so it remains a
+  same-filesystem rename.
+  - Relatedly, a target directory that could not be written to previously
+    produced a silent no-op that was reported to the caller as a successful
+    split. It now errors.
+- `writeDuckDBTableParquet()` dropped factor columns' levels. The lazy write
+  path is a SQL `COPY`, and DuckDB has no categorical type, so every factor
+  was flattened to plain `VARCHAR`; any level unused in the data was lost
+  outright, since it is not recoverable from the written values alone. The
+  recorded `collevels` were never consulted, even though the equivalent
+  arrow-side fixup already existed in this file for `splitParquetPart()`'s
+  own DuckDB round trip. That fixup is now factored into a shared internal
+  helper and applied on this path too, before the returned `sample_df` is
+  read back, so the caller's schema inference also sees the factors and can
+  emit the `categories`/`categoriesOrdered` schema keywords correctly.
+  Non-factor columns are untouched.
+
 # DuckDBDataFrame 0.99.23
 
 ## Bug fixes
