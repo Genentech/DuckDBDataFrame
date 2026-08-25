@@ -594,3 +594,36 @@ test_that("splitParquetPart leaves the source intact when it cannot write", {
     expect_identical(arrow::read_parquet(src)$i, 1:12)
     expect_length(list.files(dir), 1L)                # no stray .bak left behind
 })
+
+test_that("factor restoration leaves no open mapping on the files it touches", {
+    skip_if_not_installed("arrow")
+    # arrow's default memory-mapped read leaves a mapping that Windows refuses
+    # to write over, rename, or unlink ("[Windows error 1224] ... a file with a
+    # user-mapped section open"). Both helpers rewrite a file in place, and
+    # splitParquetPart() then renames and unlinks its source, so every read on
+    # that path must pass mmap = FALSE. This assertion is a no-op on POSIX but
+    # pins the invariant for the Windows builders.
+    dir <- tempfile(); dir.create(dir)
+    on.exit(unlink(dir, recursive = TRUE), add = TRUE)
+    src <- file.path(dir, "part-0.parquet")
+    arrow::write_parquet(
+        data.frame(i = 1:12,
+                   g = factor(rep(c("a", "b", "c"), 4L),
+                              levels = c("a", "b", "c", "zz"))),
+        src)
+
+    # .findFactorColumns() must not pin the file it inspects
+    expect_identical(DuckDBDataFrame:::.findFactorColumns(src), "g")
+    moved <- paste0(src, ".moved")
+    expect_true(file.rename(src, moved))
+    expect_true(file.rename(moved, src))
+
+    # after splitParquetPart(), the source is gone and every part is rewritable
+    parts <- splitParquetPart(dir, 3L)
+    expect_false(file.exists(paste0(src, ".bak")))
+    for (p in parts) {
+        expect_true(file.rename(p, paste0(p, ".x")))
+        expect_true(file.rename(paste0(p, ".x"), p))
+    }
+    expect_true(all(file.remove(parts)))
+})

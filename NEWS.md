@@ -28,6 +28,19 @@
   read back, so the caller's schema inference also sees the factors and can
   emit the `categories`/`categoriesOrdered` schema keywords correctly.
   Non-factor columns are untouched.
+- The factor-restoration path now reads with `mmap = FALSE` throughout. It
+  rewrites each parquet file in place, and `arrow`'s default memory-mapped
+  read leaves a mapping open that Windows refuses to write over, rename, or
+  unlink (`[Windows error 1224] The requested operation cannot be performed
+  on a file with a user-mapped section open`). Staging the write elsewhere
+  and renaming would not have helped, since replacing a mapped file is
+  blocked the same way. `.findFactorColumns()` switched from
+  `open_dataset()`, which offers no way to opt out of the mapping, to
+  `ParquetFileReader$create(mmap = FALSE)`; `splitParquetPart()` renames and
+  then unlinks the very file it inspects, so that read had to be unmapped
+  too. This affected the pre-existing `splitParquetPart()` restoration path
+  as well as the new one; it surfaced only now because that function had no
+  test coverage before this release.
 
 # DuckDBDataFrame 0.99.23
 

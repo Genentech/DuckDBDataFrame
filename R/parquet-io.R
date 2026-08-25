@@ -591,7 +591,9 @@ function(x, path, indexcol = "__index__", keycol = "__name__", dimtbl = NULL,
     }
 
     sample_n <- min(100L, max(1L, n))
-    sample_df <- as.data.frame(arrow::read_parquet(prep$pq_path))
+    # mmap = FALSE so this read does not leave a mapping open on a file a
+    # caller may go on to rewrite, rename, or split (blocked on Windows).
+    sample_df <- as.data.frame(arrow::read_parquet(prep$pq_path, mmap = FALSE))
     if (nrow(sample_df) > sample_n)
         sample_df <- sample_df[seq_len(sample_n), , drop = FALSE]
 
@@ -638,9 +640,9 @@ function(x, path, indexcol = "__index__", keycol = "__name__", dimtbl = NULL,
 ### arrow does the (cheap, per-part, only-if-needed) factor fixup.
 ###
 
-#' @importFrom arrow open_dataset
+#' @importFrom arrow ParquetFileReader
 .findFactorColumns <- function(path) {
-    sch <- open_dataset(path)$schema
+    sch <- ParquetFileReader$create(path, mmap = FALSE)$GetSchema()
     nms <- names(sch)
     is_dict <- vapply(nms, function(nm) {
         inherits(sch$GetFieldByName(nm)$type, "DictionaryType")
@@ -651,7 +653,8 @@ function(x, path, indexcol = "__index__", keycol = "__name__", dimtbl = NULL,
 #' @importFrom arrow read_parquet write_parquet
 .applyFactorLevels <- function(files, levels_by_col, row_group_size) {
     for (f in files) {
-        part <- read_parquet(f)
+        # mmap = FALSE is required for Windows
+        part <- read_parquet(f, mmap = FALSE)
         for (col in names(levels_by_col)) {
             info <- levels_by_col[[col]]
             part[[col]] <- factor(part[[col]], levels = info[["levels"]],
@@ -666,8 +669,11 @@ function(x, path, indexcol = "__index__", keycol = "__name__", dimtbl = NULL,
 #' @importFrom arrow read_parquet
 #' @importFrom dplyr all_of
 .restoreFactorColumns <- function(files, src, factor_cols, row_group_size) {
+    # mmap = FALSE for the same reason as .applyFactorLevels(), and because
+    # splitParquetPart() renames 'src' aside and then unlinks it once the parts
+    # are in place; Windows blocks both operations while a mapping is open.
     levels_by_col <- lapply(factor_cols, function(col) {
-        x <- read_parquet(src, col_select = all_of(col))[[col]]
+        x <- read_parquet(src, col_select = all_of(col), mmap = FALSE)[[col]]
         list(levels = levels(x), ordered = is.ordered(x))
     })
     names(levels_by_col) <- factor_cols

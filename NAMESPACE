@@ -264,6 +264,7 @@ importFrom(SparseArray,
   nzcount
 )
 importFrom(arrow,
+  ParquetFileReader,
   bool,
   float32,
   float64,
