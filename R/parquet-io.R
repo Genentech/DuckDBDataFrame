@@ -157,8 +157,14 @@ validateAppendOffset <- function(offset) {
     if (offset <= .Machine$integer.max) as.integer(offset) else offset
 }
 
+#' @importFrom arrow ParquetFileReader ReadableFile
+.parquetFileSchema <- function(path) {
+    con <- ReadableFile$create(path)
+    on.exit(try(con$close(), silent = TRUE), add = TRUE)
+    ParquetFileReader$create(con)$GetSchema()
+}
+
 #' @export
-#' @importFrom arrow read_parquet schema
 #' @rdname parquet-io
 readParquetSchema <- function(path, columns = NULL) {
     files <- list.files(path, pattern = "\\.parquet$", recursive = TRUE,
@@ -166,7 +172,7 @@ readParquetSchema <- function(path, columns = NULL) {
     if (length(files) == 0L) {
         stop("'append = TRUE' but no parquet files found under ", path)
     }
-    sch <- schema(read_parquet(files[1L], as_data_frame = FALSE))
+    sch <- .parquetFileSchema(files[1L])
     if (!is.null(columns)) {
         missing_fields <- setdiff(columns, names(sch))
         if (length(missing_fields) > 0L) {
@@ -640,11 +646,8 @@ function(x, path, indexcol = "__index__", keycol = "__name__", dimtbl = NULL,
 ### arrow does the (cheap, per-part, only-if-needed) factor fixup.
 ###
 
-#' @importFrom arrow ParquetFileReader ReadableFile
 .findFactorColumns <- function(path) {
-    con <- ReadableFile$create(path)
-    on.exit(try(con$close(), silent = TRUE), add = TRUE)
-    sch <- ParquetFileReader$create(con)$GetSchema()
+    sch <- .parquetFileSchema(path)
     nms <- names(sch)
     is_dict <- vapply(nms, function(nm) {
         inherits(sch$GetFieldByName(nm)$type, "DictionaryType")

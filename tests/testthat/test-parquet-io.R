@@ -618,6 +618,12 @@ test_that("factor restoration leaves no open mapping on the files it touches", {
     expect_true(file.rename(src, moved))
     expect_true(file.rename(moved, src))
 
+    # readParquetSchema() reads a schema off the same kind of file and is
+    # exported, so it must not pin it either
+    expect_true(inherits(readParquetSchema(dir, columns = c("i", "g")), "Schema"))
+    expect_true(file.rename(src, moved))
+    expect_true(file.rename(moved, src))
+
     # after splitParquetPart(), the source is gone and every part is rewritable
     parts <- splitParquetPart(dir, 3L)
     expect_false(file.exists(paste0(src, ".bak")))

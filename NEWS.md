@@ -49,6 +49,14 @@
   the source file, rather than at function exit, so nothing on the DuckDB
   side still refers to it either.
 
+  The schema read is now shared by `readParquetSchema()` and
+  `.findFactorColumns()` through one internal helper. `readParquetSchema()`
+  had the same leak (verified: one open handle per call, now none). It was
+  not reachable as a bug, since its only caller appends a new part rather
+  than rewriting the file it inspected, but it is exported and one step away
+  from the paths that do rewrite. It also no longer reads the file's data
+  just to obtain its schema.
+
   This affected the pre-existing `splitParquetPart()` restoration path as
   well as the new one; it surfaced only now because that function had no
   test coverage before this release.
