@@ -353,3 +353,30 @@ test_that("a directory marked _INCOMPLETE is refused explicitly", {
     unlink(file.path(dir, "_INCOMPLETE"))
     expect_identical(nrow(as.data.frame(DuckDBDataFrame(dir))), 3L)
 })
+
+test_that("dimtbl-based partition pruning works for a keycol whose values are not row positions", {
+    test_df <- data.frame(id = c(1001L, 1002L, 1003L), grp = c(1L, 1L, 2L),
+                          value = c("a", "b", "c"))
+    test_path <- tempfile(fileext = ".parquet")
+    arrow::write_parquet(test_df, test_path)
+    on.exit(unlink(test_path), add = TRUE)
+
+    dimtbl <- data.frame(grp = c(1L, 1L, 2L), row.names = c("1001", "1002", "1003"))
+
+    tbl <- DuckDBTable(test_path, datacols = c("grp", "value"),
+                       keycols = list(id = 1002L),
+                       dimtbls = list(id = dimtbl))
+    checkDuckDBTable(tbl, data.frame(grp = 1L, value = "b", id = 1002L))
+
+    test_df2 <- data.frame(id = c("S1", "S2", "S3"), grp = c(1L, 1L, 2L),
+                           value = c("a", "b", "c"))
+    test_path2 <- tempfile(fileext = ".parquet")
+    arrow::write_parquet(test_df2, test_path2)
+    on.exit(unlink(test_path2), add = TRUE)
+
+    dimtbl2 <- data.frame(grp = c(1L, 1L, 2L), row.names = c("S1", "S2", "S3"))
+    tbl2 <- DuckDBTable(test_path2, datacols = c("grp", "value"),
+                        keycols = list(id = "S2"),
+                        dimtbls = list(id = dimtbl2))
+    checkDuckDBTable(tbl2, data.frame(grp = 1L, value = "b", id = "S2"))
+})

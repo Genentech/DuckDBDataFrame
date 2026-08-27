@@ -1,3 +1,17 @@
+# DuckDBDataFrame 0.99.26
+
+## Bug fixes
+
+- `.filter_tblconn()`'s dimension-table-based partition pruning
+  (`DuckDBTable-class.R`) indexed a dim table by a keycol's raw stored
+  values using `dimtbl[set, , drop = FALSE]`. R's `[.data.frame` dispatches
+  on the index's type: a numeric index is always positional (row number),
+  a character index is a row-name lookup. `set` is numeric, so this was a
+  positional lookup, silently wrong whenever a key's value differs from its
+  row position in the dim table -- e.g. a `DuckDBTable`/`DuckDBArray`
+  representing only a subset of a larger dataset's keys (a shard), which is
+  exactly the shape `dimtbls`-based pruning exists to optimize.
+
 # DuckDBDataFrame 0.99.25
 
 ## Bug fixes
