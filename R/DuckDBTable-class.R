@@ -474,16 +474,11 @@ setMethod("dbconn", "DuckDBTable", function(x) x@conn$src$con)
         if (i %in% names(dimtbls)) {
             # Filter with dimension tables
             dimtbl <- dimtbls[[i]]
-            dimtbl_rn <- rownames(dimtbl)
-            comp <- setdiff(dimtbl_rn %||% seq_len(nrow(dimtbl)), set)
+            comp <- setdiff(rownames(dimtbl) %||% seq_len(nrow(dimtbl)), set)
             ncomp <- length(comp)
             if (ncomp > 0L) {
                 # Add the dimension table filters
-                sectbl <- if (is.null(dimtbl_rn)) {
-                    dimtbl[set, , drop = FALSE]
-                } else {
-                    dimtbl[as.character(set), , drop = FALSE]
-                }
+                sectbl <- dimtbl[set, , drop = FALSE]
                 for (j in colnames(sectbl)) {
                     part <- unique(sectbl[[j]])
                     comp2 <- setdiff(unique(dimtbl[[j]]), part)
