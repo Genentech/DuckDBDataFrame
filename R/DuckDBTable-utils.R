@@ -40,6 +40,10 @@
 #' @section Numerical Data Methods:
 #' In the code snippets below, \code{x} is a DuckDBTable object:
 #' \describe{
+#'   \item{\code{anyNA(x)}:}{
+#'     Returns a single logical: \code{TRUE} if any value in \code{x} is
+#'     missing.
+#'   }
 #'   \item{\code{is.finite(x)}:}{
 #'     Returns a DuckDBTable containing logicals that indicate which values are
 #'     finite.
@@ -47,6 +51,10 @@
 #'   \item{\code{is.infinite(x)}:}{
 #'     Returns a DuckDBTable containing logicals that indicate which values are
 #'     infinite.
+#'   }
+#'   \item{\code{is.na(x)}:}{
+#'     Returns a DuckDBTable containing logicals that indicate which values are
+#'     missing (SQL \code{NULL}).
 #'   }
 #'   \item{\code{is.nan(x)}:}{
 #'     Returns a DuckDBTable containing logicals that indicate which values are
@@ -234,8 +242,10 @@
 #' @aliases Math,DuckDBTable-method
 #' @aliases Summary,DuckDBTable-method
 #'
+#' @aliases anyNA,DuckDBTable-method
 #' @aliases is.finite,DuckDBTable-method
 #' @aliases is.infinite,DuckDBTable-method
+#' @aliases is.na,DuckDBTable-method
 #' @aliases is.nan,DuckDBTable-method
 #' @aliases mean,DuckDBTable-method
 #' @aliases var,DuckDBTable,ANY-method
@@ -513,6 +523,25 @@ setMethod("Summary", "DuckDBTable", function(x, ..., na.rm = FALSE) {
 ### Numerical methods
 ###
 
+.isNaExpr <- function(j, type) {
+    if (identical(type, "double")) {
+        call("|", call("is.na", j), call("isnan", j))
+    } else {
+        call("is.na", j)
+    }
+}
+
+#' @export
+#' @importFrom dplyr pull summarize
+#' @importFrom S4Vectors mendoapply
+setMethod("anyNA", "DuckDBTable", function(x, recursive = FALSE) {
+    types <- coltypes(x)
+    exprs <- mendoapply(.isNaExpr, x@datacols, types[names(x@datacols)])
+    combined <- Reduce(function(a, b) call("|", a, b), exprs)
+    aggr <- call("any", combined, na.rm = TRUE)
+    pull(summarize(tblconn(x, select = FALSE), !!aggr))
+})
+
 #' @export
 setMethod("is.finite", "DuckDBTable", function(x) {
     sql_call(x, "isfinite")
@@ -521,6 +550,14 @@ setMethod("is.finite", "DuckDBTable", function(x) {
 #' @export
 setMethod("is.infinite", "DuckDBTable", function(x) {
     sql_call(x, "isinf")
+})
+
+#' @export
+#' @importFrom S4Vectors mendoapply
+setMethod("is.na", "DuckDBTable", function(x) {
+    types <- coltypes(x)
+    datacols <- mendoapply(.isNaExpr, x@datacols, types[names(x@datacols)])
+    replaceSlots(x, datacols = datacols, check = FALSE)
 })
 
 #' @export

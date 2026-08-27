@@ -1,3 +1,33 @@
+# DuckDBDataFrame 0.99.25
+
+## Bug fixes
+
+- `is.na()` and `anyNA()` on a `DuckDBColumn`, `DuckDBTable`, or
+  `DuckDBDataFrame` silently reported no missing values at all, regardless
+  of the actual data. Neither class defined its own `is.na`/`anyNA`, so both
+  inherited S4Vectors' `Vector`/`List` fallback stubs
+  (`rep.int(FALSE, length(x))` and `function(x, recursive = FALSE) FALSE`),
+  which exist for abstract `Vector` subclasses with no inherent notion of
+  missingness -- the wrong inheritance for a class backed by real,
+  well-defined per-row SQL `NULL` semantics. Both now have real methods:
+  `is.na()` delegates to `sql_call(x, "is.na")` (dbplyr's SQL translator
+  already renders the R function name `is.na` as `IS NULL`, so no new
+  query-building code was needed, only reusing the existing `is.finite`/
+  `is.infinite`/`is.nan` delegation pattern with a different function name);
+  `anyNA()` ORs every data column's "is missing" expression into one per-row
+  predicate and evaluates a single `any()` aggregate of it in one query.
+  Because `DuckDBDataFrame` extends `DuckDBTable` before `DataFrame`,
+  `anyNA()` needed to work correctly for any number of data columns itself
+  rather than relying on the S4Vectors per-column `DataFrame` composition,
+  which is never reached.
+- Fallout from the above, caught by extending the existing `is.finite`/
+  `is.infinite`/`is.nan` test to a `special_path` fixture that already
+  includes a `NaN`: DuckDB's `x IS NULL` does not treat `NaN` as missing
+  (`NaN IS NULL` is `FALSE` in DuckDB), but R's `is.na()` does (`is.na(NaN)`
+  is `TRUE`). `is.na()`/`anyNA()` now additionally check `isnan(x)` for
+  `"double"`-typed columns specifically, matching R's semantics exactly
+  without affecting any other column type.
+
 # DuckDBDataFrame 0.99.24
 
 ## Bug fixes

@@ -177,6 +177,39 @@ test_that("Special numeric functions work as expected for a DuckDBTable", {
     checkDuckDBTable(is.nan(tbl), expected)
 })
 
+test_that("is.na/anyNA work as expected for a single-column DuckDBTable", {
+    tbl <- DuckDBTable(special_path, datacols = "x", keycols = list(id = letters[1:4]))
+
+    expected <- as.data.frame(tbl)
+    expected$x <- is.na(expected$x)
+    checkDuckDBTable(is.na(tbl), expected)
+
+    expect_identical(anyNA(tbl), anyNA(as.data.frame(tbl)[["x"]]))
+})
+
+test_that("is.na/anyNA work as expected for a multi-column DuckDBTable", {
+    test_df <- data.frame(
+        id = 1:5,
+        v = c(1, NA, 3, NA, 5),
+        w = c(NA, 2, 3, 4, NA)
+    )
+    test_path <- tempfile(fileext = ".parquet")
+    arrow::write_parquet(test_df, test_path)
+    on.exit(unlink(test_path), add = TRUE)
+
+    tbl <- DuckDBTable(test_path, datacols = c("v", "w"), keycols = "id")
+
+    expected <- as.data.frame(tbl)
+    expected$v <- is.na(expected$v)
+    expected$w <- is.na(expected$w)
+    checkDuckDBTable(is.na(tbl), expected)
+
+    expect_true(anyNA(tbl))
+
+    no_na <- DuckDBTable(mtcars_parquet, datacols = c("mpg", "cyl"), keycols = "model")
+    expect_false(anyNA(no_na))
+})
+
 test_that("Summary methods work as expected for a DuckDBTable", {
     tbl <- DuckDBTable(titanic_parquet, datacols = "fate", keycols = c("Class", "Sex", "Age", "Survived"))
     expect_identical(max(tbl), max(as.data.frame(tbl)[["fate"]]))

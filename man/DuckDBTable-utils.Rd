@@ -11,8 +11,10 @@
 \alias{!,DuckDBTable-method}
 \alias{Math,DuckDBTable-method}
 \alias{Summary,DuckDBTable-method}
+\alias{anyNA,DuckDBTable-method}
 \alias{is.finite,DuckDBTable-method}
 \alias{is.infinite,DuckDBTable-method}
+\alias{is.na,DuckDBTable-method}
 \alias{is.nan,DuckDBTable-method}
 \alias{mean,DuckDBTable-method}
 \alias{var,DuckDBTable,ANY-method}
@@ -94,6 +96,10 @@ DuckDBTable objects have support for S4 group generic functionality:
 
 In the code snippets below, \code{x} is a DuckDBTable object:
 \describe{
+  \item{\code{anyNA(x)}:}{
+    Returns a single logical: \code{TRUE} if any value in \code{x} is
+    missing.
+  }
   \item{\code{is.finite(x)}:}{
     Returns a DuckDBTable containing logicals that indicate which values are
     finite.
@@ -101,6 +107,10 @@ In the code snippets below, \code{x} is a DuckDBTable object:
   \item{\code{is.infinite(x)}:}{
     Returns a DuckDBTable containing logicals that indicate which values are
     infinite.
+  }
+  \item{\code{is.na(x)}:}{
+    Returns a DuckDBTable containing logicals that indicate which values are
+    missing (SQL \code{NULL}).
   }
   \item{\code{is.nan(x)}:}{
     Returns a DuckDBTable containing logicals that indicate which values are

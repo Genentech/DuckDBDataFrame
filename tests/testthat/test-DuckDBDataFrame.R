@@ -18,6 +18,29 @@ test_that("basic methods work for a DuckDBDataFrame", {
     checkDuckDBDataFrame(df, infert)
 })
 
+test_that("is.na/anyNA work as expected for a DuckDBDataFrame", {
+    test_df <- data.frame(
+        id = 1:5,
+        v = c(1, NA, 3, NA, 5),
+        w = c(NA, 2, 3, 4, NA)
+    )
+    test_path <- tempfile(fileext = ".parquet")
+    arrow::write_parquet(test_df, test_path)
+    on.exit(unlink(test_path), add = TRUE)
+
+    df <- DuckDBDataFrame(test_path, datacols = c("v", "w"), keycol = "id")
+
+    expected <- as.data.frame(df)
+    expected$v <- is.na(expected$v)
+    expected$w <- is.na(expected$w)
+    checkDuckDBDataFrame(is.na(df), expected)
+
+    expect_true(anyNA(df))
+
+    no_na_df <- DuckDBDataFrame(mtcars_parquet, datacols = c("mpg", "cyl"), keycol = "model")
+    expect_false(anyNA(no_na_df))
+})
+
 test_that("renaming columns works for a DuckDBDataFrame", {
     df <- DuckDBDataFrame(mtcars_parquet, datacols = colnames(mtcars), keycol = list(model = rownames(mtcars)))
     expected <- mtcars

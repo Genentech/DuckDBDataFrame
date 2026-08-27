@@ -40,6 +40,10 @@
 #' @section Numerical Data Methods:
 #' In the code snippets below, \code{x} is a DuckDBColumn object:
 #' \describe{
+#'   \item{\code{anyNA(x)}:}{
+#'     Returns a single logical: \code{TRUE} if any value in \code{x} is
+#'     missing.
+#'   }
 #'   \item{\code{is.finite(x)}:}{
 #'     Returns a DuckDBColumn containing logicals that indicate which values are
 #'     finite.
@@ -47,6 +51,10 @@
 #'   \item{\code{is.infinite(x)}:}{
 #'     Returns a DuckDBColumn containing logicals that indicate which values are
 #'     infinite.
+#'   }
+#'   \item{\code{is.na(x)}:}{
+#'     Returns a DuckDBColumn containing logicals that indicate which values are
+#'     missing (SQL \code{NULL}).
 #'   }
 #'   \item{\code{is.nan(x)}:}{
 #'     Returns a DuckDBColumn containing logicals that indicate which values are
@@ -216,8 +224,10 @@
 #' @aliases Math,DuckDBColumn-method
 #' @aliases Summary,DuckDBColumn-method
 #'
+#' @aliases anyNA,DuckDBColumn-method
 #' @aliases is.finite,DuckDBColumn-method
 #' @aliases is.infinite,DuckDBColumn-method
+#' @aliases is.na,DuckDBColumn-method
 #' @aliases is.nan,DuckDBColumn-method
 #' @aliases mean,DuckDBColumn-method
 #' @aliases var,DuckDBColumn,ANY-method
@@ -344,12 +354,22 @@ setMethod("Summary", "DuckDBColumn", function(x, ..., na.rm = FALSE) {
 ###
 
 #' @export
+setMethod("anyNA", "DuckDBColumn", function(x, recursive = FALSE) {
+    callGeneric(x@table, recursive = recursive)
+})
+
+#' @export
 setMethod("is.finite", "DuckDBColumn", function(x) {
     replaceSlots(x, table = callGeneric(x@table), check = FALSE)
 })
 
 #' @export
 setMethod("is.infinite", "DuckDBColumn", function(x) {
+    replaceSlots(x, table = callGeneric(x@table), check = FALSE)
+})
+
+#' @export
+setMethod("is.na", "DuckDBColumn", function(x) {
     replaceSlots(x, table = callGeneric(x@table), check = FALSE)
 })
 

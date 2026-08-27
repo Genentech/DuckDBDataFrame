@@ -121,6 +121,17 @@ test_that("Special numeric functions work as expected for a DuckDBColumn", {
     checkDuckDBColumn(is.nan(x), is.nan(as.vector(x)))
 })
 
+test_that("is.na/anyNA work as expected for a DuckDBColumn", {
+    df <- DuckDBDataFrame(special_path, datacols = "x", keycol = list(id = letters[1:4]))
+    x <- df[["x"]]
+
+    checkDuckDBColumn(is.na(x), is.na(as.vector(x)))
+    expect_identical(anyNA(x), anyNA(as.vector(x)))
+
+    y <- df[["x"]][1:2]
+    expect_false(anyNA(y))
+})
+
 test_that("Summary methods work as expected for a DuckDBColumn", {
     df <- DuckDBDataFrame(mtcars_parquet, datacols = colnames(mtcars), keycol = "model")
     mpg <- df[["mpg"]]

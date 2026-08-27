@@ -11,8 +11,10 @@
 \alias{!,DuckDBColumn-method}
 \alias{Math,DuckDBColumn-method}
 \alias{Summary,DuckDBColumn-method}
+\alias{anyNA,DuckDBColumn-method}
 \alias{is.finite,DuckDBColumn-method}
 \alias{is.infinite,DuckDBColumn-method}
+\alias{is.na,DuckDBColumn-method}
 \alias{is.nan,DuckDBColumn-method}
 \alias{mean,DuckDBColumn-method}
 \alias{var,DuckDBColumn,ANY-method}
@@ -92,6 +94,10 @@ DuckDBColumn objects have support for S4 group generic functionality:
 
 In the code snippets below, \code{x} is a DuckDBColumn object:
 \describe{
+  \item{\code{anyNA(x)}:}{
+    Returns a single logical: \code{TRUE} if any value in \code{x} is
+    missing.
+  }
   \item{\code{is.finite(x)}:}{
     Returns a DuckDBColumn containing logicals that indicate which values are
     finite.
@@ -99,6 +105,10 @@ In the code snippets below, \code{x} is a DuckDBColumn object:
   \item{\code{is.infinite(x)}:}{
     Returns a DuckDBColumn containing logicals that indicate which values are
     infinite.
+  }
+  \item{\code{is.na(x)}:}{
+    Returns a DuckDBColumn containing logicals that indicate which values are
+    missing (SQL \code{NULL}).
   }
   \item{\code{is.nan(x)}:}{
     Returns a DuckDBColumn containing logicals that indicate which values are

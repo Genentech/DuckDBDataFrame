@@ -86,6 +86,7 @@ exportMethods(IQR)
 exportMethods(Math)
 exportMethods(Ops)
 exportMethods(Summary)
+exportMethods(anyNA)
 exportMethods(as.data.frame)
 exportMethods(as.env)
 exportMethods(as.list)
@@ -118,6 +119,7 @@ exportMethods(has_row_number)
 exportMethods(head)
 exportMethods(is.finite)
 exportMethods(is.infinite)
+exportMethods(is.na)
 exportMethods(is.nan)
 exportMethods(is_nonzero)
 exportMethods(is_sparse)
@@ -243,6 +245,7 @@ importFrom(S4Vectors,
   makeNakedCharacterMatrixForDisplay,
   make_zero_col_DFrame,
   mcols,
+  mendoapply,
   metadata,
   nLnode,
   nRnode,
