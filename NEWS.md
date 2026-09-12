@@ -1,3 +1,23 @@
+# DuckDBDataFrame 0.99.27
+
+## Bug fixes
+
+- `sql_fun,DuckDBTable-method` built its `return_type IN (...)` predicate by
+  pasting the user-supplied `return_type` argument directly between
+  hardcoded quotes (`paste0("'", return_type, "'", ...)`), with no
+  escaping, before sending the query to `dbGetQuery()`. `return_type` was
+  validated only as `is.character()`, so a value containing a `'` (e.g.
+  `"x') OR 1=1 --"`) broke out of the string literal. Real-world
+  exploitability was low (this queries DuckDB's own local, in-process,
+  read-only `duckdb_functions()` catalog inside an embedded single-user
+  database, no network boundary or cross-tenant data involved), but it was
+  the one place in the file not using `DBI::dbQuoteString()` despite DBI
+  already being imported in the same method. The parallel
+  `function_type IN (...)` predicate built the same way was not actually
+  exploitable (`match.arg(..., several.ok = TRUE)` constrains it to a
+  fixed enum first) but is fixed the same way for consistency. Both now
+  quote via `DBI::dbQuoteString(conn, ...)`.
+
 # DuckDBDataFrame 0.99.26
 
 Reverted

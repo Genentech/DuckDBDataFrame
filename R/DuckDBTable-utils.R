@@ -317,7 +317,7 @@ setMethod("sql_call", "DuckDBTable", function(x, fun, ...) {
 ###
 
 #' @export
-#' @importFrom DBI dbGetQuery
+#' @importFrom DBI dbGetQuery dbQuoteString
 #' @importFrom dbplyr sql_render
 setMethod("sql_fun", "DuckDBTable",
 function(x, function_type = NULL, return_type = NULL, description = FALSE)
@@ -366,14 +366,14 @@ function(x, function_type = NULL, return_type = NULL, description = FALSE)
         if (!is.character(return_type)) {
             stop("'return_type' must be a character vector")
         }
-        types_sql <- paste0("'", return_type, "'", collapse = ", ")
+        types_sql <- paste(dbQuoteString(conn, return_type), collapse = ", ")
         predicate <- c(predicate, sprintf("return_type IN (%s)", types_sql))
     }
 
     if (length(function_type) > 0L) {
         allowed_ftypes <- c("scalar", "aggregate", "macro", "table", "pragma", "table_macro")
         ftypes <- match.arg(function_type, allowed_ftypes, several.ok = TRUE)
-        ftypes_sql <- paste0("'", ftypes, "'", collapse = ", ")
+        ftypes_sql <- paste(dbQuoteString(conn, ftypes), collapse = ", ")
         predicate <- c(predicate, sprintf("function_type IN (%s)", ftypes_sql))
     }
 

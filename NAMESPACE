@@ -198,7 +198,8 @@ importFrom(DBI,
   dbExecute,
   dbGetQuery,
   dbQuoteIdentifier,
-  dbQuoteLiteral
+  dbQuoteLiteral,
+  dbQuoteString
 )
 importFrom(DelayedArray,
   getAutoRealizationBackend,
