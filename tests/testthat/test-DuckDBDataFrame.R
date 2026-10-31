@@ -273,6 +273,89 @@ test_that("rbind produces errors", {
     expect_error(rbind(df, df))
 })
 
+test_that("rbind works for row-number-keyed DuckDBDataFrame", {
+    a <- DuckDBDataFrame(mtcars_parquet)
+    b <- DuckDBDataFrame(mtcars_parquet)
+
+    # Identical columns: matches base rbind() of the same data twice.
+    expected <- rbind(mtcars_df, mtcars_df)
+    checkDuckDBDataFrame(rbind(a, b), expected)
+
+    # Binding 3+ tables in one call.
+    expected3 <- rbind(mtcars_df, mtcars_df, mtcars_df)
+    checkDuckDBDataFrame(rbind(a, b, a), expected3)
+
+    # Different (partially overlapping) columns: NULL-filled, like
+    # dplyr::bind_rows() for in-memory data frames.
+    sub <- a[, c("model", "mpg", "cyl")]
+    expected_sub <- dplyr::bind_rows(mtcars_df, as.data.frame(sub))
+    rownames(expected_sub) <- NULL
+    checkDuckDBDataFrame(rbind(a, sub), expected_sub)
+
+    # checkDuckDBDataFrame() only checks shape for row-number-keyed results
+    # (there's no stable row order to compare values against); verify NULL-fill
+    # values directly: 'sub'-contributed rows must be NA for dropped columns,
+    # 'a'-contributed rows must retain their real values unchanged.
+    df_sub <- as.data.frame(rbind(a, sub))
+    expect_equal(sum(is.na(df_sub[["disp"]])), nrow(sub))
+    expect_setequal(df_sub[["disp"]][!is.na(df_sub[["disp"]])], mtcars_df[["disp"]])
+
+    # 3+ tables with genuinely disjoint (not just subset) non-key columns.
+    t1 <- a[, c("model", "mpg", "cyl")]
+    t2 <- a[, c("model", "hp", "wt")]
+    t3 <- a[, c("model", "qsec")]
+    df3 <- as.data.frame(rbind(t1, t2, t3))
+    expect_identical(sort(colnames(df3)), sort(c("model", "mpg", "cyl", "hp", "wt", "qsec")))
+    expect_equal(nrow(df3), nrow(mtcars_df) * 3L)
+    expect_equal(sum(!is.na(df3[["mpg"]])), nrow(mtcars_df))
+    expect_equal(sum(!is.na(df3[["hp"]])), nrow(mtcars_df))
+    expect_equal(sum(!is.na(df3[["qsec"]])), nrow(mtcars_df))
+})
+
+test_that("rbind merges matching collevels and errors on conflicting ones", {
+    dfA <- data.frame(id = 1:3, grp = c("a", "b", "a"))
+    dfB <- data.frame(id = 4:5, grp = c("a", "b"))
+    pathA <- tempfile(fileext = ".parquet")
+    pathB <- tempfile(fileext = ".parquet")
+    on.exit(unlink(c(pathA, pathB)))
+    arrow::write_parquet(dfA, pathA)
+    arrow::write_parquet(dfB, pathB)
+
+    lvls <- list(grp = list(levels = c("a", "b"), ordered = FALSE))
+    a <- DuckDBDataFrame(pathA, collevels = lvls)
+    b <- DuckDBDataFrame(pathB, collevels = lvls)
+
+    # Same recorded levels on both sides: merges cleanly, no NA introduced.
+    combined <- as.data.frame(rbind(a, b))
+    expect_false(anyNA(combined[["grp"]]))
+    expect_setequal(combined[["grp"]], c("a", "b"))
+
+    # Different recorded levels for the same column: silently keeping one
+    # side's levels would have .apply_collevels() turn the other side's
+    # values into NA on collection, so this must error instead.
+    dfC <- data.frame(id = 6:7, grp = c("x", "y"))
+    pathC <- tempfile(fileext = ".parquet")
+    on.exit(unlink(pathC), add = TRUE)
+    arrow::write_parquet(dfC, pathC)
+    c_mismatched <- DuckDBDataFrame(pathC, collevels = list(grp = list(levels = c("x", "y"), ordered = FALSE)))
+    expect_error(rbind(a, c_mismatched), "factor levels")
+
+    # One side records 'grp' as a factor, the other doesn't: also a conflict,
+    # since 'grp's raw values in the plain-character table may not be a
+    # subset of the recorded levels.
+    plain <- DuckDBDataFrame(pathB)
+    expect_error(rbind(a, plain), "factor levels")
+})
+
+test_that("rbind errors when any table has explicit keycols", {
+    a <- DuckDBDataFrame(mtcars_parquet)
+    keyed <- DuckDBDataFrame(mtcars_parquet, datacols = colnames(mtcars),
+                             keycol = list(model = rownames(mtcars)))
+
+    expect_error(rbind(keyed, keyed), "keycols")
+    expect_error(rbind(a, keyed), "keycols")
+})
+
 test_that("cbind operations that works for DuckDBDataFrame", {
     df <- DuckDBDataFrame(mtcars_parquet, datacols = colnames(mtcars), keycol = list(model = rownames(mtcars)))
 

@@ -1,3 +1,36 @@
+# DuckDBDataFrame 0.99.28
+
+## New features
+
+- `rbind()` now works for a `DuckDBTable`/`DuckDBDataFrame` keyed by row
+  number (the default construction, i.e. no explicit `keycols`), backed by
+  `bindROWS,DuckDBTable-method` (previously an unconditional `stop()`).
+  Reported by a user who drafted a candidate implementation around
+  `dbplyr::bind_queries()` (`UNION ALL`) and asked whether `rbind()`/`c()`
+  not being supported was a design choice. It was deliberate for tables
+  with real, named `keycols` (row identity under a named key has no
+  well-defined union across tables: colliding or disjoint key values,
+  mismatched `dimtbls`, etc.), so that case still errors, now with a
+  message naming the offending `keycols`. For the common row-number-keyed
+  case, each side's pending `datacols` transformations are resolved via
+  `tblconn()` before the union (not the raw `@conn`, which would silently
+  drop them), and a fresh row-number key is computed afterward so rows are
+  uniquely addressable in the combined table. Tables with different columns
+  are supported: missing columns are NULL-filled, as `dplyr::bind_rows()`
+  does for in-memory data, but unlike `bind_rows()`, a shared column with a
+  different type across tables (e.g. integer vs. character) is implicitly
+  cast by DuckDB rather than erroring (values are preserved, not lost, but
+  this can mask a real type mismatch in calling code). `collevels` (factor
+  levels) are merged across inputs: a shared column must have the *same*
+  recorded levels (or not be a factor) in every table supplying it, or
+  binding errors — silently preferring one table's levels would let
+  `.apply_collevels()` quietly turn another table's values into `NA` on
+  collection. Requires `dbplyr >= 2.6.0` (for `bind_queries()`, gated at
+  runtime, not pinned in `DESCRIPTION` per house convention). Note `c()` is
+  not wired to `bindROWS()` for this class (unlike `rbind()`, which
+  dispatches through `BiocGenerics::rbind`'s `RectangularData` method); use
+  `rbind()` instead.
+
 # DuckDBDataFrame 0.99.27
 
 ## Bug fixes

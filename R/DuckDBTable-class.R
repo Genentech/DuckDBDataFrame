@@ -8,7 +8,12 @@
 #' The DuckDBTable class provides a way to define a DuckDB table as a
 #' \linkS4class{RectangularData} object. It supports \emph{standard 2D API}
 #' such as \code{dim()}, \code{nrow()}, \code{ncol()}, \code{dimnames()},
-#' \code{x[i, j]} and \code{cbind()}, but does not support \code{rbind()}.
+#' \code{x[i, j]}, \code{cbind()}, and \code{rbind()} (via \code{UNION ALL})
+#' for tables keyed by row number (the default; see \code{keycols} below).
+#' \code{rbind()} on a table with explicit, named \code{keycols} is not
+#' supported, since row identity under a real key has no well-defined union
+#' across tables. (\code{c()} is not currently wired to \code{bindROWS()} for
+#' this class, unlike \code{rbind()}; use \code{rbind()}.)
 #'
 #' @section Constructor:
 #' \describe{
@@ -1375,9 +1380,64 @@ setMethod("tail", "DuckDBTable", function(x, n = 6L, ...) {
 
 #' @export
 #' @importFrom S4Vectors classNameForDisplay bindROWS
+#' @importFrom dbplyr bind_queries
+#' @importFrom dplyr mutate select
+#' @importFrom stats setNames
 setMethod("bindROWS", "DuckDBTable",
 function(x, objects = list(), use.names = TRUE, ignore.mcols = FALSE, check = TRUE) {
-    stop(sprintf("binding rows to a %s is not supported", classNameForDisplay(x)))
+    if (!exists("bind_queries", where = asNamespace("dbplyr"), mode = "function")) {
+        stop("binding rows requires dbplyr >= 2.6.0 (for 'bind_queries()'); ",
+             "please update the 'dbplyr' package")
+    }
+
+    tables <- c(list(x), objects)
+    for (obj in tables) {
+        if (!is(obj, "DuckDBTable")) {
+            stop("all objects must be of class 'DuckDBTable'")
+        }
+        if (!has_row_number(obj)) {
+            stop(sprintf("binding rows to a %s with explicit 'keycols' (%s) is not supported",
+                         classNameForDisplay(obj), paste(names(obj@keycols), collapse = ", ")))
+        }
+    }
+
+    # Resolve each side's pending 'datacols' transformations via tblconn(),
+    # then drop its own row-number keycol column before unioning
+    tbls <- lapply(tables, function(obj) {
+        select(tblconn(obj), !!!lapply(names(obj@datacols), as.name))
+    })
+    conn <- do.call(bind_queries, tbls)
+
+    cols <- colnames(conn)
+    datacols <- as.expression(lapply(setNames(cols, cols), as.name))
+
+    # Name the new keycol the way the constructor does, so it can't collide
+    # with a real (possibly NULL-filled) column name.
+    keycol_name <- tail(make.unique(c(cols, names(x@keycols)), sep = "_"), 1L)
+    conn <- mutate(conn, !!!setNames(list(call("row_number")), keycol_name))
+    keycols <- setNames(list(set_row_number(conn)), keycol_name)
+
+    # A shared column name must be a factor with the SAME 'collevels' entry
+    # (or not a factor at all) in every table that supplies it
+    collevels <- x@collevels
+    for (obj in tables[-1L]) {
+        for (nm in names(obj@datacols)) {
+            if (nm %in% names(collevels)) {
+                if (!identical(collevels[[nm]], obj@collevels[[nm]])) {
+                    stop("cannot bind rows: column '", nm, "' is recorded with ",
+                         "different (or absent) factor levels across tables; ",
+                         "use 'coltypes<-' to make 'collevels' for '", nm,
+                         "' consistent before binding")
+                }
+            } else if (nm %in% names(obj@collevels)) {
+                collevels[[nm]] <- obj@collevels[[nm]]
+            }
+        }
+    }
+    collevels <- .normalize_collevels(datacols, collevels)
+
+    replaceSlots(x, conn = conn, datacols = datacols, keycols = keycols,
+                 collevels = collevels, check = FALSE)
 })
 
 #' @export

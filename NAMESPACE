@@ -292,6 +292,7 @@ importFrom(bit64,
   is.integer64
 )
 importFrom(dbplyr,
+  bind_queries,
   lazy_select_query,
   sql_render
 )

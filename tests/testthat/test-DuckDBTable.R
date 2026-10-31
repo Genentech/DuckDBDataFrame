@@ -118,6 +118,21 @@ test_that("DuckDBTable can be bound across columns", {
     checkDuckDBTable(cbind(tbl, carb=tbl[,"carb"]), expected)
 })
 
+test_that("DuckDBTable can be bound across rows when row-number-keyed", {
+    a <- DuckDBTable(mtcars_parquet)
+    b <- DuckDBTable(mtcars_parquet)
+
+    expected <- rbind(mtcars_df, mtcars_df)
+    checkDuckDBTable(rbind(a, b), expected)
+
+    expected3 <- rbind(mtcars_df, mtcars_df, mtcars_df)
+    checkDuckDBTable(rbind(a, b, a), expected3)
+
+    keyed <- DuckDBTable(mtcars_parquet, datacols = colnames(mtcars), keycols = "model")
+    expect_error(rbind(keyed, keyed), "keycols")
+    expect_error(rbind(a, keyed), "keycols")
+})
+
 test_that("Arith methods work as expected for a DuckDBTable", {
     tbl <- DuckDBTable(mtcars_parquet, datacols = colnames(mtcars), keycols = "model")
 

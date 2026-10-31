@@ -44,7 +44,12 @@ class for DuckDB tables by wrapping a tbl_duckdb_connection object.
 The DuckDBTable class provides a way to define a DuckDB table as a
 \linkS4class{RectangularData} object. It supports \emph{standard 2D API}
 such as \code{dim()}, \code{nrow()}, \code{ncol()}, \code{dimnames()},
-\code{x[i, j]} and \code{cbind()}, but does not support \code{rbind()}.
+\code{x[i, j]}, \code{cbind()}, and \code{rbind()} (via \code{UNION ALL})
+for tables keyed by row number (the default; see \code{keycols} below).
+\code{rbind()} on a table with explicit, named \code{keycols} is not
+supported, since row identity under a real key has no well-defined union
+across tables. (\code{c()} is not currently wired to \code{bindROWS()} for
+this class, unlike \code{rbind()}; use \code{rbind()}.)
 }
 \section{Constructor}{
 
