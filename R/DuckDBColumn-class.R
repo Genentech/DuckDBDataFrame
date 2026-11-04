@@ -89,6 +89,7 @@
 #' @aliases tail,DuckDBColumn-method
 #'
 #' @aliases as.vector,DuckDBColumn-method
+#' @aliases xtfrm,DuckDBColumn-method
 #' @aliases realize,DuckDBColumn-method
 #'
 #' @aliases show,DuckDBColumn-method
@@ -297,6 +298,9 @@ setMethod("as.vector", "DuckDBColumn", function(x, mode = "any") {
     }
     vec
 })
+
+#' @export
+setMethod("xtfrm", "DuckDBColumn", function(x) xtfrm(as.vector(x)))
 
 #' @export
 #' @importFrom DelayedArray getAutoRealizationBackend realize

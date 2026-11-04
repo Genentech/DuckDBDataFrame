@@ -19,6 +19,7 @@
 \alias{head,DuckDBColumn-method}
 \alias{tail,DuckDBColumn-method}
 \alias{as.vector,DuckDBColumn-method}
+\alias{xtfrm,DuckDBColumn-method}
 \alias{realize,DuckDBColumn-method}
 \alias{show,DuckDBColumn-method}
 \alias{showAsCell,DuckDBColumn-method}

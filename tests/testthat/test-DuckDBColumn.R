@@ -132,6 +132,23 @@ test_that("is.na/anyNA work as expected for a DuckDBColumn", {
     expect_false(anyNA(y))
 })
 
+test_that("factor()/order()/rank() work on a DuckDBColumn without a stack overflow", {
+    # factor() calls order() when levels aren't supplied explicitly; order()
+    # falls back to xtfrm() for a class it doesn't recognize, which in turn
+    # falls back to rank(), which needs ordering again -- with no xtfrm()
+    # method of its own, DuckDBColumn had no base case to stop that loop,
+    # crashing with a C stack overflow (not a catchable R-level error)
+    # instead of ever reaching any of these generics' actual logic.
+    df <- DuckDBDataFrame(mtcars_parquet)
+    x <- df[["model"]]
+    plain <- as.vector(x)
+
+    expect_identical(as.character(factor(x)), as.character(factor(plain)))
+    expect_identical(levels(factor(x)), levels(factor(plain)))
+    expect_identical(order(x), order(plain))
+    expect_equal(unname(rank(x)), unname(rank(plain)))
+})
+
 test_that("Summary methods work as expected for a DuckDBColumn", {
     df <- DuckDBDataFrame(mtcars_parquet, datacols = colnames(mtcars), keycol = "model")
     mpg <- df[["mpg"]]

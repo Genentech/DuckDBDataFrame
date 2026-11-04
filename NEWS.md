@@ -55,6 +55,20 @@
   `releaseDuckDBConn()` -- confirmed empirically that a registration left
   over from a since-released connection fails immediately and confusingly
   (`dplyr::tbl()` eagerly probes the catalog) if reused on a new one.
+- `factor(x)` on a `DuckDBColumn` crashed with a C stack overflow (not a
+  catchable R-level error) instead of erroring or returning a result.
+  `factor()` calls `order()` when `levels` isn't supplied explicitly;
+  `order()` falls back to `xtfrm()` for a class it doesn't recognize, which
+  itself falls back to `rank()`, which needs ordering again -- with no
+  `xtfrm()` method of its own, `DuckDBColumn` had no base case to stop that
+  loop. Added `xtfrm,DuckDBColumn-method`, which materializes first
+  (`xtfrm(as.vector(x))`): `order()`/`sort()`/`rank()` all already route
+  through `xtfrm()` for an unrecognized class, so the one method covers all
+  three. (`sort()` was also checked while fixing this: it no longer
+  crashes, but still doesn't actually reorder a `DuckDBColumn`'s rows --
+  numeric-index subsetting only supports membership filtering today, not
+  the arbitrary reordering/repetition `x[order(x)]` needs. Left open; it's
+  a deeper question than this fix, not a quick one.)
 
 # DuckDBDataFrame 0.99.28
 
