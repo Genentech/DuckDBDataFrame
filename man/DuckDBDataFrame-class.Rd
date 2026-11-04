@@ -157,7 +157,12 @@ In the code snippets below, \code{x} is a DuckDBDataFrame object:
     Extracts a DuckDBColumn object from \code{x}.
   }
   \item{\code{x[[i]] <- value}:}{
-   Replaces column \code{i} in \code{x} with \code{value}.
+   Replaces (or, for a new \code{i}, adds) column \code{i} in \code{x}
+   with \code{value}: a \code{DuckDBColumn} derived from the same
+   underlying table, or a plain in-memory atomic vector or factor of
+   length \code{nrow(x)} (or length 1, recycled). \code{x[, i] <- value}
+   accepts the same for a single column; a multi-column plain-vector/
+   \code{data.frame} \code{value} is not yet supported.
   }
   \item{\code{head(x, n = 6L)}:}{
     If \code{n} is non-negative, returns the first n rows of \code{x}.

@@ -1,3 +1,61 @@
+# DuckDBDataFrame 0.99.29
+
+## New features
+
+- `[[<-`/`$<-` and single-column `[<-` on `DuckDBDataFrame` now accept a
+  plain in-memory R vector or factor as `value`, not just a lazy
+  `DuckDBColumn`/`DuckDBDataFrame` derived from the exact same underlying
+  table. `sce$newcol <- some_external_vector` (the single most routine
+  operation in `SingleCellExperiment`/`SpatialFeatureExperiment`-style
+  workflows) failed outright before this, confirmed via a real spike
+  constructing an SCE with `DuckDBDataFrame` colData: without it,
+  `DuckDBDataFrame` isn't viable as a `colData` substitute for anything past
+  already-fully-annotated, read-only data. A survey of every existing
+  "in-memory -> lazy DuckDB" technique in this package suite found literal
+  `IN`/`CASE` SQL embedding for small filter sets and `duckdb_register()`
+  zero-copy registration + a named-key join for large ones (the pattern
+  this suite's own most performance-tuned code, `BiocDuckDB`'s `scran`
+  helpers, already moved *to*, away from `copy_to()`-based joins, for
+  speed); `dplyr::rows_update()` (an external contributor's own draft for
+  this exact feature) has no precedent anywhere in the suite. The new value
+  is joined into the table's lazy query by its own existing key column
+  (its already-materialized row-number column for the default,
+  row-number-keyed case -- never a freshly recomputed `row_number()`, since
+  DuckDB's has no `ORDER BY` and isn't guaranteed stable across separate
+  evaluations -- or its single named keycol otherwise), always via
+  `duckdb_register()` + `left_join()`; no size-gated literal-embedding
+  fallback, since the realistic target use case (`colData`-sized tables:
+  Visium ~5k spots, Xenium/MERFISH 10k-1M+ cells) essentially never has few
+  enough rows for that to matter, so it would only have added bug surface
+  for a path that would not run in practice. The registered temp table is
+  intentionally never unregistered (the same already-shipped tradeoff as
+  `DuckDBSpatial::.as_duckdb_table()`/`DuckDBArray::.duckdb_matmult_copy()`,
+  now also documented here): it must survive for the entire remaining
+  lifetime of whatever object is built from it. Replacing a factor column
+  with a plain vector explicitly clears the stale `collevels` entry, rather
+  than leaving `coltypes()` reporting `"factor"` against data that no
+  longer is. Multi-column plain-vector assignment
+  (`x[, c("a","b")] <- data.frame(...)`) has no existing precedent for its
+  shape and is not yet supported.
+
+## Bug fixes
+
+- `.register_key_table()` (used by `.apply_key_filter()` for large
+  membership-filter sets) registered a new DuckDB virtual table on every
+  call and never unregistered it; since `tblconn()` is not memoized, this
+  leaked unboundedly on the shared process-wide connection for an
+  explicitly-keyed table whose current key subset exceeds 256 distinct
+  values. (Deliberately decoupled from the feature above: it's real but
+  orthogonal -- ordinary row-number-keyed `colData` can never trigger it --
+  and was already session-bounded, since a process-exit finalizer already
+  disconnects the shared connection.) Fixed with a content-keyed cache on
+  the connection's own `.duckdb` package environment (a connection object
+  itself can't hold a cache: it's an ordinary copy-on-modify R value, and
+  `tblconn()` re-extracts it fresh every call), invalidated inside
+  `releaseDuckDBConn()` -- confirmed empirically that a registration left
+  over from a since-released connection fails immediately and confusingly
+  (`dplyr::tbl()` eagerly probes the catalog) if reused on a new one.
+
 # DuckDBDataFrame 0.99.28
 
 ## New features

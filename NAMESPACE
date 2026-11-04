@@ -304,6 +304,7 @@ importFrom(dplyr,
   distinct,
   filter,
   group_by,
+  left_join,
   mutate,
   n,
   pull,
@@ -319,7 +320,10 @@ importFrom(duckdb,
   duckdb,
   duckdb_register
 )
-importFrom(rlang,new_quosure)
+importFrom(rlang,
+  hash,
+  new_quosure
+)
 importFrom(stats,
   median,
   quantile,

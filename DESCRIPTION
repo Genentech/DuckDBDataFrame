@@ -1,6 +1,6 @@
 Package: DuckDBDataFrame
-Version: 0.99.28
-Date: 2026-10-30
+Version: 0.99.29
+Date: 2026-11-03
 Title: DuckDB-Backed DataFrame and Table Structures
 Description:
     Provides DuckDB-backed implementations of core tabular data structures

@@ -1,5 +1,15 @@
 .duckdb <- new.env()
 .duckdb$drv <- NULL
+# Content-keyed cache of registered key-filter temp tables (see
+# .register_key_table() in DuckDBTable-class.R); must be invalidated whenever
+# the connection itself is released, since a registration on a since-closed
+# connection fails immediately and confusingly if reused on a new one.
+.duckdb$key_table_cache <- new.env()
+# Cache of canonical seq_len(n) vectors reused by .inject_vector() (see
+# .canonical_row_numbers() in DuckDBTable-class.R). Unlike key_table_cache
+# above, this holds plain R vectors with no connection-specific state, so it
+# does not need to be invalidated by releaseDuckDBConn().
+.duckdb$row_number_cache <- new.env()
 
 #' @importFrom DBI dbDisconnect
 reg.finalizer(.duckdb, function(env) {
@@ -509,5 +519,6 @@ releaseDuckDBConn <- function() {
         dbDisconnect(.duckdb$drv)
         .duckdb$drv <- NULL
     }
+    .duckdb$key_table_cache <- new.env()
     invisible(NULL)
 }

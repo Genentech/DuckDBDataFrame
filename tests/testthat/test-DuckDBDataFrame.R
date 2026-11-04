@@ -167,6 +167,35 @@ test_that("slicing a large key set uses a SEMI JOIN without duplicating rows", {
     expect_false(grepl("INNER JOIN", sql, ignore.case = TRUE))
 })
 
+test_that(".register_key_table caches an identical large key set and invalidates across a connection release/reacquire", {
+    con <- acquireDuckDBConn()
+    base_tbl <- dplyr::tbl(con, dplyr::sql("SELECT 1 AS x"))
+    set1 <- seq_len(300L) # > .KEY_FILTER_JOIN_THRESHOLD (256)
+
+    reg1 <- DuckDBDataFrame:::.register_key_table(base_tbl, "k", set1)
+    name1 <- dbplyr::remote_name(reg1)
+    on.exit(try(duckdb::duckdb_unregister(con, name1), silent = TRUE), add = TRUE)
+    reg1b <- DuckDBDataFrame:::.register_key_table(base_tbl, "k", set1)
+    expect_identical(dbplyr::remote_name(reg1b), name1)
+
+    reg_diff <- DuckDBDataFrame:::.register_key_table(base_tbl, "k", seq_len(301L))
+    name_diff <- dbplyr::remote_name(reg_diff)
+    on.exit(try(duckdb::duckdb_unregister(con, name_diff), silent = TRUE), add = TRUE)
+    expect_false(identical(name_diff, name1))
+
+    # Releasing and reacquiring the connection must not leave the cache
+    # pointing at a registration on the now-closed connection: re-registering
+    # the same key set afterward must still work against the new connection,
+    # not silently reuse a now-nonexistent name.
+    releaseDuckDBConn()
+    con2 <- acquireDuckDBConn()
+    expect_false(identical(con, con2))
+    base_tbl2 <- dplyr::tbl(con2, dplyr::sql("SELECT 1 AS x"))
+    reg2 <- DuckDBDataFrame:::.register_key_table(base_tbl2, "k", set1)
+    on.exit(try(duckdb::duckdb_unregister(con2, dbplyr::remote_name(reg2)), silent = TRUE), add = TRUE)
+    expect_equal(nrow(dplyr::collect(reg2)), 300L)
+})
+
 test_that("key-filter complement is NULL-safe (no 'NOT IN (NULL)' wipe-out)", {
     con <- acquireDuckDBConn()
 
@@ -236,8 +265,9 @@ test_that("unique works for a DuckDBDataFrame", {
 test_that("subset assignments that produce errors", {
     df <- DuckDBDataFrame(mtcars_parquet, datacols = colnames(mtcars), keycol = list(model = rownames(mtcars)))
     expect_error(df[1:5,] <- df[9:13,])
-    expect_error(df[,"foobar"] <- runif(nrow(df)))
-    expect_error(df$some_random_thing <- runif(nrow(df)))
+    # A correctly-sized plain vector is now supported (see "plain-vector
+    # [[<-/replaceCOLS" tests below); $<-/[[<- still reject a mismatched one.
+    expect_error(df$some_random_thing <- runif(nrow(df) - 1L))
 })
 
 test_that("subset assignments works for a DuckDBDataFrame", {
@@ -266,6 +296,157 @@ test_that("subset assignments works for a DuckDBDataFrame", {
     mtcars2 <- mtcars
     mtcars2[,c(1,2,3)] <- mtcars2[,c(4,5,6)]
     checkDuckDBDataFrame(copy, mtcars2)
+})
+
+test_that("[[<- accepts a plain vector, for both row-number- and explicitly-keyed tables", {
+    for (df in list(DuckDBDataFrame(mtcars_parquet),
+                     DuckDBDataFrame(mtcars_parquet, datacols = colnames(mtcars),
+                                     keycol = list(model = rownames(mtcars))))) {
+        # New column.
+        copy <- df
+        copy$new_metric <- mtcars$mpg * 2
+        expect_equal(as.data.frame(copy)$new_metric, mtcars$mpg * 2)
+        expect_equal(ncol(copy), ncol(df) + 1L)
+
+        # Replace an existing column.
+        copy <- df
+        copy$mpg <- mtcars$mpg + 100
+        expect_equal(as.data.frame(copy)$mpg, mtcars$mpg + 100)
+        expect_equal(ncol(copy), ncol(df))
+
+        # Scalar recycling.
+        copy <- df
+        copy$flag <- TRUE
+        expect_true(all(as.data.frame(copy)$flag))
+
+        # NA passes through.
+        copy <- df
+        vals <- mtcars$mpg
+        vals[3] <- NA
+        copy$mpg_na <- vals
+        expect_equal(as.data.frame(copy)$mpg_na, vals)
+
+        # Sequential [[<- calls build on each other, not independently on the
+        # original object (the row-identity regression this feature's design
+        # review specifically flagged).
+        copy <- df
+        copy$a <- mtcars$mpg
+        copy$b <- mtcars$disp
+        result <- as.data.frame(copy)
+        expect_equal(result$a, mtcars$mpg)
+        expect_equal(result$b, mtcars$disp)
+
+        # Re-replacing an earlier column after later ones were added still
+        # aligns correctly (not just appending without disturbing earlier
+        # writes).
+        copy$a <- mtcars$qsec
+        result <- as.data.frame(copy)
+        expect_equal(result$a, mtcars$qsec)
+        expect_equal(result$b, mtcars$disp)
+    }
+})
+
+test_that("[[<- aligns correctly on a row-number-keyed table after a numeric-index subset", {
+    # A numeric-index subset of a row-number-keyed table PRESERVES original
+    # row identity (rownames stay "3".."8" for x[3:8,], matching base R's own
+    # data.frame indexing convention) rather than renumbering to "1".."6" --
+    # .inject_vector()'s join key must reflect that real identity, not assume
+    # seq_len(nrow(x)). (A prior, incorrect fix attempt tried to force
+    # renumbering here instead and broke "positional slicing by rows works".)
+    df <- DuckDBDataFrame(mtcars_parquet)
+    sub <- df[3:8, ]
+    expect_identical(rownames(sub), as.character(3:8))
+
+    sub$d <- seq_len(nrow(sub)) * 111L
+    expect_equal(as.data.frame(sub)$d, seq_len(nrow(sub)) * 111L)
+
+    # A non-contiguous, non-sorted index too. df[i,] doesn't preserve i's
+    # order (DuckDB gives no row-order guarantee without an ORDER BY), so the
+    # value supplied to $<- must be aligned to sub2's own current row order
+    # (via rownames(sub2)), not to i's order -- the same positional contract
+    # ordinary base R data.frame $<- has.
+    i <- c(8L, 6L, 7L, 5L, 3L, 9L)
+    sub2 <- df[i, ]
+    ordered_mpg <- mtcars$mpg[as.integer(rownames(sub2))]
+    sub2$e <- ordered_mpg
+    expect_equal(as.data.frame(sub2)$e, ordered_mpg)
+})
+
+test_that(".canonical_row_number_values reuses one allocation per distinct content", {
+    # Base R's own tracemem() gives the same object-address string
+    # lobstr::obj_addr() wraps, with no extra dependency; untracemem()
+    # immediately after avoids leaving copy-tracing enabled on 'x'.
+    obj_addr <- function(x) {
+        addr <- tracemem(x)
+        untracemem(x)
+        addr
+    }
+
+    df <- DuckDBDataFrame(mtcars_parquet)
+    v1 <- DuckDBDataFrame:::.canonical_row_number_values(rownames(df))
+    v2 <- DuckDBDataFrame:::.canonical_row_number_values(rownames(df))
+    expect_identical(obj_addr(v1), obj_addr(v2))
+
+    sub <- df[3:8, ]
+    v3 <- DuckDBDataFrame:::.canonical_row_number_values(rownames(sub))
+    expect_false(identical(obj_addr(v1), obj_addr(v3)))
+})
+
+test_that("[[<- with a factor value records collevels; a later plain-vector replacement clears it", {
+    df <- DuckDBDataFrame(mtcars_parquet)
+    grp <- factor(rep(c("a", "b", "c"), length.out = nrow(df)), levels = c("a", "b", "c", "unused"))
+
+    copy <- df
+    copy$grp <- grp
+    expect_identical(unname(coltypes(copy)["grp"]), "factor")
+    expect_equal(as.character(as.data.frame(copy)$grp), as.character(grp))
+    # Declared-but-unobserved levels are preserved, not dropped to the
+    # observed subset.
+    expect_identical(levels(as.data.frame(copy)$grp), levels(grp))
+
+    # Replacing that same column with a plain (non-factor) vector must clear
+    # the stale collevels entry -- coltypes() must stop reporting "factor".
+    copy$grp <- as.character(grp)
+    expect_false(identical(unname(coltypes(copy)["grp"]), "factor"))
+})
+
+test_that("$<-/[[<- reject a wrong-length plain vector; [<- on columns recycles with a warning", {
+    df <- DuckDBDataFrame(mtcars_parquet)
+    expect_error(df$x <- runif(nrow(df) - 1L), "length")
+
+    # Unlike $<-/[[<-, '[<-' on columns inherits S4Vectors' generic DataFrame
+    # recycling (with base R's own "not a sub-multiple" warning) before
+    # replaceCOLS() ever sees 'value' -- by then it has already been
+    # recycled to the right length, the same as for any other DataFrame.
+    copy <- df
+    expect_warning(copy[, "x"] <- runif(nrow(df) - 1L), "sub-multiple")
+    expect_equal(ncol(copy), ncol(df) + 1L)
+})
+
+test_that("replaceCOLS accepts a single-column plain vector but not multi-column", {
+    for (df in list(DuckDBDataFrame(mtcars_parquet),
+                     DuckDBDataFrame(mtcars_parquet, datacols = colnames(mtcars),
+                                     keycol = list(model = rownames(mtcars))))) {
+        copy <- df
+        copy[, "new_metric"] <- mtcars$mpg * 2
+        expect_equal(as.data.frame(copy)$new_metric, mtcars$mpg * 2)
+
+        copy <- df
+        copy[, 1] <- mtcars$mpg + 1
+        expect_equal(as.data.frame(copy)[[1L]], mtcars$mpg + 1)
+
+        # Multi-column plain-vector assignment is not yet supported.
+        expect_error(df[, c("a", "b")] <- data.frame(a = mtcars$mpg, b = mtcars$disp))
+    }
+})
+
+test_that("[[<- works end to end on a real SingleCellExperiment's colData", {
+    skip_if_not_installed("SingleCellExperiment")
+    sce <- SingleCellExperiment::SingleCellExperiment(
+        assays = list(counts = matrix(seq_len(20), nrow = 4)),
+        colData = DuckDBDataFrame(mtcars_parquet)[seq_len(5), ])
+    sce$qc_pass <- c(TRUE, TRUE, FALSE, TRUE, FALSE)
+    expect_equal(unname(as.vector(sce$qc_pass)), c(TRUE, TRUE, FALSE, TRUE, FALSE))
 })
 
 test_that("rbind produces errors", {

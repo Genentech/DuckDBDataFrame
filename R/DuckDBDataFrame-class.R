@@ -123,7 +123,12 @@
 #'     Extracts a DuckDBColumn object from \code{x}.
 #'   }
 #'   \item{\code{x[[i]] <- value}:}{
-#'    Replaces column \code{i} in \code{x} with \code{value}.
+#'    Replaces (or, for a new \code{i}, adds) column \code{i} in \code{x}
+#'    with \code{value}: a \code{DuckDBColumn} derived from the same
+#'    underlying table, or a plain in-memory atomic vector or factor of
+#'    length \code{nrow(x)} (or length 1, recycled). \code{x[, i] <- value}
+#'    accepts the same for a single column; a multi-column plain-vector/
+#'    \code{data.frame} \code{value} is not yet supported.
 #'   }
 #'   \item{\code{head(x, n = 6L)}:}{
 #'     If \code{n} is non-negative, returns the first n rows of \code{x}.
@@ -404,6 +409,34 @@ setReplaceMethod("[[", "DuckDBDataFrame", function(x, i, j, ..., value) {
                 return(replaceSlots(x, datacols = datacols, collevels = collevels,
                                     elementMetadata = mc, check = FALSE))
             }
+        } else if (is.atomic(value) || is.factor(value)) {
+            if (length(value) != nrow(x) && length(value) != 1L) {
+                stop("'value' must have length nrow(x) or 1")
+            }
+            target <- if (is.character(i2)) i2 else names(x@datacols)[i2]
+            key_col <- names(x@keycols)[1L]
+            key_values <- if (has_row_number(x)) .canonical_row_number_values(rownames(x)) else rownames(x)
+            plain_value <- if (is.factor(value)) as.character(value) else value
+            injected <- .inject_vector(tblconn(x, select = FALSE), key_col, key_values,
+                                       plain_value)
+            datacols <- x@datacols
+            datacols[[target]] <- as.name(injected$col)
+            # Record factor levels for factor input; explicitly clear any stale
+            # entry otherwise (a plain-vector replacement of a former factor
+            # column must not keep reporting coltypes() == "factor").
+            collevels <- x@collevels
+            if (is.factor(value)) {
+                collevels[[target]] <- list(levels = levels(value), ordered = is.ordered(value))
+            } else {
+                collevels[[target]] <- NULL
+            }
+            collevels <- .sync_collevels(collevels, datacols)
+            mc <- mcols(x)
+            if (!is.null(mc) && is.character(i) && !(i %in% colnames(x))) {
+                mc <- combineRows(mc, DataFrame(row.names = i))
+            }
+            return(replaceSlots(x, conn = injected$conn, datacols = datacols,
+                                collevels = collevels, elementMetadata = mc, check = FALSE))
         }
     }
 
@@ -463,6 +496,36 @@ setMethod("replaceCOLS", "DuckDBDataFrame", function(x, i, value) {
             return(replaceSlots(x, datacols = datacols, collevels = collevels,
                                 elementMetadata = mc, check = FALSE))
         }
+    } else if (length(i2) == 1L && (is.atomic(value) || is.factor(value))) {
+        # Single-column plain-vector add/replace only; a multi-column
+        # plain-vector/data.frame 'value' (x[, c("a","b")] <- data.frame(...))
+        # has no existing precedent for its shape and is not yet supported.
+        if (length(value) != nrow(x) && length(value) != 1L) {
+            stop("'value' must have length nrow(x) or 1")
+        }
+        target <- if (is.character(i)) i else names(x@datacols)[i2]
+        key_col <- names(x@keycols)[1L]
+        key_values <- if (has_row_number(x)) .canonical_row_number_values(rownames(x)) else rownames(x)
+        plain_value <- if (is.factor(value)) as.character(value) else value
+        injected <- .inject_vector(tblconn(x, select = FALSE), key_col, key_values,
+                                   plain_value)
+        datacols <- x@datacols
+        datacols[[target]] <- as.name(injected$col)
+        collevels <- x@collevels
+        if (is.factor(value)) {
+            collevels[[target]] <- list(levels = levels(value), ordered = is.ordered(value))
+        } else {
+            collevels[[target]] <- NULL
+        }
+        collevels <- .sync_collevels(collevels, datacols)
+        mc <- mcols(x)
+        if (!is.null(mc) && !setequal(names(datacols), rownames(mc))) {
+            newnames <- setdiff(names(datacols), rownames(mc))
+            mc <- combineRows(mc, DataFrame(row.names = newnames))
+            mc <- mc[names(datacols), , drop = FALSE]
+        }
+        return(replaceSlots(x, conn = injected$conn, datacols = datacols,
+                            collevels = collevels, elementMetadata = mc, check = FALSE))
     }
     stop("not compatible DuckDBDataFrame objects")
 })
@@ -473,6 +536,12 @@ setMethod("normalizeSingleBracketReplacementValue", "DuckDBDataFrame",
 function(value, x) {
     if (is(value, "DuckDBColumn")) {
         return(new2("DuckDBDataFrame", value@table, check = FALSE))
+    }
+    # Leave a plain atomic/factor 'value' as-is: replaceCOLS()'s own
+    # plain-vector branch needs to see it in this form, not coerced into a
+    # single-column in-memory DFrame by the inherited default method.
+    if (is.atomic(value) || is.factor(value)) {
+        return(value)
     }
     callNextMethod()
 })

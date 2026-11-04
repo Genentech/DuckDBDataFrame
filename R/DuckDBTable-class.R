@@ -364,19 +364,108 @@ setMethod("dbconn", "DuckDBTable", function(x) x@conn$src$con)
     }
 }
 
+# Generate a table name that cannot collide across calls/packages: PID plus a
+# tempfile()-derived unique suffix.
+.next_temp_table_name <- function(prefix) {
+    sprintf("%s_%d_%s", prefix, Sys.getpid(), basename(tempfile(pattern = "")))
+}
+
 # Register an in-memory key vector as a virtual DuckDB table for join-based
 # filtering, returning a lazy tbl over it. Used for large key sets, where a
 # semi-/anti-join is cheaper to compile and execute than a giant IN list.
+#
+# Repeated calls with the *same* (col_name, set) -- e.g. re-filtering the same
+# large key subset across several tblconn() calls on one object -- reuse the
+# same registered table via a content-keyed cache on the shared connection's
+# .duckdb environment, rather than registering (and never unregistering) a
+# fresh one every time; releaseDuckDBConn() clears the cache, since a name
+# registered on a since-closed connection fails immediately if reused.
 #' @importFrom dplyr tbl
 #' @importFrom duckdb duckdb_register
+#' @importFrom rlang hash
 .register_key_table <- function(conn, col_name, set) {
     db_con <- conn$src$con
-    temp_suffix <- basename(tempfile(pattern = ""))
-    temp_name <- sprintf("temp_filter_%s_%s", col_name, temp_suffix)
-    temp_df <- data.frame(key = set)
-    names(temp_df) <- col_name
-    duckdb_register(db_con, temp_name, temp_df)
+    cache_key <- paste0(col_name, ":", hash(sort(set)))
+    temp_name <- .duckdb$key_table_cache[[cache_key]]
+    if (is.null(temp_name)) {
+        temp_name <- .next_temp_table_name(paste0("temp_filter_", col_name))
+        temp_df <- data.frame(key = set)
+        names(temp_df) <- col_name
+        duckdb_register(db_con, temp_name, temp_df)
+        .duckdb$key_table_cache[[cache_key]] <- temp_name
+    }
     tbl(db_con, temp_name)
+}
+
+# A row-number-keyed table's actual row-number values are NOT always
+# seq_len(nrow(x)): rownames()/the materialized row-number column PRESERVE
+# original row positions across a numeric-index subset (matching base R's
+# own data.frame indexing convention, e.g. x[c(8,6,3),] keeps rownames
+# "8"/"6"/"3", not "1"/"2"/"3") -- only a logical-DuckDBColumn-filter subset
+# renumbers to 1..N. .inject_vector()'s join key must always be the table's
+# REAL current key values, read via rownames(), never assumed.
+#
+# A plain character-to-integer64 cache, keyed by content hash (mirroring
+# .register_key_table()'s own cache), avoids each [[<-/replaceCOLS call on
+# the same table holding its own separately-allocated copy of what is
+# usually identical content call to call (duckdb_register() is zero-copy:
+# it holds onto whatever object it is given for as long as the registration
+# lives, i.e. the life of the session).
+#' @importFrom bit64 as.integer64
+#' @importFrom rlang hash
+.canonical_row_number_values <- function(rn) {
+    cache_key <- hash(rn)
+    cached <- .duckdb$row_number_cache[[cache_key]]
+    if (is.null(cached)) {
+        cached <- as.integer64(rn)
+        .duckdb$row_number_cache[[cache_key]] <- cached
+    }
+    cached
+}
+
+# Inject a plain in-memory vector as a new SQL column in 'conn', aligned by
+# the table's own existing key column (its row-number column for a
+# row-number-keyed table, or its single named keycol otherwise), via
+# duckdb_register() + left_join(). Deliberately no size-gated literal
+# embedding path the way .apply_key_filter() has: the real target use case
+# (colData-sized tables) essentially never has few enough rows for that to
+# matter, so it would only add bug surface (SQL literal type coercion, NA
+# handling, scalar-recycling-in-SQL) for a path that would not run in
+# practice.
+#
+# The registered temp table is intentionally never unregistered: the
+# returned 'conn's lazy query plan references it by name, and it must
+# survive for the entire remaining lifetime of whatever object is built from
+# it (and everything derived from that, transitively) -- not just until this
+# call returns, so neither a reg.finalizer() nor an eager-unregister-after-join
+# would be safe here. This mirrors the same already-reviewed tradeoff shipped
+# at DuckDBSpatial::.as_duckdb_table() and DuckDBArray::.duckdb_matmult_copy().
+#' @importFrom dplyr left_join tbl
+#' @importFrom duckdb duckdb_register
+.inject_vector <- function(conn, key_col, key_values, value) {
+    n <- length(key_values)
+    if (length(value) == 1L) {
+        value <- rep(value, n)
+    } else if (length(value) != n) {
+        stop("'value' must have length 1 or length(x)")
+    }
+
+    db_con <- conn$src$con
+    temp_name <- .next_temp_table_name("temp_inject")
+    # The joined-in value column gets its own guaranteed-unique name, never
+    # the caller's eventual target column name directly: 'conn' may already
+    # have a column by that name (replacing an existing column), and
+    # duckdb/dbplyr would silently disambiguate the collision into
+    # '<name>.x'/'<name>.y' rather than erroring, breaking a caller that
+    # assumed the joined column kept the requested name. The caller is
+    # expected to splice this returned column name into its own column-name
+    # bookkeeping (e.g. via a 'datacols' expression), not rely on it matching
+    # any particular final name.
+    inject_col <- .next_temp_table_name("inject_col")
+    temp_df <- setNames(data.frame(key_values, value), c(key_col, inject_col))
+    duckdb_register(db_con, temp_name, temp_df)
+    list(conn = left_join(conn, tbl(db_con, temp_name), by = key_col),
+         col = inject_col)
 }
 
 # Above this many keys, filtering switches from an inline IN list to a temporary-
