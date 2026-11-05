@@ -10,6 +10,20 @@
 # above, this holds plain R vectors with no connection-specific state, so it
 # does not need to be invalidated by releaseDuckDBConn().
 .duckdb$row_number_cache <- new.env()
+# Small LRU of .get_duckdb_schema() results (see DuckDBTable-class.R), keyed
+# on the raw (conn, datacols) inputs and checked via identical(), not a hash
+# digest: most of that function's cost is building the dplyr/dbplyr query
+# object to render into SQL (see its own comments), so a hash key would
+# still pay for the same construction it exists to avoid. identical()
+# short-circuits instead, since 'conn' and 'datacols' are typically either
+# literally the same object across repeated calls (same environment/SEXP,
+# compared by reference) or cheaply distinguishable. A content-keyed env
+# (key_table_cache's pattern) doesn't fit for the same reason: computing a
+# lookup key would require the same expensive construction. Schema values
+# are tied to a specific connection's lazy-query object, so this is reset on
+# releaseDuckDBConn() like key_table_cache, not kept like row_number_cache.
+.duckdb$schema_cache <- new.env()
+.duckdb$schema_cache$entries <- list()
 
 #' @importFrom DBI dbDisconnect
 reg.finalizer(.duckdb, function(env) {
@@ -520,5 +534,7 @@ releaseDuckDBConn <- function() {
         .duckdb$drv <- NULL
     }
     .duckdb$key_table_cache <- new.env()
+    .duckdb$schema_cache <- new.env()
+    .duckdb$schema_cache$entries <- list()
     invisible(NULL)
 }

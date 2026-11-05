@@ -169,3 +169,86 @@ test_that(".physicalMemoryBytes parses an injected /proc/meminfo", {
     expect_identical(DuckDBDataFrame:::.physicalMemoryBytes(mi), 16307188 * 1024)
     expect_null(DuckDBDataFrame:::.physicalMemoryBytes(tempfile()))
 })
+
+### - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+### .get_duckdb_schema() memoization (schema_cache)
+###
+
+test_that(".get_duckdb_schema() memoizes and reuses a cache hit", {
+    releaseDuckDBConn()
+    on.exit(releaseDuckDBConn(), add = TRUE)
+
+    # DuckDBTable() construction itself already calls .get_duckdb_schema()
+    # once internally (for its lossy-widetype check), so the cache already
+    # holds this (conn, datacols) pair once construction returns.
+    tbl <- DuckDBTable(esoph_parquet, datacols = c("ncases", "ncontrols"),
+                       keycols = c("agegp", "alcgp", "tobgp"))
+    n1 <- length(DuckDBDataFrame:::.duckdb$schema_cache$entries)
+    expect_gte(n1, 1L)
+
+    s1 <- DuckDBDataFrame:::.get_duckdb_schema(tbl@conn, tbl@datacols)
+
+    # a second call with the SAME (conn, datacols) must hit the cache, not
+    # grow it, and must return the identical schema
+    s2 <- DuckDBDataFrame:::.get_duckdb_schema(tbl@conn, tbl@datacols)
+    expect_equal(length(DuckDBDataFrame:::.duckdb$schema_cache$entries), n1)
+    expect_identical(s1, s2)
+})
+
+test_that(".get_duckdb_schema() cache correctly misses on a genuinely different (conn, datacols)", {
+    releaseDuckDBConn()
+    on.exit(releaseDuckDBConn(), add = TRUE)
+
+    tbl1 <- DuckDBTable(esoph_parquet, datacols = c("ncases", "ncontrols"),
+                        keycols = c("agegp", "alcgp", "tobgp"))
+    tbl2 <- DuckDBTable(esoph_parquet, datacols = "ncases",
+                        keycols = c("agegp", "alcgp", "tobgp"))
+
+    s1 <- DuckDBDataFrame:::.get_duckdb_schema(tbl1@conn, tbl1@datacols)
+    s2 <- DuckDBDataFrame:::.get_duckdb_schema(tbl2@conn, tbl2@datacols)
+    # different 'datacols' -> genuinely different schema, not a stale hit
+    # borrowed from tbl1's cache entry
+    expect_false(identical(s1, s2))
+    expect_identical(names(s2), "ncases")
+    expect_identical(unname(s2), unname(s1["ncases"]))
+
+    # re-querying tbl1 after tbl2 was cached must still return tbl1's own
+    # schema (the cache must not have cross-contaminated entries)
+    s1b <- DuckDBDataFrame:::.get_duckdb_schema(tbl1@conn, tbl1@datacols)
+    expect_identical(s1, s1b)
+})
+
+test_that("releaseDuckDBConn() clears the schema cache", {
+    releaseDuckDBConn()
+    on.exit(releaseDuckDBConn(), add = TRUE)
+
+    tbl <- DuckDBTable(esoph_parquet, datacols = c("ncases", "ncontrols"),
+                       keycols = c("agegp", "alcgp", "tobgp"))
+    DuckDBDataFrame:::.get_duckdb_schema(tbl@conn, tbl@datacols)
+    expect_gt(length(DuckDBDataFrame:::.duckdb$schema_cache$entries), 0L)
+
+    releaseDuckDBConn()
+    expect_identical(DuckDBDataFrame:::.duckdb$schema_cache$entries, list())
+})
+
+test_that("the schema cache evicts least-recently-used entries past its size cap", {
+    releaseDuckDBConn()
+    on.exit(releaseDuckDBConn(), add = TRUE)
+
+    # Exercise .store_schema_cache()/.lookup_schema_cache() directly with
+    # synthetic (fabricated, but mutually identical()-distinct) keys: the
+    # eviction bookkeeping itself doesn't depend on these being real
+    # tbl_duckdb_connection/datacols objects.
+    cap <- DuckDBDataFrame:::.SCHEMA_CACHE_SIZE
+    keys <- lapply(seq_len(cap + 2L), function(i) as.expression(as.name(paste0("x", i))))
+    for (i in seq_along(keys)) {
+        DuckDBDataFrame:::.store_schema_cache(conn = "conn", datacols = keys[[i]],
+                                              schema = c(x = "INTEGER"))
+    }
+    expect_identical(length(DuckDBDataFrame:::.duckdb$schema_cache$entries), cap)
+    # the oldest two keys were evicted; the most recent 'cap' remain
+    expect_null(DuckDBDataFrame:::.lookup_schema_cache("conn", keys[[1L]]))
+    expect_null(DuckDBDataFrame:::.lookup_schema_cache("conn", keys[[2L]]))
+    expect_identical(DuckDBDataFrame:::.lookup_schema_cache("conn", keys[[length(keys)]]),
+                     c(x = "INTEGER"))
+})

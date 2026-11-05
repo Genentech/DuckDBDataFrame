@@ -194,13 +194,16 @@ importClassesFrom(S4Vectors,SelfHits)
 importClassesFrom(S4Vectors,TransposedDataFrame)
 importClassesFrom(S4Vectors,Vector)
 importFrom(DBI,
+  dbClearResult,
   dbConnect,
   dbDisconnect,
   dbExecute,
+  dbFetchArrow,
   dbGetQuery,
   dbQuoteIdentifier,
   dbQuoteLiteral,
-  dbQuoteString
+  dbQuoteString,
+  dbSendQueryArrow
 )
 importFrom(DelayedArray,
   getAutoRealizationBackend,
@@ -271,6 +274,7 @@ importFrom(SparseArray,
 importFrom(arrow,
   ParquetFileReader,
   ReadableFile,
+  as_arrow_table,
   bool,
   float32,
   float64,

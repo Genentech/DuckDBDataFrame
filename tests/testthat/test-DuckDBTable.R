@@ -85,6 +85,34 @@ test_that("datacols columns of a DuckDBTable can be cast to a different type", {
     expect_is(as.data.frame(tbl)[["ncontrols"]], "integer")
 })
 
+test_that("coltypes() is unaffected by .get_duckdb_schema()'s cache", {
+    releaseDuckDBConn()
+    on.exit(releaseDuckDBConn(), add = TRUE)
+
+    tbl <- DuckDBTable(esoph_parquet, datacols = c("ncases", "ncontrols"),
+                       keycols = c("agegp", "alcgp", "tobgp"))
+    expected <- c("ncases" = "double", "ncontrols" = "double")
+
+    # repeated calls must all agree, whether served from cache or not
+    for (i in 1:3) {
+        expect_identical(coltypes(tbl), expected)
+    }
+
+    # a DIFFERENT DuckDBTable (different 'datacols') must not pick up a
+    # stale cache entry keyed on the first table's schema
+    tbl2 <- DuckDBTable(esoph_parquet, datacols = "ncases",
+                        keycols = c("agegp", "alcgp", "tobgp"))
+    expect_identical(coltypes(tbl2), c("ncases" = "double"))
+    # and the first table's own coltypes() must still be correct afterwards
+    expect_identical(coltypes(tbl), expected)
+
+    # recasting ncases to integer creates a new DuckDBTable with a DIFFERENT
+    # 'datacols' expression (wrapped in as.integer()); the cache must not
+    # confuse it with the original double-typed table
+    coltypes(tbl) <- c("ncases" = "integer", "ncontrols" = "integer")
+    expect_identical(coltypes(tbl), c("ncases" = "integer", "ncontrols" = "integer"))
+})
+
 test_that("DuckDBTable column names can be modified", {
     tbl <- DuckDBTable(mtcars_parquet, datacols = colnames(mtcars), keycols = "model")
     replacements <- sprintf("COL%d", seq_len(ncol(tbl)))

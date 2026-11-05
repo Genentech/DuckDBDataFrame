@@ -842,6 +842,41 @@ setReplaceMethod("colnames", "DuckDBTable", function(x, value) {
 ### Schema-based type detection (for complex types)
 ###
 
+# Max entries kept in .duckdb$schema_cache (see DuckDBConnection.R). A
+# handful of live DuckDBTable/DuckDBDataFrame shapes are typically in play
+# within one session (the base table plus a few filtered/selected/cast
+# views derived from it), so this gives comfortable headroom without
+# turning the linear identical() scan below into its own cost center.
+.SCHEMA_CACHE_SIZE <- 16L
+
+# Linear identical()-keyed lookup/insert against .duckdb$schema_cache,
+# mirroring .register_key_table()'s cache below but checked via identical()
+# on the raw (conn, datacols) inputs rather than a hash-string key (see
+# the comment on .duckdb$schema_cache in DuckDBConnection.R for why a hash
+# key does not avoid the cost this cache exists to avoid).
+.lookup_schema_cache <- function(conn, datacols) {
+    entries <- .duckdb$schema_cache$entries
+    for (i in seq_along(entries)) {
+        entry <- entries[[i]]
+        if (identical(entry$datacols, datacols) && identical(entry$conn, conn)) {
+            if (i > 1L) {
+                .duckdb$schema_cache$entries <- c(entries[i], entries[-i])
+            }
+            return(entry$schema)
+        }
+    }
+    NULL
+}
+
+.store_schema_cache <- function(conn, datacols, schema) {
+    entries <- c(list(list(conn = conn, datacols = datacols, schema = schema)),
+                .duckdb$schema_cache$entries)
+    if (length(entries) > .SCHEMA_CACHE_SIZE) {
+        entries <- entries[seq_len(.SCHEMA_CACHE_SIZE)]
+    }
+    .duckdb$schema_cache$entries <- entries
+}
+
 #' @importFrom DBI dbGetQuery
 #' @importFrom dbplyr sql_render
 #' @importFrom dplyr select
@@ -850,17 +885,25 @@ setReplaceMethod("colnames", "DuckDBTable", function(x, value) {
         return(character(0L))
     }
 
-    tryCatch({
-        conn <- .mutate_datacols(conn, datacols)
-        conn <- select(conn, !!!as.list(names(datacols)))
-        sql <- sql_render(conn)
+    cached <- .lookup_schema_cache(conn, datacols)
+    if (!is.null(cached)) {
+        return(cached)
+    }
 
-        db_conn <- conn$src$con
-        schema <- dbGetQuery(db_conn, sprintf("DESCRIBE (%s)", sql))
-        setNames(schema$column_type, schema$column_name)
+    schema <- tryCatch({
+        mutated <- .mutate_datacols(conn, datacols)
+        mutated <- select(mutated, !!!as.list(names(datacols)))
+        sql <- sql_render(mutated)
+
+        db_conn <- mutated$src$con
+        described <- dbGetQuery(db_conn, sprintf("DESCRIBE (%s)", sql))
+        setNames(described$column_type, described$column_name)
     }, error = function(e) {
         character(0L)
     })
+
+    .store_schema_cache(conn, datacols, schema)
+    schema
 }
 
 .duckdb_element_type <- function(type) {

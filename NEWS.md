@@ -1,3 +1,29 @@
+# DuckDBDataFrame 0.99.30
+
+## Performance
+
+- `writeDuckDBTableParquet()` no longer reads the entire just-written part
+  file back through `arrow::read_parquet()` purely to pull the ≤100-row
+  sample `writeParquet()` uses for `datapackage.json` schema inference.
+  Schema sampling now re-derives the write's own `SELECT` via
+  `buildTableSelectSQL()` (dropping the index expression, which would
+  otherwise force full materialization before a `LIMIT` can apply) and
+  fetches through DuckDB's Arrow export, so wide integer columns still get
+  the same `arrow` int64-downcast conversion the old full-file reread
+  relied on. The `__index__` sample column, no longer part of that query, is
+  synthesized in R from the write's own offset/row-count instead. Schema
+  output is unaffected; only how the sample backing it is obtained changed.
+- `.get_duckdb_schema()` (behind `coltypes()`, `DuckDBDataFrame`'s `[[`, and
+  transitively every `writeParquet()` call via `.hasLazyGeometryColumn()`)
+  issued a fresh `DESCRIBE` query, with its dplyr/dbplyr query-construction
+  overhead, on every call even though a given `(conn, datacols)` pair's
+  schema never changes. It is now memoized in a small `identical()`-keyed
+  LRU (following the same content-keyed-env pattern as `DuckDBConnection.R`'s
+  `key_table_cache`, including invalidation on `releaseDuckDBConn()`), keyed
+  on the raw inputs rather than a hash digest of them, since most of the
+  function's cost is the dplyr construction a hash key would still have to
+  pay for.
+
 # DuckDBDataFrame 0.99.29
 
 ## New features

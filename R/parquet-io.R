@@ -538,10 +538,36 @@ function(x, indexcol = NULL, keycol = NULL, dimtbl = NULL, offset = 0L,
     )
 }
 
+# Mirrors, without reading anything back, the R class arrow::read_parquet()
+# would assign to the just-written __index__ column: converting a DuckDB
+# integer column through Arrow narrows BIGINT/UINTEGER down to a plain
+# integer whenever every value in the full written column (offset+1 ..
+# offset+n, not just the sample) fits in 32 bits, and never narrows UBIGINT
+# at all. 'offset' and 'n' describe that full column, matching the range
+# .duckdbIntTypeName()'s caller used to pick 'index_type' in the first
+# place; the sample itself only ever needs the first 'sample_n' of those
+# values. See test-parquet-io.R for the empirical basis (TINYINT/SMALLINT/
+# INTEGER/UTINYINT/USMALLINT never need narrowing since they always fit).
+#' @importFrom bit64 as.integer64
+.sampleIndexColumn <- function(offset, sample_n, n, index_type) {
+    vals <- offset + seq_len(sample_n)
+    fits_int32 <- (offset + n) <= 2147483647
+    switch(index_type,
+        "TINYINT" = ,
+        "SMALLINT" = ,
+        "INTEGER" = ,
+        "UTINYINT" = ,
+        "USMALLINT" = as.integer(vals),
+        "UINTEGER" = if (fits_int32) as.integer(vals) else as.double(vals),
+        "BIGINT" = if (fits_int32) as.integer(vals) else as.integer64(vals),
+        "UBIGINT" = as.double(vals),
+        stop("unsupported index type for sample synthesis: ", index_type))
+}
+
 #' @describeIn parquet-io Lazy DuckDBTable SQL Parquet export.
 #' @export
-#' @importFrom DBI dbExecute
-#' @importFrom arrow read_parquet
+#' @importFrom DBI dbExecute dbSendQueryArrow dbFetchArrow dbClearResult
+#' @importFrom arrow read_parquet as_arrow_table
 writeDuckDBTableParquet <-
 function(x, path, indexcol = "__index__", keycol = "__name__", dimtbl = NULL,
          append = FALSE, offset = 0L, part = NULL, part_digits = 0L,
@@ -597,11 +623,43 @@ function(x, path, indexcol = "__index__", keycol = "__name__", dimtbl = NULL,
     }
 
     sample_n <- min(100L, max(1L, n))
-    # mmap = FALSE so this read does not leave a mapping open on a file a
-    # caller may go on to rewrite, rename, or split (blocked on Windows).
-    sample_df <- as.data.frame(arrow::read_parquet(prep$pq_path, mmap = FALSE))
-    if (nrow(sample_df) > sample_n)
-        sample_df <- sample_df[seq_len(sample_n), , drop = FALSE]
+
+    # Re-derive the SELECT without the index expression (dropping indexcol
+    # avoids rebuilding its "row_number() OVER (ORDER BY (SELECT 1))" -- a
+    # window function that forces DuckDB to materialize the whole result
+    # before a LIMIT can apply, measured slower than the old full-file
+    # reread this replaces) and pull only 'sample_n' rows for schema
+    # sampling, instead of reading the entire just-written part file back.
+    sample_built <- buildTableSelectSQL(x, indexcol = NULL, keycol = keycol,
+                                        dimtbl = dimtbl, conn = conn)
+    sample_sql <- sprintf("%s LIMIT %d", sample_built$sql, sample_n)
+
+    # Fetch through DuckDB's own Arrow export, not a plain DBI fetch: this
+    # reuses the exact same arrow int64-downcast conversion that the old
+    # arrow::read_parquet() reread relied on, so wide integer columns
+    # (BIGINT/UINTEGER/...) infer the same schema type as before. A plain
+    # DBI fetch uses duckdb's native (always-widen) conversion instead,
+    # which disagrees with arrow's on R class for those columns.
+    qres <- dbSendQueryArrow(conn, sample_sql)
+    on.exit(dbClearResult(qres), add = TRUE)
+    sample_df <- as.data.frame(as_arrow_table(dbFetchArrow(qres)))
+
+    if (!is.null(indexcol)) {
+        # Use the LIMIT query's actual row count, not 'sample_n': an empty
+        # 'x' still sets sample_n = 1L (see above) but returns zero rows.
+        idx_vals <- .sampleIndexColumn(prep$offset, nrow(sample_df), n, index_type)
+        sample_df <- cbind(setNames(data.frame(idx_vals), indexcol), sample_df)
+    }
+
+    # DuckDB/Arrow have no notion of 'collevels' (an R-level annotation on
+    # the DuckDBTable, restored in the actual output file by
+    # .applyFactorLevels() above); reapply it here too so the sample used
+    # for schema inference reports factor columns exactly as the old
+    # arrow::read_parquet() reread of the (already-restored) output file did.
+    sample_collevels <- x@collevels[intersect(names(x@collevels), names(sample_df))]
+    if (length(sample_collevels) > 0L) {
+        sample_df <- .apply_collevels(sample_df, sample_collevels)
+    }
 
     list(path = prep$pq_path,
          dir = prep$path,

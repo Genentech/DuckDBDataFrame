@@ -633,3 +633,193 @@ test_that("factor restoration leaves no open mapping on the files it touches", {
     }
     expect_true(all(file.remove(parts)))
 })
+
+### - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+### Regression: sample_df for schema inference must not depend on HOW it is
+### computed (query + LIMIT vs. the old full-file reread via
+### arrow::read_parquet()). The file written to 'res$path' is unaffected by
+### the fix, so re-reading and truncating it the old way is a faithful
+### ground truth to compare 'res$sample_df' against.
+###
+
+.oldSampleDF <- function(path, sample_n) {
+    df <- as.data.frame(arrow::read_parquet(path, mmap = FALSE))
+    if (nrow(df) > sample_n)
+        df <- df[seq_len(sample_n), , drop = FALSE]
+    df
+}
+
+.expectSampleMatchesOldReread <- function(res, sample_n) {
+    old <- .oldSampleDF(res$path, sample_n)
+    expect_identical(names(res$sample_df), names(old))
+    expect_identical(nrow(res$sample_df), nrow(old))
+    for (col in names(old)) {
+        expect_identical(class(res$sample_df[[col]]), class(old[[col]]),
+                         info = paste("column", col))
+        # The query-based sample has no ORDER BY (adding one to pin row order
+        # reintroduces the materialize-before-LIMIT cost this fix removes),
+        # so it may return a differently-ordered subset of the same rows than
+        # a sequential file reread. That's immaterial to callers: sample_df
+        # only ever feeds per-column, order-independent type/shape inference
+        # (.fieldtype()), never a row-aligned view across columns. Compare
+        # value *sets* (or, for list columns, sorted lengths), not
+        # row-for-row, to avoid a brittle false failure.
+        if (is.list(old[[col]])) {
+            expect_equal(sort(lengths(res$sample_df[[col]])),
+                         sort(lengths(old[[col]])), info = paste("column", col))
+        } else {
+            expect_equal(sort(as.character(res$sample_df[[col]])),
+                         sort(as.character(old[[col]])), info = paste("column", col))
+        }
+    }
+}
+
+test_that("writeDuckDBTableParquet sample_df matches an old-style full reread (small table, mixed types)", {
+    skip_if_not_installed("arrow")
+    tf <- tempfile(fileext = ".parquet")
+    on.exit(unlink(tf), add = TRUE)
+    # 'bignum'/'unum' are deliberately typed BIGINT/UINTEGER with small values:
+    # arrow's int64/uint32 -> R conversion narrows these to plain integer when
+    # read back from a file, which a naive DBI fetch from DuckDB would not do.
+    tab <- arrow::arrow_table(
+        id = letters[1:8],
+        v = 1:8L,
+        x = as.double(1:8) / 2,
+        lgl = c(TRUE, FALSE, NA, TRUE, FALSE, TRUE, NA, FALSE),
+        g = c("a", "b", "a", "c", "b", "a", "c", "b"),
+        bignum = arrow::Array$create(1:8L, type = arrow::int64()),
+        unum = arrow::Array$create(1:8L, type = arrow::uint32()))
+    arrow::write_parquet(tab, tf)
+
+    ddf <- DuckDBDataFrame(tf, datacols = c("v", "x", "lgl", "g", "bignum", "unum"),
+                           keycol = "id",
+                           collevels = list(g = list(levels = c("a", "b", "c", "zz"),
+                                                     ordered = FALSE)))
+    x <- as(ddf, "DuckDBTable")
+
+    out <- tempfile(); dir.create(out)
+    on.exit(unlink(out, recursive = TRUE), add = TRUE)
+    res <- writeDuckDBTableParquet(x, out, indexcol = "__index__", keycol = "__name__")
+
+    expect_identical(res$nrow, 8L)
+    .expectSampleMatchesOldReread(res, min(100L, res$nrow))
+    expect_s3_class(res$sample_df$g, "factor")
+    expect_identical(levels(res$sample_df$g), c("a", "b", "c", "zz"))
+})
+
+test_that("writeDuckDBTableParquet sample_df matches an old-style full reread (list/embedding column)", {
+    skip_if_not_installed("arrow")
+    tf <- tempfile(fileext = ".parquet")
+    on.exit(unlink(tf), add = TRUE)
+    tab <- arrow::arrow_table(
+        v = arrow::Array$create(list(1:2L, 1:3L, 1:2L, 1:2L),
+                                type = arrow::list_of(arrow::int32())))
+    arrow::write_parquet(tab, tf)
+    ddf <- DuckDBDataFrame(tf)
+    x <- as(ddf, "DuckDBTable")
+
+    out <- tempfile(); dir.create(out)
+    on.exit(unlink(out, recursive = TRUE), add = TRUE)
+    res <- writeDuckDBTableParquet(x, out, indexcol = "__index__", keycol = NULL)
+
+    expect_identical(res$nrow, 4L)
+    .expectSampleMatchesOldReread(res, min(100L, res$nrow))
+
+    # a list column's field-spec length constraint (BiocDuckDB's
+    # .fieldtype.list()) is estimated from lengths() of the sampled column;
+    # confirm that estimate is unaffected by switching how the sample itself
+    # is fetched.
+    lens <- lengths(res$sample_df$v)
+    expect_identical(lens, c(2L, 3L, 2L, 2L))
+    expect_true(is.list(res$sample_df$v))
+})
+
+test_that("writeDuckDBTableParquet sample_df matches an old-style full reread (large table, narrowed __index__)", {
+    skip_if_not_installed("arrow")
+    n <- 5000L
+    tf <- tempfile(fileext = ".parquet")
+    on.exit(unlink(tf), add = TRUE)
+    set.seed(42)
+    df <- data.frame(v = sample(1:1000, n, replace = TRUE),
+                     x = rnorm(n),
+                     s = sample(letters[1:5], n, replace = TRUE),
+                     stringsAsFactors = FALSE)
+    arrow::write_parquet(df, tf)
+    ddf <- DuckDBDataFrame(tf)
+    x <- as(ddf, "DuckDBTable")
+
+    # index_max forces a wide (int64) __index__ -- the scenario that
+    # motivated .sampleIndexColumn()'s magnitude handling.
+    out <- tempfile(); dir.create(out)
+    on.exit(unlink(out, recursive = TRUE), add = TRUE)
+    res <- writeDuckDBTableParquet(x, out, indexcol = "__index__", keycol = NULL,
+                                   index_max = Inf)
+
+    expect_identical(res$nrow, n)
+    expect_identical(nrow(res$sample_df), 100L)
+    .expectSampleMatchesOldReread(res, 100L)
+    # with index_max = Inf, arrow narrows __index__ back to plain integer
+    # for these small (1..100) sample values, same as the old reread.
+    expect_identical(class(res$sample_df$`__index__`), "integer")
+
+    # without index_max, the small table narrows to the smallest unsigned
+    # type that fits -- exercise a non-BIGINT branch of .sampleIndexColumn().
+    out2 <- tempfile(); dir.create(out2)
+    on.exit(unlink(out2, recursive = TRUE), add = TRUE)
+    res2 <- writeDuckDBTableParquet(x, out2, indexcol = "__index__", keycol = NULL)
+    .expectSampleMatchesOldReread(res2, 100L)
+})
+
+test_that("writeDuckDBTableParquet sample_df matches an old-style full reread across a multi-part append", {
+    skip_if_not_installed("arrow")
+    tf1 <- tempfile(fileext = ".parquet")
+    on.exit(unlink(tf1), add = TRUE)
+    arrow::write_parquet(data.frame(v = 1:50), tf1)
+    x1 <- as(DuckDBDataFrame(tf1), "DuckDBTable")
+
+    out <- tempfile(); dir.create(out)
+    on.exit(unlink(out, recursive = TRUE), add = TRUE)
+    # index_max = Inf declares the physical column BIGINT, but this part's
+    # own values (1..50) still fit in 32 bits, so arrow (and
+    # .sampleIndexColumn()) narrow it to plain integer -- same as part 0 of
+    # the "honors index_max" test above, just reached via the append path.
+    res0 <- writeDuckDBTableParquet(x1, out, indexcol = "__index__", keycol = NULL,
+                                    part = 0L, part_digits = 2L, index_max = Inf)
+    expect_false(isTRUE(res0$subsequent_part))
+    .expectSampleMatchesOldReread(res0, 50L)
+    expect_identical(class(res0$sample_df$`__index__`),
+                     class(.oldSampleDF(res0$path, 50L)$`__index__`))
+
+    # Part 1 appends at a huge offset: __index__ is pinned to part 0's BIGINT
+    # type, and this part's own range (offset+1 .. offset+30) now exceeds 32
+    # bits, exercising .sampleIndexColumn()'s integer64 branch for real.
+    big_offset <- 3000000000
+    tf2 <- tempfile(fileext = ".parquet")
+    on.exit(unlink(tf2), add = TRUE)
+    arrow::write_parquet(data.frame(v = 51:80), tf2)
+    x2 <- as(DuckDBDataFrame(tf2), "DuckDBTable")
+    res1 <- writeDuckDBTableParquet(x2, out, indexcol = "__index__", keycol = NULL,
+                                    offset = big_offset, part = 1L, part_digits = 2L,
+                                    append = TRUE)
+    expect_true(isTRUE(res1$subsequent_part))
+    # Still computed (the caller decides whether to use it), still correct.
+    .expectSampleMatchesOldReread(res1, 30L)
+    expect_true(bit64::is.integer64(res1$sample_df$`__index__`))
+    expect_true(all(res1$sample_df$`__index__` > big_offset))
+})
+
+test_that(".sampleIndexColumn mirrors arrow's int64/uint32 downcast rules", {
+    # narrow types never need widening
+    expect_identical(.sampleIndexColumn(0, 3L, 3L, "TINYINT"), 1:3)
+    expect_identical(.sampleIndexColumn(0, 3L, 3L, "UTINYINT"), 1:3)
+    # UINTEGER/BIGINT narrow to plain integer only if the FULL column (not
+    # just the sample) fits in 32 bits
+    expect_identical(.sampleIndexColumn(0, 3L, 3L, "UINTEGER"), 1:3)
+    expect_identical(.sampleIndexColumn(0, 3L, 3L, "BIGINT"), 1:3)
+    expect_identical(class(.sampleIndexColumn(0, 3L, 3e9, "UINTEGER")), "numeric")
+    expect_true(bit64::is.integer64(.sampleIndexColumn(0, 3L, 3e9, "BIGINT")))
+    # UBIGINT never narrows, even for tiny values
+    expect_identical(class(.sampleIndexColumn(0, 3L, 3L, "UBIGINT")), "numeric")
+    # an empty sample still returns a zero-length vector of the right class
+    expect_identical(.sampleIndexColumn(0, 0L, 3e9, "BIGINT"), bit64::integer64())
+})

@@ -119,6 +119,26 @@ test_that("extraction of a column yields a DuckDBColumn", {
     checkDuckDBColumn(df[,keep], setNames(mtcars[,keep], rownames(mtcars)))
 })
 
+test_that("repeated [[ extraction is unaffected by .get_duckdb_schema()'s cache", {
+    releaseDuckDBConn()
+    on.exit(releaseDuckDBConn(), add = TRUE)
+
+    df <- DuckDBDataFrame(mtcars_parquet, datacols = colnames(mtcars),
+                          keycol = list(model = rownames(mtcars)))
+    expected <- setNames(mtcars[["mpg"]], rownames(mtcars))
+
+    # [[ builds a fresh DuckDBTable every call (see its method); repeated
+    # extraction of the same column must keep returning the correct type
+    # and values whether or not that lookup was served from the cache
+    for (i in 1:3) {
+        checkDuckDBColumn(df[["mpg"]], expected)
+    }
+
+    # a DIFFERENT column must not pick up a cached schema keyed on "mpg"
+    checkDuckDBColumn(df[["cyl"]], setNames(mtcars[["cyl"]], rownames(mtcars)))
+    checkDuckDBColumn(df[["mpg"]], expected)
+})
+
 test_that("conditional slicing by rows works for a DuckDBDataFrame", {
     df <- DuckDBDataFrame(mtcars_parquet, datacols = colnames(mtcars), keycol = list(model = rownames(mtcars)))
     checkDuckDBDataFrame(df[df$cyl > 6,], mtcars[mtcars$cyl > 6,])
