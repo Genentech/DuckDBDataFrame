@@ -57,7 +57,7 @@
 #'   (\code{\link{writeDuckDBTableParquet}}).
 #' @param indexcol Optional index column name for lazy table export.
 #' @param keycol Optional primary-key column name for lazy table export.
-#' @param dimtbl Optional single-row \linkS4class{DataFrame} of partition columns.
+#' @param dimtbl Optional single-row \link[S4Vectors]{DataFrame-class} of partition columns.
 #'
 #' @return
 #' \describe{

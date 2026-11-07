@@ -1,12 +1,12 @@
 #' DuckDBTable objects
 #'
 #' @description
-#' The DuckDBTable class extends the \linkS4class{RectangularData} virtual
+#' The DuckDBTable class extends the \link[S4Vectors]{RectangularData-class} virtual
 #' class for DuckDB tables by wrapping a tbl_duckdb_connection object.
 #'
 #' @details
 #' The DuckDBTable class provides a way to define a DuckDB table as a
-#' \linkS4class{RectangularData} object. It supports \emph{standard 2D API}
+#' \link[S4Vectors]{RectangularData-class} object. It supports \emph{standard 2D API}
 #' such as \code{dim()}, \code{nrow()}, \code{ncol()}, \code{dimnames()},
 #' \code{x[i, j]}, \code{cbind()}, and \code{rbind()} (via \code{UNION ALL})
 #' for tables keyed by row number (the default; see \code{keycols} below).

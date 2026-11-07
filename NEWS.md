@@ -1,3 +1,29 @@
+# DuckDBDataFrame 0.99.31
+
+## Bug fixes
+
+- Fixed the Bioconductor `nebbiolo2` build-report `ERROR`: a test exercising
+  `.canonical_row_number_values()`'s memory deduplication used
+  `tracemem()`/`untracemem()` to confirm repeated calls on the same rowname
+  values return the identical object rather than a fresh copy. `nebbiolo2`'s
+  R build lacks memory-profiling support, so `tracemem()` itself errored
+  before the dedup logic was ever exercised. The test now
+  `skip_if_not(capabilities("profmem"), ...)` first, verified both on a
+  profmem-enabled build (test still runs and passes) and with
+  `capabilities()` mocked to report `FALSE` (test now skips cleanly instead
+  of erroring).
+- Fixed an accompanying `NOTE` for calling an unexported `S4Vectors:::`
+  function (`make_rownames_for_RectangularData_display()`) from `show()`
+  methods in `DuckDBDataFrame-class.R` and `DuckDBEmbeddings-class.R`.
+  Vendored a local `.make_rownames_for_display()` helper instead of reaching
+  into `S4Vectors`'s internals.
+- Fixed a `NOTE` for `\linkS4class{}` cross-references to classes defined in
+  other packages (`DataFrame`, `Vector`, `AtomicList`, `RectangularData`,
+  `TransposedDataFrame`, `SplitDataFrameList`, `CharacterList`), which
+  `\linkS4class{}` cannot anchor to the defining package on its own. Replaced
+  with explicit `\link[pkg]{Target-class}` anchors, matching this package's
+  existing convention for the same kind of cross-package class reference.
+
 # DuckDBDataFrame 0.99.30
 
 ## Performance

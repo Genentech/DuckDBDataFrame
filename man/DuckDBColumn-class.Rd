@@ -28,7 +28,7 @@
 Objects of class \code{DuckDBColumn} extend \link[S4Vectors]{Vector}.
 }
 \description{
-The DuckDBColumn class extends \linkS4class{Vector} to represent a column
+The DuckDBColumn class extends \link[S4Vectors]{Vector-class} to represent a column
 extracted from a \linkS4class{DuckDBDataFrame} object.
 }
 \section{Accessors}{

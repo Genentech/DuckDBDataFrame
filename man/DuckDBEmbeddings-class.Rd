@@ -20,7 +20,7 @@
 Objects of class \code{DuckDBEmbeddings} extend \link[S4Vectors]{RectangularData}.
 }
 \description{
-The DuckDBEmbeddings class extends \linkS4class{RectangularData} and
+The DuckDBEmbeddings class extends \link[S4Vectors]{RectangularData-class} and
 \linkS4class{DuckDBColumn} to represent a single dimensionality reduction
 embedding (e.g., PCA, UMAP, tSNE) stored in DuckDB using an ARRAY[] column.
 }

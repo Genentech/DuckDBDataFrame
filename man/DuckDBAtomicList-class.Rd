@@ -22,7 +22,7 @@
 Objects of class \code{DuckDBAtomicList} extend \link[IRanges]{AtomicList}.
 }
 \description{
-The DuckDBAtomicList class extends \linkS4class{AtomicList} and
+The DuckDBAtomicList class extends \link[IRanges]{AtomicList-class} and
 \linkS4class{DuckDBColumn} to represent list columns extracted from a
 \linkS4class{DuckDBDataFrame} object.
 }

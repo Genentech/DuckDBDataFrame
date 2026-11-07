@@ -29,7 +29,7 @@
 Objects of class \code{DuckDBDataFrameList} extend \link[S4Vectors]{List}.
 }
 \description{
-The DuckDBDataFrame class extends \linkS4class{SplitDataFrameList}.
+The DuckDBDataFrame class extends \link[IRanges]{SplitDataFrameList-class}.
 }
 \section{Constructor}{
 
@@ -80,21 +80,21 @@ In the code snippets below, \code{x} is a DuckDBDataFrameList object:
     elements.
   }
   \item{\code{dimnames(x)}:}{
-    Get the list of two \linkS4class{CharacterList}s, the first holding the
+    Get the list of two \link[IRanges]{CharacterList-class}s, the first holding the
     rownames and the second the column names.
   }
   \item{\code{rownames(x)}, \code{colnames(x)}:}{
-    Get the \linkS4class{CharacterList} of row and colum names, respectively.
+    Get the \link[IRanges]{CharacterList-class} of row and colum names, respectively.
   }
   \item{\code{commonColnames(x)}, \code{commonColnames(x) <- value}:}{
     Get or set the character vector of column names present in the individual
     DataFrames in \code{x}.
   }
   \item{\code{columnMetadata(x)}, \code{columnMetadata(x) <- value}:}{
-    Get the \linkS4class{DataFrame} of metadata along the columns, i.e.,
+    Get the \link[S4Vectors]{DataFrame-class} of metadata along the columns, i.e.,
     where each column in \code{x} is represented by a row in the metadata.
     The metadata is common across all elements of \code{x}. Note that calling
-    \code{mcols(x)} returns the metadata on the \linkS4class{DataFrame}
+    \code{mcols(x)} returns the metadata on the \link[S4Vectors]{DataFrame-class}
     elements of \code{x}.
   }
 }

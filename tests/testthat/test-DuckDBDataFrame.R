@@ -395,7 +395,12 @@ test_that("[[<- aligns correctly on a row-number-keyed table after a numeric-ind
 test_that(".canonical_row_number_values reuses one allocation per distinct content", {
     # Base R's own tracemem() gives the same object-address string
     # lobstr::obj_addr() wraps, with no extra dependency; untracemem()
-    # immediately after avoids leaving copy-tracing enabled on 'x'.
+    # immediately after avoids leaving copy-tracing enabled on 'x'. Requires
+    # R to have been *compiled* with memory-profiling support, which is not
+    # guaranteed on every build machine (confirmed on a real Bioconductor
+    # build report: errors with "R was not compiled with support for memory
+    # profiling" rather than skipping) -- skip rather than error when absent.
+    skip_if_not(capabilities("profmem"), "R not compiled with memory-profiling support")
     obj_addr <- function(x) {
         addr <- tracemem(x)
         untracemem(x)

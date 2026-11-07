@@ -2,13 +2,13 @@
 #'
 #' @description
 #' The DuckDBDataFrame class extends both \linkS4class{DuckDBTable} and
-#' \linkS4class{DataFrame} to represent a DuckDB table as a
-#' \linkS4class{DataFrame} object.
+#' \link[S4Vectors]{DataFrame-class} to represent a DuckDB table as a
+#' \link[S4Vectors]{DataFrame-class} object.
 #'
 #' @details
-#' DuckDBDataFrame adds \linkS4class{DataFrame} semantics to a DuckDB table.
+#' DuckDBDataFrame adds \link[S4Vectors]{DataFrame-class} semantics to a DuckDB table.
 #' It achieves a balance between the flexibility of a tbl_duckdb_connection
-#' object and the familiarity of a \linkS4class{DataFrame} object.
+#' object and the familiarity of a \link[S4Vectors]{DataFrame-class} object.
 #'
 #' @section Constructor:
 #' \describe{
@@ -716,6 +716,25 @@ function(x, BACKEND = getAutoRealizationBackend()) {
 ### Display
 ###
 
+# Vendored from S4Vectors:::make_rownames_for_RectangularData_display()
+# (unexported; an R CMD check NOTE otherwise flags the ':::' call), which
+# builds the "head, ..., tail" row-name vector shown for a truncated
+# RectangularData display. Kept identical to the original so show() output
+# stays byte-for-byte the same.
+.make_rownames_for_display <- function(x_rownames, nrow, nhead, ntail) {
+    p1 <- ifelse(nhead == 0L, 0L, 1L)
+    p2 <- ifelse(ntail == 0L, 0L, ntail - 1L)
+    s1 <- s2 <- character(0)
+    if (is.null(x_rownames)) {
+        if (nhead > 0L) s1 <- paste0(as.character(p1:nhead))
+        if (ntail > 0L) s2 <- paste0(as.character((nrow - p2):nrow))
+    } else {
+        if (nhead > 0L) s1 <- paste0(head(x_rownames, nhead))
+        if (ntail > 0L) s2 <- paste0(tail(x_rownames, ntail))
+    }
+    c(s1, "...", s2)
+}
+
 #' @rdname DuckDBDataFrame-internals
 #' @export
 #' @importFrom S4Vectors DataFrame get_showHeadLines get_showTailLines makeNakedCharacterMatrixForDisplay
@@ -757,7 +776,7 @@ makePrettyCharacterMatrixForDisplay <- function(x) {
                        makeNakedCharacterMatrixForDisplay(tail(df, ntail)))
             x_rownames <- c(x_rownames, rownames(tail(x, ntail)))
         }
-        rownames(m) <- S4Vectors:::make_rownames_for_RectangularData_display(x_rownames, x_nrow, nhead, ntail)
+        rownames(m) <- .make_rownames_for_display(x_rownames, x_nrow, nhead, ntail)
     }
 
     m <- rbind(sprintf("<%s>", coltypes(x)), m)

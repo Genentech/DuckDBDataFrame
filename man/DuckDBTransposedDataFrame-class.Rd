@@ -17,8 +17,8 @@ Objects of class \code{DuckDBTransposedDataFrame} extend
 \link[S4Vectors]{RectangularData}.
 }
 \description{
-The DuckDBTransposedDataFrame class extends \linkS4class{TransposedDataFrame}
-to represent a DuckDB table as a \linkS4class{TransposedDataFrame} object.
+The DuckDBTransposedDataFrame class extends \link[S4Vectors]{TransposedDataFrame-class}
+to represent a DuckDB table as a \link[S4Vectors]{TransposedDataFrame-class} object.
 }
 \details{
 DuckDBTransposedDataFrame objects are constructed by calling \code{t()} on a

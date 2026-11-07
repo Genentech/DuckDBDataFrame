@@ -1,7 +1,7 @@
 #' DuckDBEmbeddings objects
 #'
 #' @description
-#' The DuckDBEmbeddings class extends \linkS4class{RectangularData} and
+#' The DuckDBEmbeddings class extends \link[S4Vectors]{RectangularData-class} and
 #' \linkS4class{DuckDBColumn} to represent a single dimensionality reduction
 #' embedding (e.g., PCA, UMAP, tSNE) stored in DuckDB using an ARRAY[] column.
 #'
@@ -366,7 +366,7 @@ function(x, BACKEND = getAutoRealizationBackend()) {
                        format(as.matrix(tail(mat_parts, ntail)), justify = "right"))
             x_rownames <- c(x_rownames, rownames(tail(x, ntail)))
         }
-        rownames(m) <- S4Vectors:::make_rownames_for_RectangularData_display(x_rownames, x_nrow, nhead, ntail)
+        rownames(m) <- .make_rownames_for_display(x_rownames, x_nrow, nhead, ntail)
     }
 
     if (is_wide) {

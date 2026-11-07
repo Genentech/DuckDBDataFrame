@@ -157,7 +157,7 @@ and flat arrow writers; previously the lazy export fell back to DuckDB's
 
 \item{keycol}{Optional primary-key column name for lazy table export.}
 
-\item{dimtbl}{Optional single-row \linkS4class{DataFrame} of partition columns.}
+\item{dimtbl}{Optional single-row \link[S4Vectors]{DataFrame-class} of partition columns.}
 
 \item{n_parts}{Number of files to split into
 (\code{\link{splitParquetPart}}).}

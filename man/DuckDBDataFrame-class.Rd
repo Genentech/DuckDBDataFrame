@@ -29,13 +29,13 @@ Objects of class \code{DuckDBDataFrame} extend \link[S4Vectors]{DataFrame}.
 }
 \description{
 The DuckDBDataFrame class extends both \linkS4class{DuckDBTable} and
-\linkS4class{DataFrame} to represent a DuckDB table as a
-\linkS4class{DataFrame} object.
+\link[S4Vectors]{DataFrame-class} to represent a DuckDB table as a
+\link[S4Vectors]{DataFrame-class} object.
 }
 \details{
-DuckDBDataFrame adds \linkS4class{DataFrame} semantics to a DuckDB table.
+DuckDBDataFrame adds \link[S4Vectors]{DataFrame-class} semantics to a DuckDB table.
 It achieves a balance between the flexibility of a tbl_duckdb_connection
-object and the familiarity of a \linkS4class{DataFrame} object.
+object and the familiarity of a \link[S4Vectors]{DataFrame-class} object.
 }
 \section{Constructor}{
 
