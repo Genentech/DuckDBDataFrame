@@ -2,6 +2,22 @@
 
 ## Bug fixes
 
+- Fixed a Bioconductor `nebbiolo2` build-report `ERROR` surfacing in
+  `BiocDuckDB`'s test suite: `writeDuckDBTableParquet()`'s schema-sampling
+  step unconditionally fetches via DuckDB's Arrow export
+  (`dbSendQueryArrow()`/`dbFetchArrow()`), which requires the `nanoarrow`
+  package. `duckdb` itself only lists `nanoarrow` under its own `Suggests`
+  (not a hard dependency), so it is not guaranteed to be installed wherever
+  `duckdb` is -- `nebbiolo2` lacked it, failing every test that calls
+  `writeParquet()`/`writeDuckDBTableParquet()` with
+  `Error in \`require_arrow()\`: The nanoarrow package is required for this
+  functionality`. Added `nanoarrow` to this package's own `Suggests` and a
+  `requireNamespace("nanoarrow", quietly = TRUE)` guard that falls back to
+  the pre-optimization full-file reread when it is not available, so the
+  optimization is used when possible but its absence is never a hard error.
+  Verified via a new regression test that mocks `requireNamespace()` to
+  force the fallback path and confirms it still produces a sample matching
+  the full reread exactly.
 - Fixed the Bioconductor `nebbiolo2` build-report `ERROR`: a test exercising
   `.canonical_row_number_values()`'s memory deduplication used
   `tracemem()`/`untracemem()` to confirm repeated calls on the same rowname

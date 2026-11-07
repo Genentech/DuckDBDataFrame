@@ -42,7 +42,8 @@ Suggests:
     knitr,
     rmarkdown,
     BiocStyle,
-    testthat
+    testthat,
+    nanoarrow
 biocViews:
     DataImport,
     DataRepresentation,

@@ -640,15 +640,35 @@ function(x, path, indexcol = "__index__", keycol = "__name__", dimtbl = NULL,
     # (BIGINT/UINTEGER/...) infer the same schema type as before. A plain
     # DBI fetch uses duckdb's native (always-widen) conversion instead,
     # which disagrees with arrow's on R class for those columns.
-    qres <- dbSendQueryArrow(conn, sample_sql)
-    on.exit(dbClearResult(qres), add = TRUE)
-    sample_df <- as.data.frame(as_arrow_table(dbFetchArrow(qres)))
+    #
+    # duckdb's Arrow export (dbSendQueryArrow()/dbFetchArrow()) requires the
+    # 'nanoarrow' package internally, but only lists it under its own
+    # Suggests (not a hard dependency of duckdb itself), so it is not
+    # guaranteed to be installed. Fall back to the pre-optimization full-file
+    # reread (slower, but avoids turning an environment without 'nanoarrow'
+    # into a hard error) when it is not available.
+    if (requireNamespace("nanoarrow", quietly = TRUE)) {
+        qres <- dbSendQueryArrow(conn, sample_sql)
+        on.exit(dbClearResult(qres), add = TRUE)
+        sample_df <- as.data.frame(as_arrow_table(dbFetchArrow(qres)))
 
-    if (!is.null(indexcol)) {
-        # Use the LIMIT query's actual row count, not 'sample_n': an empty
-        # 'x' still sets sample_n = 1L (see above) but returns zero rows.
-        idx_vals <- .sampleIndexColumn(prep$offset, nrow(sample_df), n, index_type)
-        sample_df <- cbind(setNames(data.frame(idx_vals), indexcol), sample_df)
+        if (!is.null(indexcol)) {
+            # Use the LIMIT query's actual row count, not 'sample_n': an
+            # empty 'x' still sets sample_n = 1L (see above) but returns
+            # zero rows.
+            idx_vals <- .sampleIndexColumn(prep$offset, nrow(sample_df), n, index_type)
+            sample_df <- cbind(setNames(data.frame(idx_vals), indexcol), sample_df)
+        }
+    } else {
+        # The full written file already has its real indexcol values (if
+        # any), unlike 'sample_sql' above which deliberately omits it; no
+        # separate synthesis step needed here.
+        # mmap = FALSE so this read does not leave a mapping open on a file a
+        # caller may go on to rewrite, rename, or split (blocked on Windows).
+        sample_df <- as.data.frame(read_parquet(prep$pq_path, mmap = FALSE))
+        if (nrow(sample_df) > sample_n) {
+            sample_df <- sample_df[seq_len(sample_n), , drop = FALSE]
+        }
     }
 
     # DuckDB/Arrow have no notion of 'collevels' (an R-level annotation on

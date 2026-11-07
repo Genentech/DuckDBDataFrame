@@ -770,6 +770,39 @@ test_that("writeDuckDBTableParquet sample_df matches an old-style full reread (l
     .expectSampleMatchesOldReread(res2, 100L)
 })
 
+test_that("writeDuckDBTableParquet falls back gracefully when nanoarrow is unavailable", {
+    skip_if_not_installed("arrow")
+    # duckdb's Arrow export (dbSendQueryArrow()/dbFetchArrow()) requires
+    # 'nanoarrow', which duckdb itself only Suggests (not a hard dependency),
+    # so it may not be installed. Confirm the schema-sampling step falls back
+    # to the pre-optimization full-file reread instead of erroring, and still
+    # produces the same sample as that old reread.
+    tf <- tempfile(fileext = ".parquet")
+    on.exit(unlink(tf), add = TRUE)
+    set.seed(7)
+    df <- data.frame(v = 1:20L, x = rnorm(20),
+                     g = sample(letters[1:3], 20, replace = TRUE),
+                     stringsAsFactors = FALSE)
+    arrow::write_parquet(df, tf)
+    x <- as(DuckDBDataFrame(tf), "DuckDBTable")
+
+    out <- tempfile(); dir.create(out)
+    on.exit(unlink(out, recursive = TRUE), add = TRUE)
+
+    real_requireNamespace <- requireNamespace
+    local_mocked_bindings(
+        requireNamespace = function(package, ...) {
+            if (identical(package, "nanoarrow")) return(FALSE)
+            real_requireNamespace(package, ...)
+        },
+        .package = "base")
+
+    expect_no_error(
+        res <- writeDuckDBTableParquet(x, out, indexcol = "__index__", keycol = NULL))
+    expect_identical(res$nrow, 20L)
+    .expectSampleMatchesOldReread(res, min(100L, res$nrow))
+})
+
 test_that("writeDuckDBTableParquet sample_df matches an old-style full reread across a multi-part append", {
     skip_if_not_installed("arrow")
     tf1 <- tempfile(fileext = ".parquet")
