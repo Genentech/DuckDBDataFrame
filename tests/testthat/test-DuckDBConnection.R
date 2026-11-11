@@ -252,3 +252,33 @@ test_that("the schema cache evicts least-recently-used entries past its size cap
     expect_identical(DuckDBDataFrame:::.lookup_schema_cache("conn", keys[[length(keys)]]),
                      c(x = "INTEGER"))
 })
+
+test_that("BIOCDUCKDB_EXTENSION_REPOSITORY is used by loadExtension's INSTALL", {
+    releaseDuckDBConn()
+    repo <- tempfile("ext_repo_")
+    ext_dir <- tempfile("ext_dir_")
+    dir.create(repo)
+    old <- Sys.getenv(c("BIOCDUCKDB_EXTENSION_REPOSITORY",
+                        "DUCKDB_EXTENSION_DIRECTORY"), unset = NA)
+    Sys.setenv(BIOCDUCKDB_EXTENSION_REPOSITORY = repo,
+               DUCKDB_EXTENSION_DIRECTORY = ext_dir)
+    on.exit({
+        for (nm in names(old)) {
+            if (is.na(old[[nm]])) Sys.unsetenv(nm)
+            else do.call(Sys.setenv, setNames(list(old[[nm]]), nm))
+        }
+        unlink(c(repo, ext_dir), recursive = TRUE)
+        releaseDuckDBConn()
+    }, add = TRUE)
+
+    con <- acquireDuckDBConn()
+    setting <- DBI::dbGetQuery(con,
+        "SELECT current_setting('custom_extension_repository') AS v")$v
+    expect_identical(setting, repo)
+
+    # the empty local mirror has no extensions, so the install must fail
+    # while looking there rather than reaching out to the public repository
+    err <- tryCatch(loadExtension(con, "spatial"), error = conditionMessage)
+    expect_type(err, "character")
+    expect_match(err, basename(repo), fixed = TRUE)
+})
