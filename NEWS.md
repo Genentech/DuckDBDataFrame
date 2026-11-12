@@ -1,10 +1,30 @@
+# DuckDBDataFrame 0.99.33
+
+## Bug fixes
+
+- Parquet writes that went through `arrow` always requested `zstd`
+  compression, which errors outright on a "minimal" `arrow` build (common in
+  CI/Docker images) that was not compiled with zstd codec support.
+  `buildParquetCopySQL()` and `.applyFactorLevels()` hardcoded
+  `COMPRESSION zstd`/`compression = "zstd"` with no fallback. Added
+  `resolveParquetCompression()`, which checks
+  `arrow::codec_is_available("zstd")` and falls back to `snappy` (dropping
+  the compression level, since DuckDB and `arrow` both error if a
+  compression level is paired with a non-zstd codec) when it is not
+  available; `buildParquetCopySQL()` gained `compression`/`compression_level`
+  arguments defaulting to it. zstd is still preferred whenever it is
+  available. `BiocDuckDB` and `DuckDBArray` adopt the same helper for their
+  own direct `arrow::write_parquet()`/`write_dataset()` calls. Fixes #1;
+  supersedes #2, which only skipped the affected tests rather than fixing
+  the underlying writes.
+
 # DuckDBDataFrame 0.99.32
 
 ## Bug fixes
 
-- **Filtering a `DuckDBTable`/`DuckDBDataFrame` to a large, moderately-clustered
+- Filtering a `DuckDBTable`/`DuckDBDataFrame` to a large, moderately-clustered
   integer key subset (e.g. a real biological cell/gene selection, not a
-  purely random sample) could crash with a node stack overflow** -- a raw,
+  purely random sample) could crash with a node stack overflow -- a raw,
   uncatchable crash under `callr::r_bg()`, or a catchable "evaluation nested
   too deeply" error elsewhere. `.filter_tblconn()` chooses between an inline
   range filter and a join based only on a *ratio* heuristic
@@ -21,10 +41,9 @@
   tree-balancing machinery for a problem that path already solves. Verified
   directly: reverting just this cap reproduces a real `node stack overflow`
   on the new regression test.
-
-- **`BIOCDUCKDB_EXTENSION_REPOSITORY`/`DUCKDB_EXTENSION_REPOSITORY` was
+- `BIOCDUCKDB_EXTENSION_REPOSITORY`/`DUCKDB_EXTENSION_REPOSITORY` was
   ignored by `loadExtension()`'s explicit `INSTALL`, so a mirror had no
-  effect on a locked-down network.** `configureExtensionAutoloading()` only
+  effect on a locked-down network. `configureExtensionAutoloading()` only
   set `autoinstall_extension_repository`, which covers DuckDB's *implicit*
   autoloading, not a plain `INSTALL` statement -- the one `loadExtension()`
   actually runs -- which instead consults `custom_extension_repository`,

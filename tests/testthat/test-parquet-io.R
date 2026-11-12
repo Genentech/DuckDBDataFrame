@@ -130,7 +130,8 @@ test_that("setupFlatParquetWrite validates flat append", {
 })
 
 test_that("escapeSQLPath doubles single quotes", {
-    expect_equal(escapeSQLPath("/tmp/a'b"), "/tmp/a''b")
+    path <- file.path(tempdir(), "a'b")
+    expect_equal(escapeSQLPath(path), gsub("'", "''", path, fixed = TRUE))
 })
 
 test_that("quoteSQLColumns quotes identifiers", {
@@ -143,7 +144,7 @@ test_that("quoteSQLColumns quotes identifiers", {
 })
 
 test_that("buildParquetCopySQL assembles COPY TO options", {
-    sql <- buildParquetCopySQL("SELECT 1", "/tmp/out.parquet",
+    sql <- buildParquetCopySQL("SELECT 1", tempfile(fileext = ".parquet"),
                                order_cols = '"idx"')
     expect_true(grepl("^COPY \\(SELECT 1 ORDER BY", sql))
     expect_true(grepl("FORMAT PARQUET", sql))
@@ -151,12 +152,57 @@ test_that("buildParquetCopySQL assembles COPY TO options", {
     expect_true(grepl("COMPRESSION_LEVEL 3", sql))
     expect_false(grepl("ROW_GROUP_SIZE", sql))
 
-    sql2 <- buildParquetCopySQL("SELECT 1", "/tmp/out",
+    sql2 <- buildParquetCopySQL("SELECT 1", tempfile(),
                                 order_cols = "m1.new_idx",
                                 partition_by = '"__sample__group__"',
                                 row_group_size = 491520L)
     expect_true(grepl("ROW_GROUP_SIZE 491520", sql2))
     expect_true(grepl("PARTITION_BY", sql2))
+})
+
+test_that("resolveParquetCompression prefers zstd when available, falls back to snappy", {
+    local_mocked_bindings(codec_is_available = function(type) TRUE, .package = "arrow")
+    expect_identical(resolveParquetCompression(), list(compression = "zstd", compression_level = 3L))
+    expect_identical(resolveParquetCompression(level = 9L),
+                     list(compression = "zstd", compression_level = 9L))
+
+    local_mocked_bindings(codec_is_available = function(type) FALSE, .package = "arrow")
+    expect_identical(resolveParquetCompression(), list(compression = "snappy", compression_level = NULL))
+})
+
+test_that("buildParquetCopySQL falls back to snappy with no COMPRESSION_LEVEL when zstd is unavailable", {
+    local_mocked_bindings(codec_is_available = function(type) FALSE, .package = "arrow")
+    target <- tempfile(fileext = ".parquet")
+    sql <- buildParquetCopySQL("SELECT 1", target)
+    expect_true(grepl("COMPRESSION snappy", sql))
+    expect_false(grepl("COMPRESSION_LEVEL", sql))
+    expect_false(grepl("zstd", sql))
+
+    # an explicit override is honored regardless of availability
+    sql2 <- buildParquetCopySQL("SELECT 1", target,
+                                compression = "zstd", compression_level = 5L)
+    expect_true(grepl("COMPRESSION zstd", sql2))
+    expect_true(grepl("COMPRESSION_LEVEL 5", sql2))
+})
+
+test_that("writeDuckDBTableParquet falls back to snappy when zstd is unavailable", {
+    skip_if_not_installed("arrow")
+    skip_if_not_installed("nanoparquet")
+    local_mocked_bindings(codec_is_available = function(type) FALSE, .package = "arrow")
+
+    df <- data.frame(x = 1:10L, y = letters[1:10], stringsAsFactors = FALSE)
+    src <- tempfile(fileext = ".parquet"); on.exit(unlink(src), add = TRUE)
+    arrow::write_parquet(df, src)
+    ddf <- DuckDBDataFrame(src)
+
+    out <- tempfile()
+    writeDuckDBTableParquet(ddf, out, indexcol = NULL, keycol = NULL)
+    pq <- file.path(out, list.files(out, pattern = "parquet$", recursive = TRUE))[1L]
+
+    got <- as.data.frame(arrow::read_parquet(pq))
+    expect_equal(nrow(got), nrow(df))
+    codecs <- unique(nanoparquet::read_parquet_metadata(pq)$column_chunks$codec)
+    expect_identical(codecs, "SNAPPY")
 })
 
 # ---- cluster_by: coord-indexed / multi-dimensional clustering on write -----------

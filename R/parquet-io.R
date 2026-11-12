@@ -58,10 +58,22 @@
 #' @param indexcol Optional index column name for lazy table export.
 #' @param keycol Optional primary-key column name for lazy table export.
 #' @param dimtbl Optional single-row \link[S4Vectors]{DataFrame-class} of partition columns.
+#' @param level Integer \code{zstd} compression level for
+#'   \code{\link{resolveParquetCompression}}.
+#' @param compression Codec name for \code{\link{buildParquetCopySQL}};
+#'   defaults to \code{\link{resolveParquetCompression}}.
+#' @param compression_level Optional integer compression level for
+#'   \code{\link{buildParquetCopySQL}}; defaults to
+#'   \code{\link{resolveParquetCompression}} and is omitted from the SQL
+#'   when \code{NULL}.
 #'
 #' @return
 #' \describe{
 #'   \item{\code{validateAppendOffset}}{Integer scalar.}
+#'   \item{\code{resolveParquetCompression}}{Named list with
+#'     \code{compression} and \code{compression_level}: \code{"zstd"} and
+#'     \code{level} when \code{\link[arrow]{codec_is_available}("zstd")} is
+#'     \code{TRUE}, otherwise \code{"snappy"} and \code{NULL}.}
 #'   \item{\code{readParquetSchema}}{\code{\link[arrow]{Schema}} object.}
 #'   \item{\code{reconcileParquetSchema}}{Named list of resolved
 #'     \code{DataType} objects.}
@@ -111,6 +123,7 @@
 #' @aliases setupFlatParquetWrite
 #' @aliases escapeSQLPath
 #' @aliases quoteSQLColumns
+#' @aliases resolveParquetCompression
 #' @aliases buildParquetCopySQL
 #' @aliases writeDuckDBTableParquet
 #' @aliases splitParquetPart
@@ -369,11 +382,23 @@ quoteSQLColumns <- function(conn, cols) {
 }
 
 #' @export
+#' @rdname parquet-io
+resolveParquetCompression <- function(level = 3L) {
+    if (arrow::codec_is_available("zstd")) {
+        list(compression = "zstd", compression_level = level)
+    } else {
+        list(compression = "snappy", compression_level = NULL)
+    }
+}
+
+#' @export
 #' @importFrom S4Vectors isSingleNumber
 #' @rdname parquet-io
 buildParquetCopySQL <-
 function(query_sql, target_path, order_cols = NULL, partition_by = NULL,
-         row_group_size = NULL, append = FALSE)
+         row_group_size = NULL, append = FALSE,
+         compression = resolveParquetCompression()[["compression"]],
+         compression_level = resolveParquetCompression()[["compression_level"]])
 {
     order_clause <- if (!is.null(order_cols) && length(order_cols) > 0L) {
         sprintf(" ORDER BY %s", paste(order_cols, collapse = ", "))
@@ -381,7 +406,11 @@ function(query_sql, target_path, order_cols = NULL, partition_by = NULL,
         ""
     }
 
-    options <- c("FORMAT PARQUET", "COMPRESSION zstd", "COMPRESSION_LEVEL 3")
+    options <- c("FORMAT PARQUET", sprintf("COMPRESSION %s", compression))
+    if (!is.null(compression_level)) {
+        options <- c(options,
+                     sprintf("COMPRESSION_LEVEL %d", as.integer(compression_level)))
+    }
     if (!is.null(row_group_size)) {
         if (!isSingleNumber(row_group_size) ||
             row_group_size != as.integer(row_group_size) ||
@@ -735,6 +764,7 @@ function(x, path, indexcol = "__index__", keycol = "__name__", dimtbl = NULL,
 
 #' @importFrom arrow read_parquet write_parquet
 .applyFactorLevels <- function(files, levels_by_col, row_group_size) {
+    cmp <- resolveParquetCompression()
     for (f in files) {
         # mmap = FALSE is required for Windows
         part <- read_parquet(f, mmap = FALSE)
@@ -743,7 +773,8 @@ function(x, path, indexcol = "__index__", keycol = "__name__", dimtbl = NULL,
             part[[col]] <- factor(part[[col]], levels = info[["levels"]],
                                   ordered = info[["ordered"]])
         }
-        write_parquet(part, f, compression = "zstd", compression_level = 3L,
+        write_parquet(part, f, compression = cmp[["compression"]],
+                      compression_level = cmp[["compression_level"]],
                       chunk_size = row_group_size)
     }
     invisible(NULL)

@@ -12,6 +12,7 @@
 \alias{setupFlatParquetWrite}
 \alias{escapeSQLPath}
 \alias{quoteSQLColumns}
+\alias{resolveParquetCompression}
 \alias{buildParquetCopySQL}
 \alias{writeDuckDBTableParquet}
 \alias{splitParquetPart}
@@ -53,13 +54,17 @@ escapeSQLPath(path)
 
 quoteSQLColumns(conn, cols)
 
+resolveParquetCompression(level = 3L)
+
 buildParquetCopySQL(
   query_sql,
   target_path,
   order_cols = NULL,
   partition_by = NULL,
   row_group_size = NULL,
-  append = FALSE
+  append = FALSE,
+  compression = resolveParquetCompression()[["compression"]],
+  compression_level = resolveParquetCompression()[["compression_level"]]
 )
 
 writeDuckDBTableParquet(
@@ -132,6 +137,9 @@ append.}
 
 \item{cols}{Character vector of column names to quote.}
 
+\item{level}{Integer \code{zstd} compression level for
+\code{\link{resolveParquetCompression}}.}
+
 \item{query_sql}{Inner \code{SELECT} (or \code{SELECT ... WHERE ...}) for
 \code{\link{buildParquetCopySQL}}.}
 
@@ -152,6 +160,14 @@ used by the coord-array
 and flat arrow writers; previously the lazy export fell back to DuckDB's
 122880 default.}
 
+\item{compression}{Codec name for \code{\link{buildParquetCopySQL}};
+defaults to \code{\link{resolveParquetCompression}}.}
+
+\item{compression_level}{Optional integer compression level for
+\code{\link{buildParquetCopySQL}}; defaults to
+\code{\link{resolveParquetCompression}} and is omitted from the SQL
+when \code{NULL}.}
+
 \item{x}{A \linkS4class{DuckDBTable} object
 (\code{\link{writeDuckDBTableParquet}}).}
 
@@ -165,6 +181,10 @@ and flat arrow writers; previously the lazy export fell back to DuckDB's
 \value{
 \describe{
   \item{\code{validateAppendOffset}}{Integer scalar.}
+  \item{\code{resolveParquetCompression}}{Named list with
+    \code{compression} and \code{compression_level}: \code{"zstd"} and
+    \code{level} when \code{\link[arrow]{codec_is_available}("zstd")} is
+    \code{TRUE}, otherwise \code{"snappy"} and \code{NULL}.}
   \item{\code{readParquetSchema}}{\code{\link[arrow]{Schema}} object.}
   \item{\code{reconcileParquetSchema}}{Named list of resolved
     \code{DataType} objects.}
