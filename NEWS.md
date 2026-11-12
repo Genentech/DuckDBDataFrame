@@ -22,6 +22,20 @@
   directly: reverting just this cap reproduces a real `node stack overflow`
   on the new regression test.
 
+- **`BIOCDUCKDB_EXTENSION_REPOSITORY`/`DUCKDB_EXTENSION_REPOSITORY` was
+  ignored by `loadExtension()`'s explicit `INSTALL`, so a mirror had no
+  effect on a locked-down network.** `configureExtensionAutoloading()` only
+  set `autoinstall_extension_repository`, which covers DuckDB's *implicit*
+  autoloading, not a plain `INSTALL` statement -- the one `loadExtension()`
+  actually runs -- which instead consults `custom_extension_repository`,
+  never set. `DuckDBSpatial` loads `spatial` this way in its `.onLoad`, so
+  every `st_*` call failed with "not in the catalog" behind a mirror.
+  Confirmed directly: setting only `autoinstall_extension_repository` to an
+  empty local directory let `INSTALL` silently fall through to the public
+  repository; setting `custom_extension_repository` instead made `INSTALL`
+  error out referencing that local directory by name. Fixed by setting both.
+  Thanks to @buyan-kh for the diagnosis, fix, and test (#5, fixing #4).
+
 # DuckDBDataFrame 0.99.31
 
 ## Bug fixes

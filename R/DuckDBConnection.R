@@ -207,9 +207,14 @@ configureExtensionAutoloading <- function(conn) {
     repo <- Sys.getenv("BIOCDUCKDB_EXTENSION_REPOSITORY",
                        unset = Sys.getenv("DUCKDB_EXTENSION_REPOSITORY", unset = ""))
     if (nzchar(repo)) {
-        try(dbExecute(conn,
-                      sprintf("SET autoinstall_extension_repository = '%s';", repo)),
-            silent = TRUE)
+        # autoinstall_extension_repository covers autoloading;
+        # custom_extension_repository covers explicit INSTALL, which is what
+        # loadExtension() runs
+        for (setting in c("autoinstall_extension_repository",
+                          "custom_extension_repository")) {
+            try(dbExecute(conn, sprintf("SET %s = '%s';", setting, repo)),
+                silent = TRUE)
+        }
     }
     loadInstalledExtensions(conn, c("spatial", "httpfs"))
     invisible(NULL)
