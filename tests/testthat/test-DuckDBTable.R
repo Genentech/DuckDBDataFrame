@@ -396,3 +396,57 @@ test_that("a directory marked _INCOMPLETE is refused explicitly", {
     unlink(file.path(dir, "_INCOMPLETE"))
     expect_identical(nrow(as.data.frame(DuckDBDataFrame(dir))), 3L)
 })
+
+test_that("a small number of contiguous key ranges still uses the range filter correctly", {
+    skip_if_not_installed("arrow")
+    n <- 100L
+    df <- data.frame(id = seq_len(n), value = as.numeric(seq_len(n)))
+    tf <- tempfile(fileext = ".parquet")
+    on.exit(unlink(tf), add = TRUE)
+    arrow::write_parquet(df, tf)
+
+    # 5 small contiguous ranges, well under both the ratio heuristic and
+    # .KEY_FILTER_JOIN_THRESHOLD -- confirms the ordinary range-filter path
+    # (unaffected by the new absolute cap) still returns correct results.
+    set <- c(1:3, 10:12, 20:25, 50, 90:95)
+    tbl <- DuckDBTable(tf, datacols = "value", keycols = list(id = set))
+    got <- as.data.frame(tbl)
+    expect_setequal(got$value, as.numeric(set))
+})
+
+test_that(".filter_tblconn() falls back to a join instead of an unbounded range-filter tree for a large, clustered key subset", {
+    skip_if_not_installed("arrow")
+    # Reproduces the shape of issue #3: a moderately-clustered (not purely
+    # random) real-world key subset can satisfy the OLD ratio-only heuristic
+    # (length(ranges) <= max(10, k/10)) with thousands of ranges, which
+    # .build_range_filter() then combines via an unbounded
+    # Reduce(call("|", ...)) -- a call tree deep enough to overflow R's
+    # C-level node stack when walked by dbplyr's SQL translation (confirmed
+    # directly: dbplyr::translate_sql_() on a comparably deep OR-tree fails
+    # with "evaluation nested too deeply" well under this test's scale, and a
+    # much deeper tree segfaults outright via plain deparse()).
+    #
+    # 2000 blocks of 10 contiguous ids each (separated by gaps so they don't
+    # merge into fewer, larger ranges) gives exactly 2000 ranges from a
+    # 20000-key subset: 2000 <= max(10, 20000/10) = 2000 satisfies the OLD
+    # ratio check, while 2000 > .KEY_FILTER_JOIN_THRESHOLD (256) is exactly
+    # the case the new absolute cap must catch.
+    block_size <- 10L
+    gap <- 5L
+    n_blocks <- 2000L
+    block_starts <- seq(1L, by = block_size + gap, length.out = n_blocks)
+    set <- unlist(lapply(block_starts, function(s) seq.int(s, s + block_size - 1L)))
+    expect_identical(length(set), 20000L)
+    expect_identical(length(DuckDBDataFrame:::.find_contiguous_ranges(set)), 2000L)
+
+    n <- max(set)
+    df <- data.frame(id = seq_len(n), value = as.numeric(seq_len(n)))
+    tf <- tempfile(fileext = ".parquet")
+    on.exit(unlink(tf), add = TRUE)
+    arrow::write_parquet(df, tf)
+
+    tbl <- DuckDBTable(tf, datacols = "value", keycols = list(id = set))
+    got <- NULL
+    expect_no_error(got <- as.data.frame(tbl))
+    expect_setequal(got$value, as.numeric(set))
+})

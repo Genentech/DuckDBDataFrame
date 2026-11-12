@@ -1,3 +1,27 @@
+# DuckDBDataFrame 0.99.32
+
+## Bug fixes
+
+- **Filtering a `DuckDBTable`/`DuckDBDataFrame` to a large, moderately-clustered
+  integer key subset (e.g. a real biological cell/gene selection, not a
+  purely random sample) could crash with a node stack overflow** -- a raw,
+  uncatchable crash under `callr::r_bg()`, or a catchable "evaluation nested
+  too deeply" error elsewhere. `.filter_tblconn()` chooses between an inline
+  range filter and a join based only on a *ratio* heuristic
+  (`length(ranges) <= max(10, k / 10)`), with no absolute ceiling; a subset
+  compressing into thousands of contiguous ranges satisfies that ratio
+  easily, and `.build_range_filter()` combines them via an unbounded
+  `Reduce(call("|", ...))`, building a call tree thousands of nodes deep.
+  Walking that tree (dbplyr's SQL translation, or `deparse()`) can then
+  overflow R's C-level node stack. Reported externally with a precise,
+  minimal, dependency-free reproduction of the underlying `Reduce()` issue.
+  Fixed by also capping the range count at the existing
+  `.KEY_FILTER_JOIN_THRESHOLD`, falling back to the already-robust
+  join-based path (`.apply_key_filter()`) instead of building new
+  tree-balancing machinery for a problem that path already solves. Verified
+  directly: reverting just this cap reproduces a real `node stack overflow`
+  on the new regression test.
+
 # DuckDBDataFrame 0.99.31
 
 ## Bug fixes

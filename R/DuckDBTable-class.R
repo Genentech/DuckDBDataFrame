@@ -558,9 +558,15 @@ setMethod("dbconn", "DuckDBTable", function(x) x@conn$src$con)
         range_filter <- NULL
         if ((is.integer(set) || is.integer64(set)) && k > 0L) {
             ranges <- .find_contiguous_ranges(set)
-            # Use range predicates if they're more efficient than IN list
-            # Heuristic: use ranges if total range count is small relative to set size
-            if (length(ranges) <= max(10L, k / 10L)) {
+            # Use range predicates if they're more efficient than IN list.
+            # Heuristic: use ranges if total range count is small relative to
+            # set size, but that ratio alone has no absolute ceiling, and
+            # .build_range_filter()'s Reduce(call("|", ...)) can then overflow
+            # R's stack on a clustered (not random) subset with thousands of
+            # ranges. Cap at .KEY_FILTER_JOIN_THRESHOLD too, falling back to
+            # the join-based path instead.
+            if (length(ranges) <= max(10L, k / 10L) &&
+                length(ranges) <= .KEY_FILTER_JOIN_THRESHOLD) {
                 range_filter <- .build_range_filter(conn, i, ranges)
             }
         }
