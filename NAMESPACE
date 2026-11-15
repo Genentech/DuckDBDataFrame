@@ -300,7 +300,8 @@ importFrom(bit64,
 importFrom(dbplyr,
   bind_queries,
   lazy_select_query,
-  sql_render
+  sql_render,
+  window_order
 )
 importFrom(dplyr,
   all_of,

@@ -2,6 +2,16 @@
 
 ## Bug fixes
 
+- A numeric or logical subscript on a row-number-keyed table was matched
+  against the preserved row numbers instead of against row positions, which
+  gave wrong rows once an earlier subset had left gaps in them. For example,
+  `x[2:5, ][c(1, 4), ]` returned only the row numbered 4, where a
+  `data.frame` returns the rows numbered 2 and 5. Subscripts now count
+  the rows of the table being subset, as for a `data.frame`, and `rownames()`
+  still keep the original row numbers. Code that indexed a table that had
+  already been subset by the original row numbers must now use positions. The
+  mapping adds a window function only when the row numbers are no longer
+  exactly `1..n`, so the common first subset is unchanged.
 - Subsetting a `DuckDBTable`, `DuckDBDataFrame` or `DuckDBColumn` that is keyed
   by row number with a logical `i`, such as `x[keep]` or `x[keep, ]`, failed
   with "unsupported 'i' for row subsetting with row_number", even for

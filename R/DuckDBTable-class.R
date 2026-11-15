@@ -1371,6 +1371,29 @@ all.equal.DuckDBTable <- function(target, current, check.datacols = FALSE, ...) 
     conn
 }
 
+# A numeric 'i' on a row_number-keyed table is a vector of row POSITIONS, as for
+# a data.frame, while the key column keeps the original row numbers so that
+# rownames() are preserved. The two coincide only while the keys are still
+# exactly 1..n; after an earlier subset, positions are mapped to keys by rank.
+#' @importFrom bit64 as.integer64
+#' @importFrom dbplyr window_order
+#' @importFrom dplyr all_of filter mutate n pull select summarize
+#' @importFrom stats setNames
+.filter_row_positions <- function(conn, keycol_name, pos) {
+    key <- as.name(keycol_name)
+    stats <- summarize(conn, n = n(), top = max(!!key, na.rm = TRUE))
+    if (isTRUE(pull(stats, n) == pull(stats, top))) {
+        return(filter(conn, !!call("%in%", key, as.integer64(pos))))
+    }
+    pos_name <- tail(make.unique(c(colnames(conn), ".position"), sep = "_"), 1L)
+    conn <- window_order(conn, !!key)
+    conn <- mutate(conn, !!!setNames(list(call("row_number")), pos_name))
+    conn <- filter(conn, !!call("%in%", as.name(pos_name), as.integer64(pos)))
+    conn <- select(conn, -all_of(pos_name))
+    # window_order() persists and would reorder later row_number() calls
+    window_order(conn)
+}
+
 #' @importClassesFrom S4Vectors NSBS
 #' @importFrom bit64 as.integer64
 #' @importFrom dplyr distinct filter pull select
@@ -1404,8 +1427,7 @@ all.equal.DuckDBTable <- function(target, current, check.datacols = FALSE, ...) 
                         sub <- which(rep_len(sub, nr))
                     }
                     if (is.numeric(sub)) {
-                        keep <- call("%in%", as.name(k), as.integer64(sub))
-                        conn <- filter(conn, !!keep)
+                        conn <- .filter_row_positions(conn, k, sub)
                         keycols[[1L]] <- set_row_number(conn)
                     } else {
                         stop("unsupported 'i' for row subsetting with ",

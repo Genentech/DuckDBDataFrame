@@ -473,3 +473,54 @@ test_that("a row_number-keyed table and column accept logical row subscripts", {
     expect_error(col[c(TRUE, FALSE)], "length 1 or nrow")
     expect_error(col[c("a", "b")], "numeric or logical")
 })
+
+test_that("numeric and logical subscripts on a row_number-keyed table are row positions, also after a prior subset", {
+    skip_if_not_installed("arrow")
+    df <- data.frame(a = 10L * (1:10), b = letters[1:10])
+    tf <- tempfile(fileext = ".parquet")
+    on.exit(unlink(tf), add = TRUE)
+    arrow::write_parquet(df, tf)
+    ddf <- DuckDBDataFrame(tf)
+
+    idx <- c(2L, 3L, 5L, 7L, 8L, 10L)
+    s <- ddf[idx, ]
+    ref <- df[idx, ]
+    # the keys keep the original row numbers, so rownames are preserved ...
+    expect_identical(as.character(rownames(s)), rownames(ref))
+    # ... but a further subscript counts the rows of 's', as for a data.frame
+    for (sub in list(c(1L, 4L), c(TRUE, FALSE, FALSE, TRUE, FALSE, FALSE))) {
+        r <- s[sub, ]
+        expect_equal(as.data.frame(r)$a, ref[sub, "a"])
+        expect_identical(as.character(rownames(r)), rownames(ref[sub, ]))
+    }
+    r3 <- s[2:5, ][c(1L, 4L), ]
+    expect_equal(as.data.frame(r3)$a, ref[2:5, ][c(1L, 4L), "a"])
+    expect_identical(as.character(rownames(r3)), rownames(ref[2:5, ][c(1L, 4L), ]))
+
+    col <- ddf$a[idx][c(2L, 5L)]
+    expect_equal(unname(as.vector(col)), df$a[idx][c(2L, 5L)])
+
+    # a later renumbering step still works after a positional subset
+    f <- s[s$a > 30L, ]
+    expect_equal(as.data.frame(f)$a, ref$a[ref$a > 30L])
+
+    set.seed(1)
+    for (t in 1:20) {
+        d <- df
+        x <- ddf
+        for (lvl in 1:3) {
+            n <- nrow(d)
+            if (n < 2L) break
+            if (runif(1) < 0.5) {
+                p <- sort(sample.int(n, sample.int(n - 1L, 1L)))
+            } else {
+                p <- runif(n) < 0.6
+                if (!any(p)) p[1L] <- TRUE
+            }
+            d <- d[p, , drop = FALSE]
+            x <- x[p, ]
+        }
+        expect_equal(as.data.frame(x)$a, d$a)
+        expect_identical(as.character(rownames(x)), rownames(d))
+    }
+})
