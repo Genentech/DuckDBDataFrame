@@ -1381,8 +1381,9 @@ all.equal.DuckDBTable <- function(target, current, check.datacols = FALSE, ...) 
 #' @importFrom stats setNames
 .filter_row_positions <- function(conn, keycol_name, pos) {
     key <- as.name(keycol_name)
-    stats <- summarize(conn, n = n(), top = max(!!key, na.rm = TRUE))
-    if (isTRUE(pull(stats, n) == pull(stats, top))) {
+    aggr <- list(n = call("n"), top = call("max", key, na.rm = TRUE))
+    stats <- summarize(conn, !!!aggr)
+    if (isTRUE(pull(stats, "n") == pull(stats, "top"))) {
         return(filter(conn, !!call("%in%", key, as.integer64(pos))))
     }
     pos_name <- tail(make.unique(c(colnames(conn), ".position"), sep = "_"), 1L)
