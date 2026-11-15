@@ -1395,12 +1395,22 @@ all.equal.DuckDBTable <- function(target, current, check.datacols = FALSE, ...) 
             }
             if (is.atomic(sub)) {
                 if (has_row_number(x)) {
+                    if (is.logical(sub)) {
+                        nr <- nrow(x)
+                        if (anyNA(sub) || !(length(sub) %in% c(1L, nr))) {
+                            stop("a logical 'i' must have no NAs and length 1 ",
+                                 "or nrow(x)")
+                        }
+                        sub <- which(rep_len(sub, nr))
+                    }
                     if (is.numeric(sub)) {
                         keep <- call("%in%", as.name(k), as.integer64(sub))
                         conn <- filter(conn, !!keep)
                         keycols[[1L]] <- set_row_number(conn)
                     } else {
-                        stop("unsupported 'i' for row subsetting with row_number")
+                        stop("unsupported 'i' for row subsetting with ",
+                             "row_number: it has no row names, so use a ",
+                             "numeric or logical 'i'")
                     }
                 } else if (is.character(sub) && is.null(names(keycols[[k]]))) {
                     keycols[[k]] <- sub

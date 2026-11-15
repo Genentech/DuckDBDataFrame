@@ -450,3 +450,26 @@ test_that(".filter_tblconn() falls back to a join instead of an unbounded range-
     expect_no_error(got <- as.data.frame(tbl))
     expect_setequal(got$value, as.numeric(set))
 })
+
+test_that("a row_number-keyed table and column accept logical row subscripts", {
+    skip_if_not_installed("arrow")
+    df <- data.frame(a = 1:6, b = letters[1:6])
+    tf <- tempfile(fileext = ".parquet")
+    on.exit(unlink(tf), add = TRUE)
+    arrow::write_parquet(df, tf)
+    ddf <- DuckDBDataFrame(tf)
+    expect_true(DuckDBDataFrame:::has_row_number(ddf))
+
+    keep <- c(TRUE, FALSE, TRUE, TRUE, FALSE, FALSE)
+    expect_equal(as.data.frame(ddf[keep, ])$a, df$a[keep])
+    expect_equal(as.data.frame(ddf[keep, ])$b, df$b[keep])
+
+    col <- ddf$a
+    expect_equal(unname(as.vector(col[keep])), df$a[keep])
+    expect_equal(unname(as.vector(col[TRUE])), df$a)
+    expect_length(col[rep(FALSE, 6L)], 0L)
+
+    expect_error(col[c(TRUE, NA, rep(FALSE, 4L))], "no NAs")
+    expect_error(col[c(TRUE, FALSE)], "length 1 or nrow")
+    expect_error(col[c("a", "b")], "numeric or logical")
+})

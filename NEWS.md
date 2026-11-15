@@ -1,3 +1,17 @@
+# DuckDBDataFrame 0.99.34
+
+## Bug fixes
+
+- Subsetting a `DuckDBTable`, `DuckDBDataFrame` or `DuckDBColumn` that is keyed
+  by row number with a logical `i`, such as `x[keep]` or `x[keep, ]`, failed
+  with "unsupported 'i' for row subsetting with row_number", even for
+  `x[TRUE]`. Only numeric subscripts were handled, so code that selects rows
+  with a logical vector, such as `SpatialFeatureExperiment` picking out one
+  sample's geometries, could not use a lazy column. A logical `i` of length 1
+  or `nrow(x)` with no `NA`s is now converted to row positions and handled
+  like a numeric one. A character `i` still fails, since these tables have no
+  row names, and its error now says to use a numeric or logical `i`.
+
 # DuckDBDataFrame 0.99.33
 
 ## Bug fixes
