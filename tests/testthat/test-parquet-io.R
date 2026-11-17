@@ -205,6 +205,35 @@ test_that("writeDuckDBTableParquet falls back to snappy when zstd is unavailable
     expect_identical(codecs, "SNAPPY")
 })
 
+test_that("writeDuckDBTableParquet writes a column that was added or changed lazily", {
+    skip_if_not_installed("arrow")
+    src <- tempfile(fileext = ".parquet"); on.exit(unlink(src), add = TRUE)
+    arrow::write_parquet(data.frame(id = c("c1", "c2", "c3"), v = 1:3), src)
+
+    # a new column, one that replaces a stored column, and one built from
+    # another derived column
+    ddf <- DuckDBDataFrame(src)
+    ddf$flag <- ddf$id == "c1"
+    ddf$v <- ddf$v * 10L
+    ddf$both <- ddf$flag & ddf$v > 5L
+    out <- tempfile(); on.exit(unlink(out, recursive = TRUE), add = TRUE)
+    writeDuckDBTableParquet(ddf, out, indexcol = NULL, keycol = NULL)
+    got <- as.data.frame(arrow::open_dataset(out))
+    got <- got[order(got$id), ]
+    expect_identical(got$flag, c(TRUE, FALSE, FALSE))
+    expect_identical(as.integer(got$v), c(10L, 20L, 30L))
+    expect_identical(got$both, c(TRUE, FALSE, FALSE))
+
+    # and the same with a named key, which is written next to the data
+    kd <- DuckDBDataFrame(src, keycol = "id")
+    kd$flag <- kd$v > 1L
+    out2 <- tempfile(); on.exit(unlink(out2, recursive = TRUE), add = TRUE)
+    writeDuckDBTableParquet(kd, out2, indexcol = NULL, keycol = "id")
+    got2 <- as.data.frame(arrow::open_dataset(out2))
+    got2 <- got2[order(got2$id), ]
+    expect_identical(got2$flag, c(FALSE, TRUE, TRUE))
+})
+
 # ---- cluster_by: coord-indexed / multi-dimensional clustering on write -----------
 
 test_that("zorder/hilbert constructors validate their arguments", {

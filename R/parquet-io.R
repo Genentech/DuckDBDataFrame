@@ -499,7 +499,10 @@ function(x, indexcol = NULL, keycol = NULL, dimtbl = NULL, offset = 0L,
 {
     if (!inherits(x, "DuckDBTable"))
         stop("'x' must be a DuckDBTable")
-    tbl_q <- sql_render(tblconn(x, select = FALSE))
+    conn_x <- tblconn(x, select = FALSE)
+    if (inherits(conn_x, "tbl_duckdb_connection") && length(x@datacols))
+        conn_x <- .mutate_datacols(conn_x, x@datacols)
+    tbl_q <- sql_render(conn_x)
     data_cols <- colnames(x)
     kcols <- keynames(x)
     table_cols <- unique(c(data_cols, setdiff(kcols, data_cols)))

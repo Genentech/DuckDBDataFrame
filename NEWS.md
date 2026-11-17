@@ -1,3 +1,15 @@
+# DuckDBDataFrame 0.99.35
+
+## Bug fixes
+
+- `writeDuckDBTableParquet()`, and so `BiocDuckDB::writeParquet()`, failed on a
+  table with a column that had been added or changed lazily, such as
+  `x$flag <- x$id == "a"`, with a binder error saying the table has no column
+  `flag`. Such a column exists only as an expression on the table, and the
+  write read the underlying table by column name instead. The write now applies
+  the table's column definitions first, so added columns, columns that replace a
+  stored one, and columns built from another derived column are written.
+
 # DuckDBDataFrame 0.99.34
 
 ## Bug fixes
