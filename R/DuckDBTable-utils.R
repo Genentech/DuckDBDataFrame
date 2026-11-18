@@ -915,7 +915,19 @@ function (x, incomparables = FALSE, fromLast = FALSE, ...)  {
 
 #' @export
 setMethod("%in%", c(x = "DuckDBTable", table = "ANY"), function(x, table) {
-    sql_call(x, "%in%", table)
+    # Match base R: the result is never NA, and NA matches only when the table
+    # has an NA. A plain SQL IN returns NULL in both of those cases.
+    table <- unique(as.vector(table))
+    has_na <- anyNA(table)
+    table <- table[!is.na(table)]
+    FUN <- function(j) {
+        expr <- call("coalesce", call("%in%", j, table), FALSE)
+        if (has_na) {
+            expr <- call("|", call("is.na", j), expr)
+        }
+        expr
+    }
+    replaceSlots(x, datacols = endoapply(x@datacols, FUN), check = FALSE)
 })
 
 #' @export

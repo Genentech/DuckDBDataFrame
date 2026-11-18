@@ -112,6 +112,23 @@ test_that("%in% works as expected for a DuckDBColumn", {
     checkDuckDBColumn(carb %in% c(2, 4, 8), setNames(as.vector(carb) %in% c(2, 4, 8), names(carb)))
 })
 
+test_that("%in% never returns NA for a DuckDBColumn, like base R", {
+    na_df <- data.frame(id = letters[1:5], x = c(1, NA, 3, 4, NA))
+    na_path <- tempfile(fileext = ".parquet")
+    arrow::write_parquet(na_df, na_path)
+    on.exit(unlink(na_path))
+
+    df <- DuckDBDataFrame(na_path, datacols = "x", keycol = "id")
+    x <- df[["x"]]
+    expected <- function(table) setNames(na_df$x %in% table, na_df$id)
+
+    checkDuckDBColumn(x %in% c(1, 4), expected(c(1, 4)))
+    checkDuckDBColumn(x %in% c(1, NA), expected(c(1, NA)))
+    checkDuckDBColumn(x %in% NA, expected(NA))
+    checkDuckDBColumn(x %in% numeric(0), expected(numeric(0)))
+    expect_identical(sum(as.vector(x %in% c(1, 4))), 2L)
+})
+
 test_that("Special numeric functions work as expected for a DuckDBColumn", {
     df <- DuckDBDataFrame(special_path, datacols = "x", keycol = list(id = letters[1:4]))
     x <- df[["x"]]
