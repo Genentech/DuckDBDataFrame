@@ -160,6 +160,30 @@ test_that("%in% never returns NA for a character DuckDBColumn", {
     checkDuckDBColumn(s %in% NA_character_, expected(NA_character_))
 })
 
+test_that("%in% with a lazy DuckDBColumn as the table matches base R", {
+    x_df <- data.frame(id = letters[1:6], x = c(1, 2, NA, 4, 2, 7),
+                       s = c("u", "v", NA, "u", "w", "v"))
+    y_df <- data.frame(id = letters[1:3], y = c(2, 7, NA), t = c("v", "z", NA))
+    x_path <- tempfile(fileext = ".parquet")
+    y_path <- tempfile(fileext = ".parquet")
+    arrow::write_parquet(x_df, x_path)
+    arrow::write_parquet(y_df, y_path)
+    on.exit(unlink(c(x_path, y_path)))
+
+    x <- DuckDBDataFrame(x_path, datacols = c("x", "s"), keycol = "id")
+    y <- DuckDBDataFrame(y_path, datacols = c("y", "t"), keycol = "id")
+    expected <- function(v, table) setNames(v %in% table, x_df$id)
+
+    # the answer has one value per element of x, not one per element of the table
+    checkDuckDBColumn(x[["x"]] %in% y[["y"]], expected(x_df$x, y_df$y))
+    checkDuckDBColumn(x[["s"]] %in% y[["t"]], expected(x_df$s, y_df$t))
+    checkDuckDBColumn(x[["x"]] %in% x[["x"]], expected(x_df$x, x_df$x))
+    checkDuckDBColumn(x[["x"]] %in% y[["y"]][0L], expected(x_df$x, numeric(0)))
+
+    one <- x[, "x", drop = FALSE]
+    expect_identical(as.vector(( one %in% y[["y"]] )[["x"]]), expected(x_df$x, y_df$y))
+})
+
 test_that("Special numeric functions work as expected for a DuckDBColumn", {
     df <- DuckDBDataFrame(special_path, datacols = "x", keycol = list(id = letters[1:4]))
     x <- df[["x"]]

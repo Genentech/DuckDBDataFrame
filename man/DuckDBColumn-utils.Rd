@@ -42,6 +42,8 @@
 \alias{paste,DuckDBColumn-method}
 \alias{unique,DuckDBColumn-method}
 \alias{\%in\%,DuckDBColumn,ANY-method}
+\alias{\%in\%,DuckDBColumn,DuckDBColumn-method}
+\alias{\%in\%,DuckDBTable,DuckDBColumn-method}
 \alias{table,DuckDBColumn-method}
 \alias{is_nonzero,DuckDBColumn-method}
 \alias{nzcount,DuckDBColumn-method}

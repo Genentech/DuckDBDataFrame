@@ -56,6 +56,13 @@
   result is never `NA`, `NA` matches only an `NA` in the table, and `NaN`
   matches only a `NaN`. Reported in #6, with a fix proposed by the contributor
   in #7 that this change builds on.
+- `%in%` with a `DuckDBColumn` as the table, such as `x %in% y` for two columns
+  of a table, returned a plain `logical` with one value per element of the
+  table instead of one per element of `x`. A column is an S4Vectors `Vector`,
+  so the `(Vector, Vector)` method was chosen and compared the two lazy objects
+  with `match()`. A `DuckDBColumn` or `DuckDBTable` on the left with a
+  `DuckDBColumn` table now collects the table's values and gives the same
+  lazy result as for a vector table.
 
 ## Testing
 
@@ -71,6 +78,9 @@
 - New tests compare `%in%` on a `DuckDBColumn` with base R for numeric columns
   holding `NA` and `NaN` and for a character column, with tables that contain
   `NA`, `NaN`, both, or nothing.
+- New tests compare `%in%` with a `DuckDBColumn` as the table with base R, for
+  numeric and character columns, a lookup in the same column, an empty table,
+  and a table with one column. They fail on the previous code.
 
 # DuckDBDataFrame 0.99.35
 

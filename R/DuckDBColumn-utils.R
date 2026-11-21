@@ -257,6 +257,8 @@
 #'
 #' @aliases unique,DuckDBColumn-method
 #' @aliases %in%,DuckDBColumn,ANY-method
+#' @aliases %in%,DuckDBColumn,DuckDBColumn-method
+#' @aliases %in%,DuckDBTable,DuckDBColumn-method
 #' @aliases table,DuckDBColumn-method
 #'
 #' @aliases is_nonzero,DuckDBColumn-method
@@ -541,6 +543,18 @@ function (x, incomparables = FALSE, fromLast = FALSE, ...)  {
 #' @export
 setMethod("%in%", c(x = "DuckDBColumn", table = "ANY"), function(x, table) {
     replaceSlots(x, table = callGeneric(x@table, table), check = FALSE)
+})
+
+#' @export
+setMethod("%in%", c(x = "DuckDBColumn", table = "DuckDBColumn"),
+function(x, table) {
+    callGeneric(x, as.vector(table))
+})
+
+#' @export
+setMethod("%in%", c(x = "DuckDBTable", table = "DuckDBColumn"),
+function(x, table) {
+    callGeneric(x, as.vector(table))
 })
 
 #' @export
