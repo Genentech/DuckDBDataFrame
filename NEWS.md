@@ -50,6 +50,12 @@
 - A subscript by name on a table with a key, such as `y["r5", ]`, selected from
   the keys given and not the keys of the table, so a row outside a subset could
   come back. It now selects among the keys the table has.
+- `%in%` on a `DuckDBColumn` or `DuckDBDataFrame` returned `NA` for every row
+  whose value was missing, and for every row when the table contained an `NA`,
+  because it passed the lookup straight to SQL `IN`. It now follows base R: the
+  result is never `NA`, `NA` matches only an `NA` in the table, and `NaN`
+  matches only a `NaN`. Reported in #6, with a fix proposed by the contributor
+  in #7 that this change builds on.
 
 ## Testing
 
@@ -62,6 +68,9 @@
   index that was not in increasing order on a table numbered by row and passed
   only because the table returned the rows in file order. They now use an
   increasing index, and the first also checks the new error.
+- New tests compare `%in%` on a `DuckDBColumn` with base R for numeric columns
+  holding `NA` and `NaN` and for a character column, with tables that contain
+  `NA`, `NaN`, both, or nothing.
 
 # DuckDBDataFrame 0.99.35
 

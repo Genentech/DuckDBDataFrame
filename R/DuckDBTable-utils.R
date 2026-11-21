@@ -915,7 +915,25 @@ function (x, incomparables = FALSE, fromLast = FALSE, ...)  {
 
 #' @export
 setMethod("%in%", c(x = "DuckDBTable", table = "ANY"), function(x, table) {
-    sql_call(x, "%in%", table)
+    # Match base R: the result is never NA, NA matches only an NA in the table,
+    # and NaN matches only a NaN. A plain SQL IN returns NULL for a missing
+    # value and for a table that contains NULL.
+    table <- unique(as.vector(table))
+    is_nan <- if (is.double(table)) is.nan(table) else logical(length(table))
+    has_na <- any(is.na(table) & !is_nan)
+    has_nan <- any(is_nan)
+    table <- table[!is.na(table)]
+    FUN <- function(j) {
+        expr <- call("coalesce", call("%in%", j, table), FALSE)
+        if (has_na) {
+            expr <- call("|", call("is.na", j), expr)
+        }
+        if (has_nan) {
+            expr <- call("|", call("is.nan", j), expr)
+        }
+        expr
+    }
+    replaceSlots(x, datacols = endoapply(x@datacols, FUN), check = FALSE)
 })
 
 #' @export
