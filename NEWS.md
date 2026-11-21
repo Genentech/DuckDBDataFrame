@@ -17,6 +17,10 @@
 - `%in%` with a table that contains `NaN` failed with a database error on an
   integer column, and had the same `isnan()` problem on a floating point column.
   It now tests for `NaN` as `is.nan()` does and leaves an integer column alone.
+- `is.finite()` and `is.infinite()` on a `DuckDBColumn` or `DuckDBDataFrame`
+  returned `NA` for a missing value, because DuckDB's `isfinite()` and `isinf()`
+  are `NULL` for a `NULL`. Base R gives `FALSE`, so a missing value is now
+  `FALSE`.
 
 ## Testing
 
@@ -25,6 +29,10 @@
   previous code.
 - A new test compares `is.na()` and `anyNA()` with base R for columns that hold
   `NaN` and no `NA`, `NaN`, `NA` and infinite values, and integers, and for a
+  `DuckDBDataFrame`. It fails on the previous code.
+- A new test compares `is.finite()` and `is.infinite()` with base R for columns
+  that hold finite values only, infinite values, `NaN`, `NA`, all of these
+  together, only `NA`, and integers with `NA`, for a column and for a
   `DuckDBDataFrame`. It fails on the previous code.
 
 # DuckDBDataFrame 0.99.36

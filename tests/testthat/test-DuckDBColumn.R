@@ -197,6 +197,28 @@ test_that("is.na() and anyNA() count a NaN as missing, also in a column with no 
     expect_false(anyNA(df[, c("y", "n")]))
 })
 
+test_that("is.finite() and is.infinite() are never NA, as in base R", {
+    cases <- list(finite = c(1, 2, 3, 4, 5, 6),
+                  inf = c(1, 2, Inf, 4, -Inf, 6),
+                  nan = c(1, 2, NaN, 4, 5, 6),
+                  na = c(1, NA, 3, 4, 5, 6),
+                  mixed = c(NaN, 1, NA, Inf, -Inf, 3),
+                  all_na = rep(NA_real_, 6),
+                  int = c(1L, NA, 3L, 4L, 5L, 6L))
+    ids <- letters[1:6]
+    for (nm in names(cases)) {
+        v <- cases[[nm]]
+        path <- tempfile(fileext = ".parquet")
+        arrow::write_parquet(data.frame(id = ids, x = v), path)
+        df <- DuckDBDataFrame(path, datacols = "x", keycol = "id")
+        checkDuckDBColumn(is.finite(df[["x"]]), setNames(is.finite(v), ids))
+        checkDuckDBColumn(is.infinite(df[["x"]]), setNames(is.infinite(v), ids))
+        expect_identical(unname(as.vector(is.finite(df)[["x"]])), unname(is.finite(v)), info = nm)
+        expect_identical(unname(as.vector(is.infinite(df)[["x"]])), unname(is.infinite(v)), info = nm)
+        unlink(path)
+    }
+})
+
 test_that("%in% never returns NA for a character DuckDBColumn", {
     chr_df <- data.frame(id = letters[1:4], s = c("u", NA, "w", "u"))
     chr_path <- tempfile(fileext = ".parquet")

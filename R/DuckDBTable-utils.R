@@ -544,14 +544,24 @@ setMethod("anyNA", "DuckDBTable", function(x, recursive = FALSE) {
     pull(summarize(tblconn(x, select = FALSE), !!aggr))
 })
 
+# is.finite() and is.infinite() are never NA in base R, but isfinite() and
+# isinf() are NULL for a missing value, so a missing value is FALSE.
+.noNAexpr <- function(x, fun) {
+    datacols <- x@datacols
+    datacols <- as.expression(setNames(
+        lapply(datacols, function(j) call("coalesce", call(fun, j), FALSE)),
+        names(datacols)))
+    replaceSlots(x, datacols = datacols, check = FALSE)
+}
+
 #' @export
 setMethod("is.finite", "DuckDBTable", function(x) {
-    sql_call(x, "isfinite")
+    .noNAexpr(x, "isfinite")
 })
 
 #' @export
 setMethod("is.infinite", "DuckDBTable", function(x) {
-    sql_call(x, "isinf")
+    .noNAexpr(x, "isinf")
 })
 
 #' @export
