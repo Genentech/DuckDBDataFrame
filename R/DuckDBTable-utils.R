@@ -523,9 +523,11 @@ setMethod("Summary", "DuckDBTable", function(x, ..., na.rm = FALSE) {
 ### Numerical methods
 ###
 
+# A NaN is missing for is.na() and anyNA(), as in base R. Only a floating point
+# column can hold one, and DuckDB's own isnan() is not used; see is.nan().
 .isNaExpr <- function(j, type) {
     if (identical(type, "double")) {
-        call("|", call("is.na", j), call("isnan", j))
+        call("|", call("is.na", j), call("is.nan", j))
     } else {
         call("is.na", j)
     }

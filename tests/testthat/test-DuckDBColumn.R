@@ -179,6 +179,24 @@ test_that("is.nan() sees a stored NaN, also in a column with no missing value", 
     checkDuckDBColumn(df[["x"]] %in% c(1, NaN), setNames(d$x %in% c(1, NaN), d$id))
 })
 
+test_that("is.na() and anyNA() count a NaN as missing, also in a column with no NULL", {
+    # DuckDB 2.0.0's isnan() gives FALSE for such a column read from Parquet
+    d <- data.frame(id = letters[1:6], x = c(1, 2, NaN, 4, 5, 6),
+                    y = c(1, 2, 3, 4, 5, 6), z = c(NaN, 1, NA, Inf, -Inf, 3),
+                    n = 1:6)
+    path <- tempfile(fileext = ".parquet")
+    arrow::write_parquet(d, path)
+    on.exit(unlink(path))
+
+    df <- DuckDBDataFrame(path, datacols = c("x", "y", "z", "n"), keycol = "id")
+    for (col in c("x", "y", "z", "n")) {
+        checkDuckDBColumn(is.na(df[[col]]), setNames(is.na(d[[col]]), d$id))
+        expect_identical(anyNA(df[[col]]), anyNA(d[[col]]), info = col)
+    }
+    expect_true(anyNA(df))
+    expect_false(anyNA(df[, c("y", "n")]))
+})
+
 test_that("%in% never returns NA for a character DuckDBColumn", {
     chr_df <- data.frame(id = letters[1:4], s = c("u", NA, "w", "u"))
     chr_path <- tempfile(fileext = ".parquet")

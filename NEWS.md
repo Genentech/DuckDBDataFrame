@@ -7,9 +7,13 @@
   `isnan()`, which in DuckDB 2.0.0 gives `FALSE` for such a column, apparently
   because the Parquet file statistics leave `NaN` out. It now uses the
   comparison that `dbplyr` writes for `is.nan()`, which is not affected, for a
-  floating point column. An
-  integer column cannot hold a `NaN`, and that comparison cannot format an
-  integer, so `is.nan()` is `FALSE` there.
+  floating point column. An integer column cannot hold a `NaN`, and that
+  comparison cannot format an integer, so `is.nan()` is `FALSE` there.
+- `is.na()` and `anyNA()` on a `DuckDBColumn` or `DuckDBDataFrame` had the same
+  problem. They test a floating point column for `NaN` as well as for `NULL`,
+  through `isnan()`, so a `NaN` in a Parquet column with no `NULL` was not
+  missing: `anyNA()` was `FALSE` for a column of `c(1, 2, NaN)`, where base R is
+  `TRUE`. They now use the same test as `is.nan()`.
 - `%in%` with a table that contains `NaN` failed with a database error on an
   integer column, and had the same `isnan()` problem on a floating point column.
   It now tests for `NaN` as `is.nan()` does and leaves an integer column alone.
@@ -19,6 +23,9 @@
 - New tests check `is.nan()` and `%in%` with `NaN` on a column that holds `NaN`
   and no `NA`, on one that holds both, and on an integer column. They fail on the
   previous code.
+- A new test compares `is.na()` and `anyNA()` with base R for columns that hold
+  `NaN` and no `NA`, `NaN`, `NA` and infinite values, and integers, and for a
+  `DuckDBDataFrame`. It fails on the previous code.
 
 # DuckDBDataFrame 0.99.36
 
