@@ -562,7 +562,18 @@ setMethod("is.na", "DuckDBTable", function(x) {
 
 #' @export
 setMethod("is.nan", "DuckDBTable", function(x) {
-    sql_call(x, "isnan")
+    # dbplyr writes is.nan() as a printf() comparison, which cannot format an
+    # integer, and an integer cannot be NaN. DuckDB's own isnan() is not used:
+    # on a Parquet column that has no NULL it returns FALSE for a stored NaN in
+    # DuckDB 2.0.0, apparently because the file statistics leave NaN out.
+    types <- coltypes(x)
+    datacols <- x@datacols
+    datacols <- as.expression(setNames(
+        lapply(names(datacols), function(nm)
+               if (identical(types[[nm]], "double"))
+                   call("is.nan", datacols[[nm]]) else FALSE),
+        names(datacols)))
+    replaceSlots(x, datacols = datacols, check = FALSE)
 })
 
 #' @export
@@ -923,17 +934,24 @@ setMethod("%in%", c(x = "DuckDBTable", table = "ANY"), function(x, table) {
     has_na <- any(is.na(table) & !is_nan)
     has_nan <- any(is_nan)
     table <- table[!is.na(table)]
-    FUN <- function(j) {
+    # only a floating point column can hold a NaN; see the is.nan() method
+    types <- coltypes(x)
+    FUN <- function(j, can_nan) {
         expr <- call("coalesce", call("%in%", j, table), FALSE)
         if (has_na) {
             expr <- call("|", call("is.na", j), expr)
         }
-        if (has_nan) {
-            expr <- call("|", call("is.nan", j), expr)
+        if (has_nan && can_nan) {
+            expr <- call("|", call("coalesce", call("is.nan", j), FALSE), expr)
         }
         expr
     }
-    replaceSlots(x, datacols = endoapply(x@datacols, FUN), check = FALSE)
+    datacols <- x@datacols
+    datacols <- as.expression(setNames(
+        lapply(names(datacols), function(nm)
+               FUN(datacols[[nm]], identical(types[[nm]], "double"))),
+        names(datacols)))
+    replaceSlots(x, datacols = datacols, check = FALSE)
 })
 
 #' @export

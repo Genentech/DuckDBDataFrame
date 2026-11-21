@@ -146,6 +146,39 @@ test_that("%in% keeps NA and NaN distinct for a DuckDBColumn, like base R", {
     checkDuckDBColumn(x %in% c(1, 4), expected(c(1, 4)))
 })
 
+test_that("%in% with NaN in the table works for an integer DuckDBColumn", {
+    int_df <- data.frame(id = letters[1:4], n = c(1L, 2L, NA, 4L))
+    int_path <- tempfile(fileext = ".parquet")
+    arrow::write_parquet(int_df, int_path)
+    on.exit(unlink(int_path))
+
+    n <- DuckDBDataFrame(int_path, datacols = "n", keycol = "id")[["n"]]
+    expected <- function(table) setNames(int_df$n %in% table, int_df$id)
+
+    checkDuckDBColumn(n %in% NaN, expected(NaN))
+    checkDuckDBColumn(n %in% c(1, NaN), expected(c(1, NaN)))
+    checkDuckDBColumn(n %in% c(1, NA, NaN), expected(c(1, NA, NaN)))
+    checkDuckDBColumn(n %in% 2, expected(2))
+})
+
+test_that("is.nan() sees a stored NaN, also in a column with no missing value", {
+    # DuckDB 2.0.0's isnan() gives FALSE for such a column read from Parquet,
+    # apparently because the file statistics leave NaN out
+    d <- data.frame(id = letters[1:5], x = c(NaN, 1, 2, NaN, 3),
+                    y = c(NaN, 1, NA, 2, 3), n = 1:5)
+    path <- tempfile(fileext = ".parquet")
+    arrow::write_parquet(d, path)
+    on.exit(unlink(path))
+
+    df <- DuckDBDataFrame(path, datacols = c("x", "y", "n"), keycol = "id")
+    checkDuckDBColumn(is.nan(df[["x"]]), setNames(is.nan(d$x), d$id))
+    checkDuckDBColumn(is.nan(df[["y"]]), setNames(is.nan(d$y), d$id))
+    # an integer column cannot hold a NaN, and printf() cannot format one
+    checkDuckDBColumn(is.nan(df[["n"]]), setNames(is.nan(d$n), d$id))
+    checkDuckDBColumn(df[["x"]] %in% NaN, setNames(d$x %in% NaN, d$id))
+    checkDuckDBColumn(df[["x"]] %in% c(1, NaN), setNames(d$x %in% c(1, NaN), d$id))
+})
+
 test_that("%in% never returns NA for a character DuckDBColumn", {
     chr_df <- data.frame(id = letters[1:4], s = c("u", NA, "w", "u"))
     chr_path <- tempfile(fileext = ".parquet")

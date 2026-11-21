@@ -1,3 +1,25 @@
+# DuckDBDataFrame 0.99.37
+
+## Bug fixes
+
+- `is.nan()` on a `DuckDBColumn` or `DuckDBDataFrame` returned `FALSE` for a
+  stored `NaN` in a Parquet column that has no `NULL`. It called DuckDB's
+  `isnan()`, which in DuckDB 2.0.0 gives `FALSE` for such a column, apparently
+  because the Parquet file statistics leave `NaN` out. It now uses the
+  comparison that `dbplyr` writes for `is.nan()`, which is not affected, for a
+  floating point column. An
+  integer column cannot hold a `NaN`, and that comparison cannot format an
+  integer, so `is.nan()` is `FALSE` there.
+- `%in%` with a table that contains `NaN` failed with a database error on an
+  integer column, and had the same `isnan()` problem on a floating point column.
+  It now tests for `NaN` as `is.nan()` does and leaves an integer column alone.
+
+## Testing
+
+- New tests check `is.nan()` and `%in%` with `NaN` on a column that holds `NaN`
+  and no `NA`, on one that holds both, and on an integer column. They fail on the
+  previous code.
+
 # DuckDBDataFrame 0.99.36
 
 ## Significant changes
