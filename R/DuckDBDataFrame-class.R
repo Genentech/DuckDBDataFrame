@@ -648,7 +648,7 @@ function(x, row.names = NULL, optional = FALSE, ...) {
 
         cols <- seq_along(x@datacols)
         if (!has_row_number(x) && .storedKeysBijective(rownames(x), rnames)) {
-            df <- df[rownames(x), cols, drop = FALSE]
+            df <- df[match(rownames(x), rnames), cols, drop = FALSE]
         } else {
             df <- df[, cols, drop = FALSE]
         }

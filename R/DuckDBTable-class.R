@@ -530,6 +530,40 @@ setMethod("dbconn", "DuckDBTable", function(x) x@conn$src$con)
     }
 }
 
+# The distinct values of a key column with the number of rows holding each.
+#' @importFrom dplyr collect group_by n select summarize
+.scan_keys <- function(conn, k) {
+    key <- as.name(k)
+    res <- collect(summarize(group_by(select(conn, !!key), !!key),
+                             .key_count = n(), .groups = "drop"))
+    list(keys = res[[k]], n = res[[".key_count"]])
+}
+
+# A key identifies a row, so it cannot be missing, and for a table with a single
+# key column it cannot repeat. (With two or more key columns, as in an array, a
+# value repeats along the other dimensions and only the combination is unique.)
+.check_keys <- function(keys, k, single, counts = NULL) {
+    nna <- sum(is.na(keys))
+    if (nna > 0L) {
+        stop("key column '", k, "' has ", nna, " missing value",
+             if (nna > 1L) "s", ", but a key cannot be NA; remove those rows ",
+             "from the source, or use no 'keycol' to number the rows instead",
+             call. = FALSE)
+    }
+    if (single) {
+        dup <- if (is.null(counts)) duplicated(keys) else (counts > 1L)
+        if (any(dup)) {
+            ex <- utils::head(unique(as.character(keys[dup])), 3L)
+            stop("key column '", k, "' has repeated values (",
+                 paste0("'", ex, "'", collapse = ", "),
+                 if (sum(dup) > 3L) ", ...", "), but a key must identify one ",
+                 "row; deduplicate the source, or use no 'keycol' to number ",
+                 "the rows instead", call. = FALSE)
+        }
+    }
+    invisible(keys)
+}
+
 # Determine if a stored key set and a query result's materialized names form a
 # clean 1:1 correspondence (same multiset, no duplicates on either side)
 .storedKeysBijective <- function(keys, nm) {
@@ -542,7 +576,8 @@ setMethod("dbconn", "DuckDBTable", function(x) x@conn$src$con)
 # (stored-key) row order WITHOUT relabelling.
 .reindexByStoredKeys <- function(result, keys) {
     if (.storedKeysBijective(keys, names(result))) {
-        result[keys]
+        # by position, not by name: indexing by name cannot find a "" key
+        result[match(keys, names(result))]
     } else {
         result
     }
@@ -1313,12 +1348,23 @@ function(conn, datacols = colnames(conn), keycols = NULL, dimtbls = NULL, type =
         if (!is.list(keycols) || is.null(names(keycols))) {
             stop("'keycols' must be a character vector or a named list of vectors")
         }
+        single <- (length(keycols) == 1L)
         for (k in names(keycols)) {
-            if (is.null(keycols[[k]])) {
-                keycols[[k]] <- pull(distinct(select(conn, !!as.name(k))))
+            derived <- is.null(keycols[[k]])
+            if (derived) {
+                scan <- .scan_keys(conn, k)
+                keycols[[k]] <- scan$keys
+                .check_keys(scan$keys, k, single = single, counts = scan$n)
+            } else {
+                .check_keys(keycols[[k]], k, single = single)
             }
             if (!is.character(keycols[[k]])) {
                 keycols[[k]] <- sort(keycols[[k]])
+            } else if (derived) {
+                # a key read from the database has no order of its own (DISTINCT
+                # emits it in a hash order that changes with the thread count),
+                # so it is put in C-locale order, which is also DuckDB's ORDER BY
+                keycols[[k]] <- sort(keycols[[k]], method = "radix")
             }
         }
     }
@@ -1395,6 +1441,57 @@ all.equal.DuckDBTable <- function(target, current, check.datacols = FALSE, ...) 
     window_order(conn)
 }
 
+# The row positions that a numeric, logical or character 'i' selects, as the
+# subscript of a DataFrame would, with the cases a lazy table cannot honor made
+# explicit. A lazy table is a view: it keeps or drops rows (and, when it has
+# names, lists them in another order), but it cannot repeat a row, and a table
+# numbered by row has no way to reorder.
+#' @importFrom S4Vectors normalizeSingleBracketSubscript Rle
+.row_positions <- function(sub, x, k) {
+    keyed <- !has_row_number(x)
+    # 'i' addresses one key dimension: the rows of a table, but only the rows of
+    # one margin of an array (a table with two or more key columns), so its
+    # extent is the number of keys in that dimension and not nrow(x)
+    nr <- if (keyed) as.numeric(length(x@keycols[[k]])) else as.numeric(nrow(x))
+    if (is.logical(sub)) {
+        if (anyNA(sub) || !(length(sub) %in% c(1L, nr))) {
+            stop("a logical 'i' must have no NAs and length 1 or nrow(x)")
+        }
+        pos <- which(rep_len(sub, nr))
+    } else if (is.numeric(sub)) {
+        if (!is.null(dim(sub))) {
+            stop("'i' must be a vector, not a matrix")
+        }
+        pos <- as.integer(normalizeSingleBracketSubscript(sub, Rle(0L, nr)))
+    } else if (is.character(sub)) {
+        if (!keyed) {
+            stop("unsupported 'i' for row subsetting with row_number: it has ",
+                 "no row names, so use a numeric or logical 'i'")
+        }
+        kk <- x@keycols[[k]]
+        pos <- match(sub, if (is.null(names(kk))) kk else names(kk))
+        if (anyNA(pos)) {
+            stop("subscript contains invalid names: ",
+                 paste0("'", utils::head(sub[is.na(pos)], 3L), "'",
+                        collapse = ", "))
+        }
+    } else {
+        stop("unsupported 'i' for row subsetting: it must be numeric, ",
+             "logical or character")
+    }
+    if (anyDuplicated(pos)) {
+        stop("a lazy table cannot repeat rows, so 'i' must not select a row ",
+             "more than once; use as.data.frame(x)[i, ] to repeat rows in memory")
+    }
+    if (!keyed && is.unsorted(pos)) {
+        stop("a lazy table numbered by row can only select rows in their ",
+             "original order, so 'i' must be increasing; give the table a ",
+             "'keycol' to select rows in another order, or use ",
+             "as.data.frame(x)[i, ]")
+    }
+    pos
+}
+
 #' @importClassesFrom S4Vectors NSBS
 #' @importFrom bit64 as.integer64
 #' @importFrom dplyr distinct filter pull select
@@ -1418,27 +1515,12 @@ all.equal.DuckDBTable <- function(target, current, check.datacols = FALSE, ...) 
                 sub <- as.integer(sub)
             }
             if (is.atomic(sub)) {
+                pos <- .row_positions(sub, x, k)
                 if (has_row_number(x)) {
-                    if (is.logical(sub)) {
-                        nr <- nrow(x)
-                        if (anyNA(sub) || !(length(sub) %in% c(1L, nr))) {
-                            stop("a logical 'i' must have no NAs and length 1 ",
-                                 "or nrow(x)")
-                        }
-                        sub <- which(rep_len(sub, nr))
-                    }
-                    if (is.numeric(sub)) {
-                        conn <- .filter_row_positions(conn, k, sub)
-                        keycols[[1L]] <- set_row_number(conn)
-                    } else {
-                        stop("unsupported 'i' for row subsetting with ",
-                             "row_number: it has no row names, so use a ",
-                             "numeric or logical 'i'")
-                    }
-                } else if (is.character(sub) && is.null(names(keycols[[k]]))) {
-                    keycols[[k]] <- sub
+                    conn <- .filter_row_positions(conn, k, pos)
+                    keycols[[1L]] <- set_row_number(conn)
                 } else {
-                    keycols[[k]] <- keycols[[k]][sub]
+                    keycols[[k]] <- keycols[[k]][pos]
                 }
             } else if (is(sub, "DuckDBColumn") &&
                        is.logical(as.vector(head(sub, 0L))) &&
@@ -1453,7 +1535,11 @@ all.equal.DuckDBTable <- function(target, current, check.datacols = FALSE, ...) 
                 } else {
                     for (kname in names(keycols)) {
                         kdnames <- pull(distinct(select(conn, !!as.name(kname))))
-                        keycols[[kname]] <- keycols[[kname]][match(kdnames, keycols[[kname]])]
+                        # keep the order the keys already have: DISTINCT gives
+                        # a hash order, and it also reaches keys that are not
+                        # in this subset, which an intersection leaves out
+                        keycols[[kname]] <-
+                            keycols[[kname]][keycols[[kname]] %in% kdnames]
                     }
                 }
             } else {

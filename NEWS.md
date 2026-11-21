@@ -1,3 +1,68 @@
+# DuckDBDataFrame 0.99.36
+
+## Significant changes
+
+- The keys of a table read from the database now come in a fixed order. A
+  character key used to be left in the order that `DISTINCT` emits, which is a
+  hash order that changes with the thread count and the row-group layout, so the
+  same file could give different rownames in different sessions, `x[1:3, ]` could
+  pick different rows, and a value assigned in file order, such as
+  `x$y <- v`, could land on the wrong rows. Character keys are now sorted in
+  C-locale (byte) order, which is also what DuckDB's `ORDER BY` gives and does not
+  depend on the locale, as numeric keys already were. A key list passed as
+  `keycol` is still never reordered, so pass one to get a specific order, such
+  as the order of the file.
+- A key column can no longer have missing values, and a table with a single key
+  column can no longer repeat a key. Both are now an error when the table is
+  made, naming the column, with a pointer to leaving out `keycol` to number the
+  rows instead. Before, a missing character key gave an `NA` rowname, so
+  `dim()` said 3 rows where the data had 2 and `show()` failed; a missing
+  numeric key was dropped without a word; and a repeated key was counted once by
+  `dim()` while aggregates such as `sum()` counted every row. A table with two
+  or more key columns, such as an array, is not affected: there a value repeats
+  along the other dimensions, and only the combination has to be unique.
+- Row subscripts now follow `DataFrame`, or say why they cannot:
+  - Negative and zero subscripts work on a table numbered by row. `x[-1, ]`
+    used to return no rows.
+  - A missing value, an out-of-range number and a name that is not there are
+    errors. They used to give an object whose dimensions disagreed with its
+    data.
+  - A subscript that selects a row more than once is an error. `x[c(1, 1, 2), ]`
+    used to report 3 rows and return 2, and fail when printed. A lazy table is a
+    view of its source and cannot repeat a row; use `as.data.frame(x)[i, ]`.
+  - A table numbered by row can only select rows in increasing order.
+    `x[c(3, 1), ]` used to return rows 1 and 3 in file order. A table with a
+    `keycol` can still list its rows in another order.
+  - On an array, a subscript is bounded by the number of keys in the dimension it
+    addresses, as it should be, and not by the number of rows of the table.
+
+## Bug fixes
+
+- A key that is the empty string came back as `NA`: the result was looked up by
+  name, which cannot find `""`, so `as.vector(x$a)` gave `NA` for that row and
+  `as(x, "DFrame")` had a row named `"NA"`. Results are now put in key order by
+  position.
+- A lazy filter on a table that had already been subset, such as
+  `y <- x[5:20, ]; y[y$a > 12, ]`, rebuilt the keys from `DISTINCT`, which
+  reached keys outside the subset. The result had `NA` rownames and more rows
+  than data, and the keys lost the order they had. The keys now keep their
+  order and stay inside the subset.
+- A subscript by name on a table with a key, such as `y["r5", ]`, selected from
+  the keys given and not the keys of the table, so a row outside a subset could
+  come back. It now selects among the keys the table has.
+
+## Testing
+
+- A new test file, `test-row-order-contract.R`, checks the order and identity of
+  rows against `DataFrame`. Unlike the helpers in `setup.R`, which compare
+  rownames as sets, it compares them in order, which is why the problems above
+  went unnoticed.
+- Two existing tests, "positional slicing by rows works" and "[[<- aligns
+  correctly on a row-number-keyed table after a numeric-index subset", used an
+  index that was not in increasing order on a table numbered by row and passed
+  only because the table returned the rows in file order. They now use an
+  increasing index, and the first also checks the new error.
+
 # DuckDBDataFrame 0.99.35
 
 ## Bug fixes

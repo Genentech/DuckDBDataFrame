@@ -154,9 +154,14 @@ test_that("positional slicing by rows works for a DuckDBDataFrame", {
     i <- sample(nrow(df))
     checkDuckDBDataFrame(df[i,], mtcars[i,])
 
+    # a table numbered by row keeps rows in their original order, so a
+    # non-contiguous but increasing index is a plain filter
     df <- DuckDBDataFrame(infert_parquet)
-    i <- c(8,6,7,5,3,9)
+    i <- c(3,5,6,7,8,9)
     checkDuckDBDataFrame(df[i, ], infert[i, ])
+
+    # it cannot reorder, and it says so instead of returning the rows in file order
+    expect_error(df[c(8,6,7,5,3,9), ], "increasing")
 })
 
 test_that("slicing a contiguous integer64 key uses the BETWEEN fast-path", {
@@ -380,12 +385,10 @@ test_that("[[<- aligns correctly on a row-number-keyed table after a numeric-ind
     sub$d <- seq_len(nrow(sub)) * 111L
     expect_equal(as.data.frame(sub)$d, seq_len(nrow(sub)) * 111L)
 
-    # A non-contiguous, non-sorted index too. df[i,] doesn't preserve i's
-    # order (DuckDB gives no row-order guarantee without an ORDER BY), so the
-    # value supplied to $<- must be aligned to sub2's own current row order
-    # (via rownames(sub2)), not to i's order -- the same positional contract
-    # ordinary base R data.frame $<- has.
-    i <- c(8L, 6L, 7L, 5L, 3L, 9L)
+    # A non-contiguous index too. The value supplied to $<- must be aligned to
+    # sub2's own current row order (via rownames(sub2)), the same positional
+    # contract ordinary base R data.frame $<- has.
+    i <- c(3L, 5L, 6L, 7L, 8L, 9L)
     sub2 <- df[i, ]
     ordered_mpg <- mtcars$mpg[as.integer(rownames(sub2))]
     sub2$e <- ordered_mpg
