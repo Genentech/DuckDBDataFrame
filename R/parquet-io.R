@@ -439,6 +439,29 @@ function(query_sql, target_path, order_cols = NULL, partition_by = NULL,
 ### SQL COPY TO for DuckDBTable objects; preflight via setupFlatParquetWrite.
 ###
 
+# Does the single key of 'x' stand for names, as the names of its values?
+.hasKeyAlias <- function(x, key_src) {
+    if (has_row_number(x) || length(x@keycols) != 1L)
+        return(FALSE)
+    identical(names(x@keycols)[1L], key_src) && !is.null(names(x@keycols[[1L]]))
+}
+
+# Replace the values of the key column of 'conn' by their names, by joining a
+# mapping from the values to the names. The key column keeps its name.
+#' @importFrom dplyr copy_to inner_join select
+.addKeyAlias <- function(x, conn, key_src) {
+    keys <- x@keycols[[1L]]
+    names_col <- "__alias__"
+    mapping <- setNames(data.frame(unname(keys), names(keys), stringsAsFactors = FALSE),
+                        c(key_src, names_col))
+    mapping <- copy_to(dbconn(x), mapping, name = basename(tempfile("keyalias_")),
+                       temporary = TRUE, overwrite = FALSE)
+    conn <- inner_join(conn, mapping, by = key_src)
+    others <- setdiff(colnames(conn), c(key_src, names_col))
+    select(conn, !!!c(setNames(lapply(others, as.name), others),
+                      setNames(list(as.name(names_col)), key_src)))
+}
+
 .tableKeycolName <- function(x, keycol) {
     if (is.null(keycol))
         return(NULL)
@@ -511,6 +534,13 @@ function(x, indexcol = NULL, keycol = NULL, dimtbl = NULL, offset = 0L,
     # 'x' with that name is not written.
     if (!is.null(indexcol))
         conn_x <- addRowPosition(x, conn_x, indexcol)
+    key_src <- .tableKeycolName(x, keycol)
+    # A key can stand for names: a table read from a file that stores a number per
+    # row and the names of the rows elsewhere has numbers as the values of its key
+    # and the names as the names of those values. The names are what is written
+    # as the key column, as rownames() gives them, and not the numbers.
+    if (!is.null(key_src) && .hasKeyAlias(x, key_src))
+        conn_x <- .addKeyAlias(x, conn_x, key_src)
     tbl_q <- sql_render(conn_x)
     data_cols <- colnames(x)
     kcols <- keynames(x)
@@ -528,12 +558,11 @@ function(x, indexcol = NULL, keycol = NULL, dimtbl = NULL, offset = 0L,
         output_names <- c(output_names, indexcol)
     }
 
-    key_src <- .tableKeycolName(x, keycol)
     if (!is.null(keycol) && !is.null(key_src)) {
         qsrc <- as.character(dbQuoteIdentifier(conn, key_src))
         qdst <- as.character(dbQuoteIdentifier(conn, keycol))
         if (identical(key_src, keycol)) {
-            select_parts <- c(select_parts, sprintf("t.%s", qsrc))
+                select_parts <- c(select_parts, sprintf("t.%s", qsrc))
         } else {
             select_parts <- c(select_parts, sprintf("t.%s AS %s", qsrc, qdst))
         }

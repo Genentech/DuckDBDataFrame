@@ -535,8 +535,8 @@ setMethod("dbconn", "DuckDBTable", function(x) x@conn$src$con)
 .scan_keys <- function(conn, k) {
     key <- as.name(k)
     res <- collect(summarize(group_by(select(conn, !!key), !!key),
-                             .key_count = n(), .groups = "drop"))
-    list(keys = res[[k]], n = res[[".key_count"]])
+                             `__key_count__` = n(), .groups = "drop"))
+    list(keys = res[[k]], n = res[["__key_count__"]])
 }
 
 # A key identifies a row, so it cannot be missing, and for a table with a single
@@ -1432,7 +1432,7 @@ all.equal.DuckDBTable <- function(target, current, check.datacols = FALSE, ...) 
     if (isTRUE(pull(stats, "n") == pull(stats, "top"))) {
         return(filter(conn, !!call("%in%", key, as.integer64(pos))))
     }
-    pos_name <- tail(make.unique(c(colnames(conn), ".position"), sep = "_"), 1L)
+    pos_name <- tail(make.unique(c(colnames(conn), "__position__"), sep = "_"), 1L)
     conn <- window_order(conn, !!key)
     conn <- mutate(conn, !!!setNames(list(call("row_number")), pos_name))
     conn <- filter(conn, !!call("%in%", as.name(pos_name), as.integer64(pos)))

@@ -577,10 +577,10 @@ setMethod("Math", "DuckDBTable", function(x) {
         y <- call("ifelse", call("is.nan", y), NA, y)
     }
     aggr <- lapply(specs, function(spec) .aggrExpr(x, y, spec$fun, na.rm, spec$nan))
-    aggr[[".nonmissing"]] <- call("count", y)
-    aggr[[".n"]] <- call("n")
+    aggr[["__nonmissing__"]] <- call("count", y)
+    aggr[["__n__"]] <- call("n")
     res <- as.data.frame(collect(summarize(tblconn(x, select = FALSE), !!!aggr)))
-    nothing_left <- res[[".n"]] == 0L || (na.rm && res[[".nonmissing"]] == 0L)
+    nothing_left <- res[["__n__"]] == 0L || (na.rm && res[["__nonmissing__"]] == 0L)
     ans <- lapply(names(specs), function(nm) {
         value <- res[[nm]]
         if (nothing_left && is.na(value)) specs[[nm]]$empty else value
@@ -1082,9 +1082,12 @@ addRowPosition <- function(x, conn, name) {
     }
     pos <- NULL
     stride <- 1
+    idx_names <- character()
     for (k in names(keycols)) {
         keys <- unname(keycols[[k]])
-        idx_name <- paste0(".position_", k)
+        idx_name <- tail(make.unique(c(colnames(conn), idx_names,
+                                       paste0("__position_", k, "__")), sep = "_"), 1L)
+        idx_names <- c(idx_names, idx_name)
         mapping <- setNames(data.frame(keys, seq_along(keys), stringsAsFactors = FALSE),
                             c(k, idx_name))
         mapping <- copy_to(dbconn(x), mapping, name = basename(tempfile("keypos_")),
@@ -1094,7 +1097,9 @@ addRowPosition <- function(x, conn, name) {
         pos <- if (is.null(pos)) term else call("+", pos, term)
         stride <- stride * length(keys)
     }
-    mutate(conn, !!!setNames(list(call("+", pos, 1L)), name))
+    conn <- mutate(conn, !!!setNames(list(call("+", pos, 1L)), name))
+    keep <- setdiff(colnames(conn), idx_names)
+    select(conn, !!!lapply(keep, as.name))
 }
 
 #' @export
@@ -1114,7 +1119,7 @@ function (x, incomparables = FALSE, fromLast = FALSE, ...)  {
     keycols <- setNames(list(call("row_number")), keycols)
     # base R keeps the first occurrence of each value, or the last with
     # fromLast = TRUE, in the order of the occurrences that are kept
-    pos_name <- ".position"
+    pos_name <- tail(make.unique(c(colnames(conn), "__position__"), sep = "_"), 1L)
     conn <- addRowPosition(x, conn, pos_name)
     kept <- setNames(list(call(if (fromLast) "max" else "min", as.name(pos_name), na.rm = TRUE)),
                      pos_name)

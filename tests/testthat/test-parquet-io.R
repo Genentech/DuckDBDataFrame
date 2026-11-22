@@ -994,3 +994,25 @@ test_that("a column named like the internal position survives writing the index"
     expect_identical(written[["__position__"]], c(700, 800, 900))
     expect_identical(as.integer(written[["__index__"]]), 1:3)
 })
+
+test_that("the names of an aliased key are written as the key column, not the numbers", {
+    # A table read from a file that stores a number per row, with the names of the
+    # rows kept apart, has numbers as the values of its key and the names as the
+    # names of those values. rownames() gives the names, so the written key column
+    # has to as well; it used to hold the numbers, and a rewrite lost the names.
+    cells <- c("cell_c", "cell_a", "cell_d", "cell_b")      # the names of rows 1..4
+    for (file_order in list(1:4, c(3L, 1L, 4L, 2L))) {
+        d <- data.frame(id = file_order, x = c(10, 20, 30, 40)[file_order])
+        src <- tempfile(fileext = ".parquet")
+        arrow::write_parquet(d, src)
+        df <- DuckDBDataFrame(src, datacols = "x", keycol = list(id = setNames(1:4, cells)))
+        expect_identical(rownames(df), cells)
+        out <- tempfile()
+        res <- writeDuckDBTableParquet(df, out)
+        written <- as.data.frame(arrow::read_parquet(res$path))
+        expect_identical(written[["__name__"]], cells)
+        expect_identical(as.integer(written[["__index__"]]), 1:4)
+        expect_identical(written[["x"]], c(10, 20, 30, 40))     # the value of each row follows its name
+        unlink(c(src, out), recursive = TRUE)
+    }
+})
