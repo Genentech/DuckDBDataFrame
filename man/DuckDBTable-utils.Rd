@@ -90,6 +90,17 @@ DuckDBTable objects have support for S4 group generic functionality:
     \code{"prod"}, \code{"sum"}, \code{"any"}, \code{"all"}}
  }
  See \link[methods]{S4groupGeneric} for more details.
+
+ The \code{Summary} methods, \code{mean()}, \code{var()}, \code{sd()} and
+ \code{median()} take \code{na.rm} as base R does. With
+ \code{na.rm = FALSE} (the default) a missing value, SQL \code{NULL}, gives
+ \code{NA}. A \code{NaN} gives \code{NaN} for \code{sum}, \code{prod},
+ \code{mean}, \code{min} and \code{max}, and \code{NA} for \code{var},
+ \code{sd} and \code{median}. With \code{na.rm = TRUE} the missing values
+ and \code{NaN} are dropped, and an aggregate with nothing left is the value
+ base R gives for an empty set: 0 for \code{sum}, 1 for \code{prod},
+ \code{NaN} for \code{mean}, \code{Inf} for \code{min} and \code{-Inf} for
+ \code{max}.
 }
 
 \section{Numerical Data Methods}{
@@ -110,22 +121,22 @@ In the code snippets below, \code{x} is a DuckDBTable object:
   }
   \item{\code{is.na(x)}:}{
     Returns a DuckDBTable containing logicals that indicate which values are
-    missing (SQL \code{NULL}).
+    missing (SQL \code{NULL}, or \code{NaN} in a floating point column).
   }
   \item{\code{is.nan(x)}:}{
     Returns a DuckDBTable containing logicals that indicate which values are
     Not a Number.
   }
-  \item{\code{mean(x)}:}{
+  \item{\code{mean(x, na.rm = FALSE)}:}{
     Calculates the mean of \code{x}.
   }
-  \item{\code{var(x)}:}{
+  \item{\code{var(x, na.rm = FALSE)}:}{
     Calculates the variance of \code{x}.
   }
-  \item{\code{sd(x)}:}{
+  \item{\code{sd(x, na.rm = FALSE)}:}{
     Calculates the standard deviation of \code{x}.
   }
-  \item{\code{median(x)}:}{
+  \item{\code{median(x, na.rm = FALSE)}:}{
     Calculates the median of \code{x}.
   }
   \item{\code{quantile(x, probs = seq(0, 1, 0.25), names = TRUE, type = 7)}:}{

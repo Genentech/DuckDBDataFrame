@@ -37,6 +37,17 @@
 #'  }
 #'  See \link[methods]{S4groupGeneric} for more details.
 #'
+#'  The \code{Summary} methods, \code{mean()}, \code{var()}, \code{sd()} and
+#'  \code{median()} take \code{na.rm} as base R does. With
+#'  \code{na.rm = FALSE} (the default) a missing value, SQL \code{NULL}, gives
+#'  \code{NA}. A \code{NaN} gives \code{NaN} for \code{sum}, \code{prod},
+#'  \code{mean}, \code{min} and \code{max}, and \code{NA} for \code{var},
+#'  \code{sd} and \code{median}. With \code{na.rm = TRUE} the missing values
+#'  and \code{NaN} are dropped, and an aggregate with nothing left is the value
+#'  base R gives for an empty set: 0 for \code{sum}, 1 for \code{prod},
+#'  \code{NaN} for \code{mean}, \code{Inf} for \code{min} and \code{-Inf} for
+#'  \code{max}.
+#'
 #' @section Numerical Data Methods:
 #' In the code snippets below, \code{x} is a DuckDBColumn object:
 #' \describe{
@@ -54,22 +65,22 @@
 #'   }
 #'   \item{\code{is.na(x)}:}{
 #'     Returns a DuckDBColumn containing logicals that indicate which values are
-#'     missing (SQL \code{NULL}).
+#'     missing (SQL \code{NULL}, or \code{NaN} in a floating point column).
 #'   }
 #'   \item{\code{is.nan(x)}:}{
 #'     Returns a DuckDBColumn containing logicals that indicate which values are
 #'     Not a Number.
 #'   }
-#'   \item{\code{mean(x)}:}{
+#'   \item{\code{mean(x, na.rm = FALSE)}:}{
 #'     Calculates the mean of \code{x}.
 #'   }
-#'   \item{\code{var(x)}:}{
+#'   \item{\code{var(x, na.rm = FALSE)}:}{
 #'     Calculates the variance of \code{x}.
 #'   }
-#'   \item{\code{sd(x)}:}{
+#'   \item{\code{sd(x, na.rm = FALSE)}:}{
 #'     Calculates the standard deviation of \code{x}.
 #'   }
-#'   \item{\code{median(x)}:}{
+#'   \item{\code{median(x, na.rm = FALSE)}:}{
 #'     Calculates the median of \code{x}.
 #'   }
 #'   \item{\code{quantile(x, probs = seq(0, 1, 0.25), names = TRUE, type = 7)}:}{
@@ -348,7 +359,7 @@ setMethod("Math", "DuckDBColumn", function(x) {
 
 #' @export
 setMethod("Summary", "DuckDBColumn", function(x, ..., na.rm = FALSE) {
-    callGeneric(x@table)
+    callGeneric(x@table, ..., na.rm = na.rm)
 })
 
 ### - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -381,18 +392,18 @@ setMethod("is.nan", "DuckDBColumn", function(x) {
 })
 
 #' @export
-setMethod("mean", "DuckDBColumn", function(x, ...) {
-    callGeneric(x@table)
+setMethod("mean", "DuckDBColumn", function(x, na.rm = FALSE, ...) {
+    callGeneric(x@table, na.rm = na.rm)
 })
 
 #' @export
 setMethod("var", "DuckDBColumn", function(x, y = NULL, na.rm = FALSE, use)  {
-    callGeneric(x@table)
+    callGeneric(x@table, y = y, na.rm = na.rm)
 })
 
 #' @export
 setMethod("sd", "DuckDBColumn", function(x, na.rm = FALSE) {
-    callGeneric(x@table)
+    callGeneric(x@table, na.rm = na.rm)
 })
 
 #' @exportS3Method stats::median

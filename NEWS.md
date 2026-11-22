@@ -1,5 +1,30 @@
 # DuckDBDataFrame 0.99.37
 
+## Significant changes
+
+- `min()`, `max()`, `sum()`, `range()`, `prod()`, `any()`, `all()`, `mean()`,
+  `var()`, `sd()` and `median()` of a `DuckDBColumn` or a `DuckDBTable` with one
+  data column now take `na.rm` as base R does. They ignored it before: the
+  `Summary` methods, `mean()`, `var()`, `sd()` and `median()` always dropped the
+  missing values, so `mean(x)` of a column with an `NA` was the mean of the
+  other values, and the column methods did not pass `na.rm` on to the table.
+  With `na.rm = FALSE`, the default, a missing value now gives `NA`, as in base
+  R, so code that relied on the old result has to pass `na.rm = TRUE`.
+- A `NaN` is handled as base R handles it. With `na.rm = FALSE` it gives `NaN`
+  for `sum()`, `prod()`, `mean()`, `min()` and `max()`, where `min()` used to
+  skip it because DuckDB orders `NaN` above every number, and `NA` for `var()`,
+  `sd()` and `median()`. With `na.rm = TRUE` it is dropped, as an `NA` is.
+  Before, it was kept, so `sum(x, na.rm = TRUE)` of `c(1, NaN, 3)` was `NaN`.
+  A mix of `NA` and `NaN` gives `NA`; base R leaves open which of the two it
+  gives.
+- An aggregate with nothing left, which is an empty column or `na.rm = TRUE`
+  with only missing values, is the value base R gives for an empty set: 0 for
+  `sum()`, 1 for `prod()`, `NaN` for `mean()`, `Inf` for `min()` and `-Inf` for
+  `max()`. `any()` and `all()` follow the logic of base R for `NA`: `any()` is
+  `TRUE` if a value is `TRUE`, and otherwise `NA` if a value is missing.
+- `quantile()`, `mad()` and `IQR()` still ignore `na.rm`. Base R gives an error
+  for a missing value when it is `FALSE`.
+
 ## Bug fixes
 
 - `is.nan()` on a `DuckDBColumn` or `DuckDBDataFrame` returned `FALSE` for a
@@ -34,6 +59,12 @@
   that hold finite values only, infinite values, `NaN`, `NA`, all of these
   together, only `NA`, and integers with `NA`, for a column and for a
   `DuckDBDataFrame`. It fails on the previous code.
+- A new test file, `test-aggregates-missing.R`, compares the aggregates above
+  with base R, with and without `na.rm`, for a column and for a table, on data
+  that holds finite values, an `NA`, a `NaN`, both, only `NA`, infinite values, a
+  single value, and a `NaN` with no `NA`. It also covers `any()` and `all()` of a
+  logical column with `NA`, the type of an integer `min()` and `max()`, an empty
+  table, and the check on `na.rm`. It fails on the previous code.
 
 # DuckDBDataFrame 0.99.36
 

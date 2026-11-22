@@ -37,6 +37,17 @@
 #'  }
 #'  See \link[methods]{S4groupGeneric} for more details.
 #'
+#'  The \code{Summary} methods, \code{mean()}, \code{var()}, \code{sd()} and
+#'  \code{median()} take \code{na.rm} as base R does. With
+#'  \code{na.rm = FALSE} (the default) a missing value, SQL \code{NULL}, gives
+#'  \code{NA}. A \code{NaN} gives \code{NaN} for \code{sum}, \code{prod},
+#'  \code{mean}, \code{min} and \code{max}, and \code{NA} for \code{var},
+#'  \code{sd} and \code{median}. With \code{na.rm = TRUE} the missing values
+#'  and \code{NaN} are dropped, and an aggregate with nothing left is the value
+#'  base R gives for an empty set: 0 for \code{sum}, 1 for \code{prod},
+#'  \code{NaN} for \code{mean}, \code{Inf} for \code{min} and \code{-Inf} for
+#'  \code{max}.
+#'
 #' @section Numerical Data Methods:
 #' In the code snippets below, \code{x} is a DuckDBTable object:
 #' \describe{
@@ -54,22 +65,22 @@
 #'   }
 #'   \item{\code{is.na(x)}:}{
 #'     Returns a DuckDBTable containing logicals that indicate which values are
-#'     missing (SQL \code{NULL}).
+#'     missing (SQL \code{NULL}, or \code{NaN} in a floating point column).
 #'   }
 #'   \item{\code{is.nan(x)}:}{
 #'     Returns a DuckDBTable containing logicals that indicate which values are
 #'     Not a Number.
 #'   }
-#'   \item{\code{mean(x)}:}{
+#'   \item{\code{mean(x, na.rm = FALSE)}:}{
 #'     Calculates the mean of \code{x}.
 #'   }
-#'   \item{\code{var(x)}:}{
+#'   \item{\code{var(x, na.rm = FALSE)}:}{
 #'     Calculates the variance of \code{x}.
 #'   }
-#'   \item{\code{sd(x)}:}{
+#'   \item{\code{sd(x, na.rm = FALSE)}:}{
 #'     Calculates the standard deviation of \code{x}.
 #'   }
-#'   \item{\code{median(x)}:}{
+#'   \item{\code{median(x, na.rm = FALSE)}:}{
 #'     Calculates the median of \code{x}.
 #'   }
 #'   \item{\code{quantile(x, probs = seq(0, 1, 0.25), names = TRUE, type = 7)}:}{
@@ -502,21 +513,129 @@ setMethod("Math", "DuckDBTable", function(x) {
     pull(summarize(tblconn(x, select = FALSE), !!aggr))
 }
 
+### Aggregates and missing values
+###
+### An aggregate follows base R for a missing value. With na.rm = FALSE a
+### missing value gives NA; a NaN gives NaN for a sum, a product, a mean and a
+### maximum, which SQL already does, and for a minimum, which needs a guard
+### because DuckDB orders NaN above every number; and a NaN gives NA for a
+### variance, a standard deviation and a median. With na.rm = TRUE a NaN is
+### dropped as an NA is, and an aggregate with nothing left is the value base R
+### gives for an empty set: 0 for a sum, 1 for a product, NaN for a mean, Inf
+### for a minimum and -Inf for a maximum.
+###
+### Only a floating point column can hold a NaN. The test is is.nan(), which
+### dbplyr writes as a printf() comparison. DuckDB's own isnan() is not used: on
+### a Parquet column that has no NULL it gives FALSE for a stored NaN in DuckDB
+### 2.0.0, apparently because the file statistics leave NaN out. printf() cannot
+### format an integer, so the other types are left alone.
+
+.aggrCanHoldNaN <- function(x) {
+    identical(unname(coltypes(x)), "double")
+}
+
+.aggrSQL <- function(value) dplyr::sql(sprintf("CAST('%s' AS DOUBLE)", value))
+
+# The SQL for one aggregate, 'fun', of the single data column of 'x'. 'nan' is
+# how a NaN counts when na.rm = FALSE: "keep" leaves SQL's own result, "na"
+# makes the result NA and "nan" makes it NaN.
+.aggrExpr <- function(x, y, fun, na.rm, nan = c("keep", "na", "nan")) {
+    nan <- match.arg(nan)
+    # fsum() is a DuckDB function with no na.rm argument; it skips NULL as sum()
+    # does
+    stat <- if (fun == "fsum") call(fun, y) else call(fun, y, na.rm = TRUE)
+    if (na.rm) {
+        return(stat)
+    }
+    count_of <- function(test) {
+        call(">", call("coalesce", call("sum", call("as.integer", test), na.rm = TRUE), 0L), 0L)
+    }
+    can_nan <- .aggrCanHoldNaN(x)
+    missing <- call("is.na", y)
+    if (nan == "na" && can_nan) {
+        missing <- call("|", missing, call("is.nan", y))
+    } else if (nan == "nan" && can_nan) {
+        stat <- call("ifelse", count_of(call("is.nan", y)), .aggrSQL("NaN"), stat)
+    }
+    call("ifelse", count_of(missing), NA, stat)
+}
+
+# Compute the aggregates in 'specs', a named list of list(fun, nan, empty), over
+# the single data column of 'x' in one query. 'empty' is the result when no
+# value is left; it is applied here and not in SQL, which would change the type
+# of an integer result.
+#' @importFrom dplyr collect summarize
+.aggregate <- function(x, specs, na.rm = FALSE) {
+    if (length(x@datacols) != 1L) {
+        stop("aggregation requires a single datacols")
+    }
+    if (!isTRUE(na.rm) && !isFALSE(na.rm)) {
+        stop("'na.rm' must be TRUE or FALSE")
+    }
+    y <- x@datacols[[1L]]
+    if (na.rm && .aggrCanHoldNaN(x)) {
+        y <- call("ifelse", call("is.nan", y), NA, y)
+    }
+    aggr <- lapply(specs, function(spec) .aggrExpr(x, y, spec$fun, na.rm, spec$nan))
+    aggr[[".nonmissing"]] <- call("count", y)
+    aggr[[".n"]] <- call("n")
+    res <- as.data.frame(collect(summarize(tblconn(x, select = FALSE), !!!aggr)))
+    nothing_left <- res[[".n"]] == 0L || (na.rm && res[[".nonmissing"]] == 0L)
+    ans <- lapply(names(specs), function(nm) {
+        value <- res[[nm]]
+        if (nothing_left && is.na(value)) specs[[nm]]$empty else value
+    })
+    names(ans) <- names(specs)
+    ans
+}
+
+.aggrSpec <- function(fun, nan = "keep", empty = NA_real_) {
+    list(fun = fun, nan = nan, empty = empty)
+}
+
+# any() and all() of a logical column
+.aggregateLogical <- function(x, which, na.rm) {
+    if (length(x@datacols) != 1L) {
+        stop("aggregation requires a single datacols")
+    }
+    y <- x@datacols[[1L]]
+    n_of <- function(test) {
+        call("coalesce", call("sum", call("as.integer", test), na.rm = TRUE), 0L)
+    }
+    if (which == "any") {
+        hit <- call(">", n_of(y), 0L)
+        value <- FALSE
+    } else {
+        hit <- call(">", n_of(call("!", y)), 0L)
+        value <- TRUE
+    }
+    nas <- call(">", n_of(call("is.na", y)), 0L)
+    decided <- if (which == "any") TRUE else FALSE
+    expr <- if (na.rm) {
+        if (which == "any") hit else call("!", hit)
+    } else {
+        call("ifelse", hit, decided, call("ifelse", nas, NA, value))
+    }
+    res <- collect(summarize(tblconn(x, select = FALSE), !!expr))
+    res[[1L]]
+}
+
 #' @export
 setMethod("Summary", "DuckDBTable", function(x, ..., na.rm = FALSE) {
-    if (.Generic == "range") {
-        if (length(x@datacols) != 1L) {
-            stop("aggregation requires a single datacols")
-        }
-        aggr <- list(min = call("min", x@datacols[[1L]], na.rm = TRUE),
-                     max = call("max", x@datacols[[1L]], na.rm = TRUE))
-        unlist(as.data.frame(summarize(tblconn(x, select = FALSE), !!!aggr)),
-               use.names = FALSE)
-    } else if (.Generic == "sum") {
-        .pull.aggregagte(x, "fsum")
-    } else {
-        .pull.aggregagte(x, .Generic, na.rm = TRUE)
-    }
+    one <- function(spec) .aggregate(x, list(value = spec), na.rm)[["value"]]
+    switch(.Generic,
+           min = one(.aggrSpec("min", "nan", Inf)),
+           max = one(.aggrSpec("max", "keep", -Inf)),
+           sum = one(.aggrSpec("fsum", "keep", 0)),
+           prod = one(.aggrSpec("prod", "keep", 1)),
+           range = {
+               ans <- .aggregate(x, list(min = .aggrSpec("min", "nan", Inf),
+                                         max = .aggrSpec("max", "keep", -Inf)), na.rm)
+               unlist(ans, use.names = FALSE)
+           },
+           any = .aggregateLogical(x, "any", na.rm),
+           all = .aggregateLogical(x, "all", na.rm),
+           stop("unsupported Summary operator: ", .Generic))
 })
 
 ### - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -589,8 +708,8 @@ setMethod("is.nan", "DuckDBTable", function(x) {
 })
 
 #' @export
-setMethod("mean", "DuckDBTable", function(x, ...) {
-    .pull.aggregagte(x, "mean", na.rm = TRUE)
+setMethod("mean", "DuckDBTable", function(x, na.rm = FALSE, ...) {
+    .aggregate(x, list(value = .aggrSpec("mean", "keep", NaN)), na.rm)[["value"]]
 })
 
 #' @export
@@ -598,18 +717,18 @@ setMethod("var", "DuckDBTable", function(x, y = NULL, na.rm = FALSE, use)  {
     if (!is.null(y)) {
         stop("covariance is not supported")
     }
-    .pull.aggregagte(x, "var", na.rm = TRUE)
+    .aggregate(x, list(value = .aggrSpec("var", "na")), na.rm)[["value"]]
 })
 
 #' @export
 setMethod("sd", "DuckDBTable", function(x, na.rm = FALSE) {
-    .pull.aggregagte(x, "sd", na.rm = TRUE)
+    .aggregate(x, list(value = .aggrSpec("sd", "na")), na.rm)[["value"]]
 })
 
 #' @exportS3Method stats::median
 #' @importFrom stats median
 median.DuckDBTable <- function(x, na.rm = FALSE, ...) {
-    .pull.aggregagte(x, "median", na.rm = TRUE)
+    .aggregate(x, list(value = .aggrSpec("median", "na")), na.rm)[["value"]]
 }
 
 #' @exportS3Method stats::quantile
