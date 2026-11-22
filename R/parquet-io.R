@@ -530,10 +530,12 @@ function(x, indexcol = NULL, keycol = NULL, dimtbl = NULL, offset = 0L,
     # the file would not do: a file that is not in key order then gets an index
     # that disagrees with the object, and a reader that keys the table by the
     # index gets the rows back in the order of the file. The position is held in
-    # a column named like the index, a name that is already reserved: a column of
-    # 'x' with that name is not written.
+    # a column of its own, whose name is not that of any column of the query: the
+    # key can be named like the index, as the keys of the sample and feature
+    # tables of an experiment are, and would be overwritten.
+    pos_col <- tail(make.unique(c(colnames(conn_x), "__position__"), sep = "_"), 1L)
     if (!is.null(indexcol))
-        conn_x <- addRowPosition(x, conn_x, indexcol)
+        conn_x <- addRowPosition(x, conn_x, pos_col)
     key_src <- .tableKeycolName(x, keycol)
     # A key can stand for names: a table read from a file that stores a number per
     # row and the names of the rows elsewhere has numbers as the values of its key
@@ -551,7 +553,8 @@ function(x, indexcol = NULL, keycol = NULL, dimtbl = NULL, offset = 0L,
 
     if (!is.null(indexcol)) {
         qidx <- as.character(dbQuoteIdentifier(conn, indexcol))
-        idx_expr <- sprintf("(%s + t.%s)", format(offset, scientific = FALSE, trim = TRUE), qidx)
+        idx_expr <- sprintf("(%s + t.%s)", format(offset, scientific = FALSE, trim = TRUE),
+                            as.character(dbQuoteIdentifier(conn, pos_col)))
         if (!is.null(index_type))
             idx_expr <- sprintf("CAST(%s AS %s)", idx_expr, index_type)
         select_parts <- c(select_parts, sprintf("%s AS %s", idx_expr, qidx))

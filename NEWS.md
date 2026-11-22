@@ -91,8 +91,11 @@
   `readParquet()` does for a table whose schema is sorted by it, got the rows in
   the order of the file, and `x[1, ]` was a different row after the round trip.
   The index is now the position of the row in the order of the object, which is
-  the stored order of its keys, and the rows are written in that order. A table
-  numbered by row, and an in-memory data frame, were not affected.
+  the stored order of its keys, and the rows are written in that order. The
+  position is held in a column of its own, whose name is not that of any column of
+  the table, so a key that is named like the index column, as the keys of the
+  sample and feature tables of an experiment are, is not overwritten by it. A
+  table numbered by row, and an in-memory data frame, were not affected.
 - `writeDuckDBTableParquet()`, and so `BiocDuckDB::writeParquet()` of a lazy
   table, lost the row names of a table whose key stands for names. A table read
   from files that store a number per row, with the names of the rows kept apart,
@@ -144,6 +147,10 @@
   key order and from one that is not, and checks that the key column holds the
   names, that the index is the position in the order of the object, and that each
   row keeps its value. It fails on the previous code.
+- A new test writes a lazy table whose key is named like the index column and has
+  values that differ from the positions of the rows, and checks that the index is
+  the position, that the key column holds the names, and that each row keeps its
+  value.
 
 # DuckDBDataFrame 0.99.36
 

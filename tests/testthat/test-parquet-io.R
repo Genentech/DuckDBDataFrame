@@ -1016,3 +1016,27 @@ test_that("the names of an aliased key are written as the key column, not the nu
         unlink(c(src, out), recursive = TRUE)
     }
 })
+
+test_that("a key named like the index column is not overwritten by the position", {
+    # the sample and feature tables of an experiment are written with an index
+    # column named like their key, so the position of a row has to be held apart
+    # from it; the key values here differ from the positions, which a clash would
+    # hide if they were the same
+    cells <- c("cell_c", "cell_a", "cell_d", "cell_b")
+    key_values <- c(10L, 20L, 30L, 40L)
+    d <- data.frame(id = key_values[c(3L, 1L, 4L, 2L)], x = c(30, 10, 40, 20))
+    src <- tempfile(fileext = ".parquet")
+    arrow::write_parquet(d, src)
+    on.exit(unlink(src), add = TRUE)
+    df <- DuckDBDataFrame(src, datacols = "x",
+                          keycol = list(id = setNames(key_values, cells)))
+    expect_identical(rownames(df), cells)
+
+    out <- tempfile()
+    on.exit(unlink(out, recursive = TRUE), add = TRUE)
+    res <- writeDuckDBTableParquet(df, out, indexcol = "id", keycol = "__name__")
+    written <- as.data.frame(arrow::read_parquet(res$path))
+    expect_identical(as.integer(written[["id"]]), 1:4)            # the position, not the key value
+    expect_identical(written[["__name__"]], cells)
+    expect_identical(written[["x"]], c(10, 20, 30, 40)[match(key_values, key_values)])
+})
