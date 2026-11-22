@@ -931,3 +931,66 @@ test_that(".sampleIndexColumn mirrors arrow's int64/uint32 downcast rules", {
     # an empty sample still returns a zero-length vector of the right class
     expect_identical(.sampleIndexColumn(0, 0L, 3e9, "BIGINT"), bit64::integer64())
 })
+
+test_that("the written __index__ is the position of the row in the order of the object", {
+    # The index used to number the rows in the order DuckDB scans the file, so for
+    # a file that is not in key order the index disagreed with the object, and a
+    # reader that keys the table by the index got the rows in the order of the file.
+    d <- data.frame(id = c("c", "a", "d", "b"), x = c(30, 10, 40, 20),
+                    y = c("c3", "a1", "d4", "b2"))
+    src <- tempfile(fileext = ".parquet")
+    arrow::write_parquet(d, src)
+    on.exit(unlink(src), add = TRUE)
+
+    for (keys in list("id", list(id = c("d", "c", "b", "a")))) {
+        df <- DuckDBDataFrame(src, datacols = c("x", "y"), keycol = keys)
+        own <- rownames(df)                        # the order of the object
+        out <- tempfile()
+        on.exit(unlink(out, recursive = TRUE), add = TRUE)
+        res <- writeDuckDBTableParquet(df, out)
+        written <- as.data.frame(arrow::read_parquet(res$path))
+
+        expect_identical(as.integer(written[["__index__"]]), seq_along(own))
+        expect_identical(written[["__name__"]], own)
+        expect_identical(written[["x"]], d$x[match(own, d$id)])
+
+        # keyed by the index, as the reader does, the table has the rows of the
+        # object in the same positions
+        back <- as.data.frame(DuckDBDataFrame(res$path, datacols = c("x", "y"),
+                                              keycol = "__index__"))
+        expect_identical(unname(back$x), unname(as.data.frame(df)$x))
+    }
+})
+
+test_that("a row-number table keeps its index when written", {
+    d <- data.frame(x = c(5, 3, 9, 1))
+    src <- tempfile(fileext = ".parquet")
+    arrow::write_parquet(d, src)
+    on.exit(unlink(src), add = TRUE)
+    df <- DuckDBDataFrame(src)
+    out <- tempfile()
+    on.exit(unlink(out, recursive = TRUE), add = TRUE)
+    res <- writeDuckDBTableParquet(df, out, keycol = NULL)
+    written <- as.data.frame(arrow::read_parquet(res$path))
+    expect_identical(as.integer(written[["__index__"]]), 1:4)
+    expect_identical(written[["x"]], d$x)
+})
+
+test_that("a column named like the internal position survives writing the index", {
+    # the index is computed from the position of the row, which is held in a
+    # column of the query; a column of the table with a clashing name must not be
+    # overwritten
+    d <- data.frame(id = c("c", "a", "b"), x = c(3, 1, 2),
+                    `__position__` = c(900, 700, 800), check.names = FALSE)
+    src <- tempfile(fileext = ".parquet")
+    arrow::write_parquet(d, src)
+    on.exit(unlink(src), add = TRUE)
+    df <- DuckDBDataFrame(src, datacols = c("x", "__position__"), keycol = "id")
+    out <- tempfile()
+    on.exit(unlink(out, recursive = TRUE), add = TRUE)
+    res <- writeDuckDBTableParquet(df, out)
+    written <- as.data.frame(arrow::read_parquet(res$path))
+    expect_identical(written[["__name__"]], c("a", "b", "c"))
+    expect_identical(written[["__position__"]], c(700, 800, 900))
+    expect_identical(as.integer(written[["__index__"]]), 1:3)
+})

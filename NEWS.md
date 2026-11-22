@@ -82,6 +82,17 @@
   the first key varying fastest for a table with several keys. `unique()` uses it,
   and so do the position-based functions of other packages, which used to number
   the rows in the order in which DuckDB scans the file.
+- `writeDuckDBTableParquet()`, and so `BiocDuckDB::writeParquet()` of a lazy
+  table, wrote `__index__` as the number of the row in the order in which DuckDB
+  scans the file, and wrote the rows in that order. For a file that is not in key
+  order the index then disagreed with the object: a table with the keys `c, a, d,
+  b` in the file and `a, b, c, d` as its own order was written with the index
+  `1, 2, 3, 4` on `c, a, d, b`, so a reader that keys the table by `__index__`, as
+  `readParquet()` does for a table whose schema is sorted by it, got the rows in
+  the order of the file, and `x[1, ]` was a different row after the round trip.
+  The index is now the position of the row in the order of the object, which is
+  the stored order of its keys, and the rows are written in that order. A table
+  numbered by row, and an in-memory data frame, were not affected.
 
 ## Testing
 
@@ -114,6 +125,13 @@
   derived and a user-given key order, and checks the rows of `as.matrix()`,
   `head()`, `x[i, ]` and `as.list()` against the order of the object. It fails on
   the previous code.
+- New tests write a lazy table whose file is not in key order, with a derived and
+  a user-given key order, and check that `__index__` and the order of the rows in
+  the file are the positions in the order of the object, that a table keyed by the
+  index has its rows in the same positions as the original, that a row-number
+  table keeps its index, and that a column of the table with the unusual name
+  `__position__` is written unchanged. The first of these fails on the previous
+  code.
 
 # DuckDBDataFrame 0.99.36
 

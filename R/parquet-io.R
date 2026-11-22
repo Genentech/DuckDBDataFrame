@@ -502,6 +502,15 @@ function(x, indexcol = NULL, keycol = NULL, dimtbl = NULL, offset = 0L,
     conn_x <- tblconn(x, select = FALSE)
     if (inherits(conn_x, "tbl_duckdb_connection") && length(x@datacols))
         conn_x <- .mutate_datacols(conn_x, x@datacols)
+    # The index is the position of the row in the order of the object, which is
+    # the stored order of its keys. Numbering the rows in the order DuckDB scans
+    # the file would not do: a file that is not in key order then gets an index
+    # that disagrees with the object, and a reader that keys the table by the
+    # index gets the rows back in the order of the file. The position is held in
+    # a column named like the index, a name that is already reserved: a column of
+    # 'x' with that name is not written.
+    if (!is.null(indexcol))
+        conn_x <- addRowPosition(x, conn_x, indexcol)
     tbl_q <- sql_render(conn_x)
     data_cols <- colnames(x)
     kcols <- keynames(x)
@@ -512,8 +521,7 @@ function(x, indexcol = NULL, keycol = NULL, dimtbl = NULL, offset = 0L,
 
     if (!is.null(indexcol)) {
         qidx <- as.character(dbQuoteIdentifier(conn, indexcol))
-        idx_expr <- sprintf("(%s + row_number() OVER (ORDER BY (SELECT 1)))",
-                            format(offset, scientific = FALSE, trim = TRUE))
+        idx_expr <- sprintf("(%s + t.%s)", format(offset, scientific = FALSE, trim = TRUE), qidx)
         if (!is.null(index_type))
             idx_expr <- sprintf("CAST(%s AS %s)", idx_expr, index_type)
         select_parts <- c(select_parts, sprintf("%s AS %s", idx_expr, qidx))
