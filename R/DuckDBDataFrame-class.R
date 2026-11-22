@@ -445,6 +445,12 @@ setReplaceMethod("[[", "DuckDBDataFrame", function(x, i, j, ..., value) {
 
 #' @export
 setMethod("[", "DuckDBDataFrame", function(x, i, j, ..., drop = TRUE) {
+    if ((nargs() - !missing(drop)) < 3L) {
+        if (!missing(i)) {
+            x <- extractCOLS(x, i)
+        }
+        return(x)
+    }
     if (!missing(i)) {
         x <- extractROWS(x, i)
     }

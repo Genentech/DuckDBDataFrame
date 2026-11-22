@@ -22,11 +22,37 @@
   `sum()`, 1 for `prod()`, `NaN` for `mean()`, `Inf` for `min()` and `-Inf` for
   `max()`. `any()` and `all()` follow the logic of base R for `NA`: `any()` is
   `TRUE` if a value is `TRUE`, and otherwise `NA` if a value is missing.
-- `quantile()`, `mad()` and `IQR()` still ignore `na.rm`. Base R gives an error
-  for a missing value when it is `FALSE`.
+- `quantile()`, `IQR()` and `mad()` take `na.rm` as well. As in base R,
+  `quantile()` and `IQR()` give an error for a missing value or a `NaN` unless
+  `na.rm = TRUE`, and `mad()` is `NA` for one.
+- `x[j]` of a `DuckDBDataFrame` with one index now selects columns, as it does
+  for a `DataFrame`: `df[2]` and `df["y"]` are the second column and the column
+  `y`, and `df[c(TRUE, FALSE)]` keeps every other column. It selected rows
+  before, so `df[2]` was the second row and `df["y"]` was an error about row
+  names. `df[i, ]` and `df[i, j]` still select rows. Code that used `df[i]` for
+  rows has to write `df[i, ]`.
 
 ## Bug fixes
 
+- `max(x, 100)`, `sum(x, y)` and `range(x, finite = TRUE)` of a `DuckDBColumn` or
+  `DuckDBTable` ignored the arguments after the first, so `max(x, 100)` was
+  `max(x)`. They are an error now. So are `mad(x, center = 5)` and
+  `mad(x, low = TRUE)`, which ignored `center`, `low` and `high` and gave the
+  default result.
+- `sum()` of an integer column is an integer, as in base R, where it was a
+  double. A sum that does not fit in an integer stays a double and is not turned
+  into `NA`.
+- `unique()` of a `DuckDBColumn` or `DuckDBTable` returned the values in the order
+  that DuckDB's `DISTINCT` gives, which is a hash order, so `unique(x)` of a
+  column holding `p, q, p, r` could be `q, r, p`. It also ignored `fromLast`.
+  It now keeps the first occurrence of each value, or the last with
+  `fromLast = TRUE`, in the order of the occurrences that are kept, as base R
+  does, where the order is that of the object's own rows: the stored order of
+  its keys, with the first key varying fastest for a table with several keys.
+- `unique()` of a table that had been subset by its keys, such as
+  `unique(df[c("c", "e"), ][["x"]])`, left the key filter out, so it returned
+  the values of rows that are not in the subset. It now sees only the rows of the
+  subset.
 - `is.nan()` on a `DuckDBColumn` or `DuckDBDataFrame` returned `FALSE` for a
   stored `NaN` in a Parquet column that has no `NULL`. It called DuckDB's
   `isnan()`, which in DuckDB 2.0.0 gives `FALSE` for such a column, apparently
@@ -46,6 +72,16 @@
   returned `NA` for a missing value, because DuckDB's `isfinite()` and `isinf()`
   are `NULL` for a `NULL`. Base R gives `FALSE`, so a missing value is now
   `FALSE`.
+- `as.matrix()` of a `DuckDBEmbeddings` returned the rows in the order of the
+  file, not in the order of the object, which is the stored order of its keys.
+  Each row kept its own key, so a lookup by name was right, but `head(x, 3)`,
+  `x[2:4, ]`, `as.list(x)` and `realize(x)` gave the right rows in the wrong
+  order. The rows now follow the order of the object, as `as.data.frame()` does.
+- New exported helper `addRowPosition(x, conn, name)` adds a column that holds
+  the position of each row in the order of `x`: the stored order of its keys, with
+  the first key varying fastest for a table with several keys. `unique()` uses it,
+  and so do the position-based functions of other packages, which used to number
+  the rows in the order in which DuckDB scans the file.
 
 ## Testing
 
@@ -65,6 +101,19 @@
   single value, and a `NaN` with no `NA`. It also covers `any()` and `all()` of a
   logical column with `NA`, the type of an integer `min()` and `max()`, an empty
   table, and the check on `na.rm`. It fails on the previous code.
+- The same test file compares `quantile()`, `IQR()` and `mad()` with base R, with
+  and without `na.rm`, on the same kinds of data, and checks the integer type of
+  `sum()` and the arguments that are now rejected. It fails on the previous code.
+- A new test compares `x[j]`, `x[i, ]` and `x[i, j]` of a `DuckDBDataFrame` with
+  those of a `DataFrame`. It fails on the previous code.
+- New tests compare `unique()` of a column and of a table with base R, with and
+  without `fromLast`, for a derived key order, a key order that the user gave,
+  `NA` and `NaN`, and a table subset by its keys. The order and the subset tests
+  fail on the previous code.
+- A new test builds embeddings from a file that is not in key order, with a
+  derived and a user-given key order, and checks the rows of `as.matrix()`,
+  `head()`, `x[i, ]` and `as.list()` against the order of the object. It fails on
+  the previous code.
 
 # DuckDBDataFrame 0.99.36
 

@@ -109,3 +109,59 @@ test_that("na.rm has to be TRUE or FALSE", {
     expect_error(sum(x, na.rm = NA), "na.rm")
     expect_error(mean(x, na.rm = "yes"), "na.rm")
 })
+
+test_that("quantile, IQR and mad follow base R for NA and NaN", {
+    datasets <- list(finite = c(4, 1, 7, 2, 9, 3), odd = c(5, 1, 9, 2, 8),
+                     na = c(4, NA, 7, 2, 9, 3), nan = c(4, NaN, 7, 2, 9, 3),
+                     allna = rep(NA_real_, 3), single = 5)
+    # base R raises an error for a missing value unless na.rm = TRUE
+    both <- function(got, want, info) {
+        if (inherits(want, "try-error")) {
+            expect_true(inherits(got, "try-error"), info = info)
+        } else {
+            expect_false(inherits(got, "try-error"), info = info)
+            expect_true(.same_aggregate(got, want), info = info)
+        }
+    }
+    for (nm in names(datasets)) {
+        v <- datasets[[nm]]
+        fx <- .aggr_table(v)
+        on.exit(unlink(fx$path), add = TRUE)
+        objs <- list(column = fx$df[["x"]], table = fx$df)
+        for (na.rm in c(FALSE, TRUE)) {
+            for (on in names(objs)) {
+                o <- objs[[on]]
+                info <- sprintf("%s, na.rm = %s, %s", nm, na.rm, on)
+                probs <- c(0.1, 0.5, 0.9)
+                both(try(quantile(o, probs, na.rm = na.rm, names = FALSE), silent = TRUE),
+                     try(quantile(v, probs, na.rm = na.rm, names = FALSE), silent = TRUE),
+                     paste("quantile:", info))
+                both(try(IQR(o, na.rm = na.rm), silent = TRUE),
+                     try(IQR(v, na.rm = na.rm), silent = TRUE), paste("IQR:", info))
+                both(try(mad(o, na.rm = na.rm), silent = TRUE),
+                     try(mad(v, na.rm = na.rm), silent = TRUE), paste("mad:", info))
+            }
+        }
+    }
+})
+
+test_that("sum of an integer column is an integer, as in base R", {
+    v <- c(3L, 1L, NA, 7L)
+    fx <- .aggr_table(v)
+    on.exit(unlink(fx$path))
+    x <- fx$df[["x"]]
+    expect_identical(sum(x, na.rm = TRUE), sum(v, na.rm = TRUE))
+    expect_identical(sum(x), sum(v))
+    expect_type(sum(.aggr_table(c(1.5, 2))$df[["x"]]), "double")
+})
+
+test_that("aggregates reject arguments they would ignore", {
+    fx <- .aggr_table(c(1, 2, 3))
+    on.exit(unlink(fx$path))
+    x <- fx$df[["x"]]
+    expect_error(max(x, 100), "single object")
+    expect_error(sum(x, x), "single object")
+    expect_error(range(x, finite = TRUE), "single object")
+    expect_error(mad(x, center = 5), "not supported")
+    expect_error(mad(x, low = TRUE), "not supported")
+})

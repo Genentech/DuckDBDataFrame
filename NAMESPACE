@@ -13,6 +13,7 @@ export(DuckDBDataFrame)
 export(DuckDBSelfHits)
 export(DuckDBTable)
 export(acquireDuckDBConn)
+export(addRowPosition)
 export(arrowIntType)
 export(arrowType)
 export(arrowTypeFromName)
@@ -309,9 +310,11 @@ importFrom(dplyr,
   anti_join,
   between,
   collect,
+  copy_to,
   distinct,
   filter,
   group_by,
+  inner_join,
   left_join,
   mutate,
   n,

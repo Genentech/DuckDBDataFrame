@@ -166,3 +166,30 @@ test_that("as.matrix strips aliased-keycol names from matrix dimnames", {
     expect_null(names(rownames(m)))          # no stray inner names
     expect_null(names(dimnames(m)[[1L]]))
 })
+
+test_that("as.matrix() of embeddings follows the order of the object, not of the file", {
+    # SQL returned the rows in the order of the file, so head(), x[i, ] and
+    # as.list() gave the right rows in the wrong order
+    set.seed(3)
+    n <- 8L
+    ids <- sprintf("cell_%02d", sample(n))              # a shuffled file
+    truth <- matrix(round(rnorm(n * 3), 3), n, 3, dimnames = list(ids, NULL))
+    d <- data.frame(cell_id = ids, pca = I(asplit(unname(truth), 1L)),
+                    stringsAsFactors = FALSE)
+    path <- tempfile(fileext = ".parquet")
+    arrow::write_parquet(d, path)
+    on.exit(unlink(path))
+
+    keycols <- list(derived = "cell_id",
+                    user = list(cell_id = rev(sort(ids))))
+    for (nm in names(keycols)) {
+        emb <- DuckDBDataFrame(path, keycol = keycols[[nm]])[["pca"]]
+        own <- rownames(emb)
+        m <- as.matrix(emb)
+        expect_identical(rownames(m), own, info = nm)
+        expect_equal(m, truth[own, ], info = nm)
+        expect_identical(rownames(as.matrix(head(emb, 3L))), head(own, 3L), info = nm)
+        expect_identical(rownames(as.matrix(emb[2:4, ])), own[2:4], info = nm)
+        expect_identical(names(as.list(emb)), own, info = nm)
+    }
+})

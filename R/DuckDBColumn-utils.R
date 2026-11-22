@@ -422,12 +422,15 @@ function(x, probs = seq(0, 1, 0.25), na.rm = FALSE, names = TRUE, type = 7, digi
 #' @export
 setMethod("mad", "DuckDBColumn",
 function(x, center = median(x), constant = 1.4826, na.rm = FALSE, low = FALSE, high = FALSE) {
-    callGeneric(x@table, constant = constant)
+    if (!missing(center)) {
+        stop("'center', 'low' and 'high' are not supported for a DuckDB object")
+    }
+    callGeneric(x@table, constant = constant, na.rm = na.rm, low = low, high = high)
 })
 
 #' @export
 setMethod("IQR", "DuckDBColumn", function(x, na.rm = FALSE, type = 7) {
-    callGeneric(x@table, type = type)
+    callGeneric(x@table, na.rm = na.rm, type = type)
 })
 
 #' @export
@@ -548,7 +551,8 @@ setMethod("paste", "DuckDBColumn", function(..., sep = " ", collapse = NULL) {
 #' @export
 setMethod("unique", "DuckDBColumn",
 function (x, incomparables = FALSE, fromLast = FALSE, ...)  {
-    replaceSlots(x, table = callGeneric(x@table), check = FALSE)
+    replaceSlots(x, table = callGeneric(x@table, incomparables = incomparables,
+                                        fromLast = fromLast), check = FALSE)
 })
 
 #' @export

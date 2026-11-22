@@ -374,3 +374,58 @@ test_that("Variadic numeric methods work as expected for a DuckDBColumn", {
     checkDuckDBColumn(pmax(culmen_length, culmen_depth, flipper_length), pmax(as.vector(culmen_length), as.vector(culmen_depth), as.vector(flipper_length)))
     checkDuckDBColumn(pmin(culmen_length, culmen_depth, flipper_length), pmin(as.vector(culmen_length), as.vector(culmen_depth), as.vector(flipper_length)))
 })
+
+test_that("unique() keeps first occurrences in the order of the object, and honors fromLast", {
+    # a hash order used to be returned, and fromLast was ignored
+    d <- data.frame(id = c("e", "c", "a", "d", "b", "f"), x = c(2, 1, 2, 3, 1, 3),
+                    y = c("p", "q", "p", "r", "q", "r"))
+    path <- tempfile(fileext = ".parquet")
+    arrow::write_parquet(d, path)
+    on.exit(unlink(path))
+
+    df <- DuckDBDataFrame(path, datacols = c("x", "y"), keycol = "id")
+    ref <- d[order(d$id), ]                      # the object's own order is the key order
+    for (fl in c(FALSE, TRUE)) {
+        expect_identical(unname(as.vector(unique(df[["x"]], fromLast = fl))),
+                         unique(ref$x, fromLast = fl))
+        expect_identical(unname(as.vector(unique(df[["y"]], fromLast = fl))),
+                         unique(ref$y, fromLast = fl))
+        u <- as.data.frame(unique(df, fromLast = fl))
+        w <- unique(ref[c("x", "y")], fromLast = fl)
+        expect_identical(u$x, w$x)
+        expect_identical(u$y, w$y)
+    }
+    # a user-given key order is the order of the object
+    keyed <- DuckDBDataFrame(path, datacols = c("x", "y"),
+                             keycol = list(id = c("f", "e", "d", "c", "b", "a")))
+    kref <- d[match(rownames(keyed), d$id), ]
+    expect_identical(unname(as.vector(unique(keyed[["x"]]))), unique(kref$x))
+})
+
+test_that("unique() of a subset only sees the rows of the subset", {
+    # the key filter was left out, so the values of other rows came back
+    d <- data.frame(id = c("e", "c", "a", "d", "b", "f"), x = c(2, 1, 2, 3, 1, 3),
+                    y = c("p", "q", "p", "r", "q", "r"))
+    path <- tempfile(fileext = ".parquet")
+    arrow::write_parquet(d, path)
+    on.exit(unlink(path))
+
+    df <- DuckDBDataFrame(path, datacols = c("x", "y"), keycol = "id")
+    sub <- df[c("c", "e"), ]
+    expect_identical(unname(as.vector(unique(sub[["x"]]))), c(1, 2))
+    expect_identical(unname(as.vector(unique(sub[["y"]]))), c("q", "p"))
+    expect_identical(length(unique(sub[["y"]])), 2L)
+})
+
+test_that("unique() handles NA and NaN as base R does", {
+    d <- data.frame(id = sprintf("k%02d", 1:7), x = c(NA, 1, NaN, 1, NA, NaN, 2))
+    path <- tempfile(fileext = ".parquet")
+    arrow::write_parquet(d, path)
+    on.exit(unlink(path))
+    x <- DuckDBDataFrame(path, datacols = "x", keycol = "id")[["x"]]
+    got <- unname(as.vector(unique(x)))
+    want <- unique(d$x)
+    expect_identical(is.nan(got), is.nan(want))
+    expect_identical(is.na(got), is.na(want))
+    expect_equal(got[!is.na(got)], want[!is.na(want)])
+})

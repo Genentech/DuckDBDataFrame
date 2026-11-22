@@ -700,3 +700,30 @@ test_that("transform works for a DuckDBDataFrame", {
     checkDuckDBDataFrame(transform(df, wt = wt * 1000, gpm = 1 / mpg),
                          transform(mtcars, wt = wt * 1000, gpm = 1 / mpg))
 })
+
+test_that("single-bracket subsetting selects columns, as for a DataFrame", {
+    d <- data.frame(id = c("c", "a", "d", "b"), x = c(30, 10, 40, 20),
+                    y = c("c3", "a1", "d4", "b2"), z = c(1, 2, 3, 4))
+    path <- tempfile(fileext = ".parquet")
+    arrow::write_parquet(d, path)
+    on.exit(unlink(path))
+    df <- DuckDBDataFrame(path, datacols = c("x", "y", "z"), keycol = "id")
+    ref <- DataFrame(x = d$x, y = d$y, z = d$z, row.names = d$id)[sort(d$id), ]
+
+    # x[j] with one index is list-style subsetting: it selects columns
+    for (j in list(2, "y", c(TRUE, FALSE, TRUE), -1, c("z", "x"))) {
+        got <- df[j]
+        expect_s4_class(got, "DuckDBDataFrame")
+        expect_identical(colnames(got), colnames(ref[j]))
+        expect_identical(rownames(got), rownames(ref))
+        expect_equal(as.data.frame(got), as.data.frame(ref[j]), check.attributes = FALSE)
+    }
+    # x[i, ] and x[i, j] still select rows
+    got <- df[2:3, ]
+    expect_identical(rownames(got), c("b", "c"))
+    expect_identical(colnames(got), c("x", "y", "z"))
+    expect_identical(unname(as.vector(df[2:3, "y"])), c("b2", "c3"))
+    expect_identical(colnames(df[, 2:3]), c("y", "z"))
+    # a name is a column name here, not a row name
+    expect_error(df["no such column"], "invalid names")
+})

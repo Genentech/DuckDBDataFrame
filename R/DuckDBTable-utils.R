@@ -541,9 +541,9 @@ setMethod("Math", "DuckDBTable", function(x) {
 # makes the result NA and "nan" makes it NaN.
 .aggrExpr <- function(x, y, fun, na.rm, nan = c("keep", "na", "nan")) {
     nan <- match.arg(nan)
-    # fsum() is a DuckDB function with no na.rm argument; it skips NULL as sum()
-    # does
-    stat <- if (fun == "fsum") call(fun, y) else call(fun, y, na.rm = TRUE)
+    # fsum() and mad() are DuckDB functions with no na.rm argument; like the
+    # other aggregates they skip NULL
+    stat <- if (fun %in% c("fsum", "mad")) call(fun, y) else call(fun, y, na.rm = TRUE)
     if (na.rm) {
         return(stat)
     }
@@ -622,11 +622,27 @@ setMethod("Math", "DuckDBTable", function(x) {
 
 #' @export
 setMethod("Summary", "DuckDBTable", function(x, ..., na.rm = FALSE) {
+    if (...length() != 0L) {
+        stop("'", .Generic, "' of a DuckDB object takes a single object, ",
+             "not several; the other arguments would be ignored")
+    }
     one <- function(spec) .aggregate(x, list(value = spec), na.rm)[["value"]]
+    # sum() of integers is an integer in base R
+    sumInteger <- function(value) {
+        if (!identical(unname(coltypes(x)), "integer") || is.nan(value)) {
+            value
+        } else if (is.na(value)) {
+            NA_integer_
+        } else if (abs(value) <= .Machine$integer.max) {
+            as.integer(value)
+        } else {
+            value
+        }
+    }
     switch(.Generic,
            min = one(.aggrSpec("min", "nan", Inf)),
            max = one(.aggrSpec("max", "keep", -Inf)),
-           sum = one(.aggrSpec("fsum", "keep", 0)),
+           sum = sumInteger(one(.aggrSpec("fsum", "keep", 0))),
            prod = one(.aggrSpec("prod", "keep", 1)),
            range = {
                ans <- .aggregate(x, list(min = .aggrSpec("min", "nan", Inf),
@@ -747,7 +763,18 @@ function(x, probs = seq(0, 1, 0.25), na.rm = FALSE, names = TRUE, type = 7, digi
     } else {
         fun <- "quantile_cont"
     }
-    aggr <- lapply(probs, function(p) call(fun, x@datacols[[1L]], p))
+    if (!isTRUE(na.rm) && !isFALSE(na.rm)) {
+        stop("'na.rm' must be TRUE or FALSE")
+    }
+    # as base R does, a missing value or NaN is an error unless na.rm = TRUE
+    if (!na.rm && anyNA(x)) {
+        stop("missing values and NaN's not allowed if 'na.rm' is FALSE")
+    }
+    y <- x@datacols[[1L]]
+    if (na.rm && .aggrCanHoldNaN(x)) {
+        y <- call("ifelse", call("is.nan", y), NA, y)
+    }
+    aggr <- lapply(probs, function(p) call(fun, y, p))
     ans <- unlist(as.data.frame(summarize(tblconn(x, select = FALSE), !!!aggr)),
                   use.names = FALSE)
     if (names) {
@@ -760,7 +787,10 @@ function(x, probs = seq(0, 1, 0.25), na.rm = FALSE, names = TRUE, type = 7, digi
 #' @export
 setMethod("mad", "DuckDBTable",
 function(x, center = median(x), constant = 1.4826, na.rm = FALSE, low = FALSE, high = FALSE) {
-    constant * .pull.aggregagte(x, "mad")
+    if (!missing(center) || !isFALSE(low) || !isFALSE(high)) {
+        stop("'center', 'low' and 'high' are not supported for a DuckDB object")
+    }
+    constant * .aggregate(x, list(value = .aggrSpec("mad", "na")), na.rm)[["value"]]
 })
 
 #' @export
@@ -1038,19 +1068,58 @@ setMethod("paste", "DuckDBTable", function(..., sep = " ", collapse = NULL) {
 ### Set methods
 ###
 
+# The position of each row in the object's own order, as a column of 'conn': the
+# stored order of the keys, with the first key varying fastest as in an array.
+# A table numbered by row holds the position in its key. 'conn' has to hold the
+# rows of 'x', as tblconn(x, select = FALSE) does.
+#' @rdname DuckDBDataFrame-internals
 #' @export
-#' @importFrom dplyr distinct mutate row_number
+#' @importFrom dplyr copy_to inner_join mutate
+addRowPosition <- function(x, conn, name) {
+    keycols <- x@keycols
+    if (has_row_number(x)) {
+        return(mutate(conn, !!!setNames(list(as.name(names(keycols)[1L])), name)))
+    }
+    pos <- NULL
+    stride <- 1
+    for (k in names(keycols)) {
+        keys <- unname(keycols[[k]])
+        idx_name <- paste0(".position_", k)
+        mapping <- setNames(data.frame(keys, seq_along(keys), stringsAsFactors = FALSE),
+                            c(k, idx_name))
+        mapping <- copy_to(dbconn(x), mapping, name = basename(tempfile("keypos_")),
+                           temporary = TRUE, overwrite = FALSE)
+        conn <- inner_join(conn, mapping, by = k)
+        term <- call("*", call("-", as.name(idx_name), 1L), stride)
+        pos <- if (is.null(pos)) term else call("+", pos, term)
+        stride <- stride * length(keys)
+    }
+    mutate(conn, !!!setNames(list(call("+", pos, 1L)), name))
+}
+
+#' @export
+#' @importFrom dplyr mutate row_number
 setMethod("unique", "DuckDBTable",
 function (x, incomparables = FALSE, fromLast = FALSE, ...)  {
     if (!isFALSE(incomparables)) {
         .NotYetUsed("incomparables != FALSE")
     }
-    conn <- tblconn(x, select = FALSE, filter = FALSE)
+    if (!isTRUE(fromLast) && !isFALSE(fromLast)) {
+        stop("'fromLast' must be TRUE or FALSE")
+    }
+    # the rows of this object only: the filter on the keys is part of the object
+    conn <- tblconn(x, select = FALSE)
     datacols <- x@datacols
     keycols <- tail(make.unique(c(colnames(conn), "row_number"), sep = "_"), 1L)
     keycols <- setNames(list(call("row_number")), keycols)
-    conn <- distinct(conn, !!!as.list(datacols))
-    conn <- mutate(conn, !!!keycols)
+    # base R keeps the first occurrence of each value, or the last with
+    # fromLast = TRUE, in the order of the occurrences that are kept
+    pos_name <- ".position"
+    conn <- addRowPosition(x, conn, pos_name)
+    kept <- setNames(list(call(if (fromLast) "max" else "min", as.name(pos_name), na.rm = TRUE)),
+                     pos_name)
+    conn <- summarize(group_by(conn, !!!as.list(datacols)), !!!kept, .groups = "drop")
+    conn <- mutate(window_order(conn, !!as.name(pos_name)), !!!keycols)
     keycols[[1L]] <- set_row_number(conn)
     replaceSlots(x, conn = conn, keycols = keycols, check = FALSE)
 })
