@@ -1216,8 +1216,12 @@ setValidity2("DuckDBTable", function(x) {
 ### Constructor
 ###
 
+.escapeGlob <- function(x) {
+    gsub("([*?[])", "[\\1]", x)
+}
+
 .wrapFile <- function(x, read) {
-    x <- sprintf("'%s'", x)
+    x <- sprintf("'%s'", escapeSQLPath(x))
     if (length(x) > 1L) {
         x <- sprintf("[%s]", paste(x, collapse = ", "))
     }
@@ -1234,7 +1238,7 @@ setValidity2("DuckDBTable", function(x) {
         x <- .wrapFile(x, "read_parquet")
     } else if (isSingleString(x) && .isRemotePath(x)) {
             configureCloud(acquireDuckDBConn())
-            x <- .wrapFile(file.path(x, "**"), "read_parquet")
+            x <- .wrapFile(file.path(.escapeGlob(x), "**"), "read_parquet")
     } else if (isSingleString(x) && dir.exists(x)) {
             if (file.exists(file.path(x, .INCOMPLETE_MARKER))) {
                 stop("'", x, "' is marked incomplete: '", .INCOMPLETE_MARKER,
@@ -1246,7 +1250,7 @@ setValidity2("DuckDBTable", function(x) {
             hits <- grepl("(?i)\\.(parquet|pq)$", files)
             if (any(hits)) {
                 exts <- unique(sub(".*\\.", "", files[hits]))
-                x <- .wrapFile(file.path(x, "**", paste0("*.", exts)),
+                x <- .wrapFile(file.path(.escapeGlob(x), "**", paste0("*.", exts)),
                                "read_parquet")
             }
         }
@@ -1336,7 +1340,7 @@ function(conn, datacols = colnames(conn), keycols = NULL, dimtbls = NULL, type =
 
     # Ensure 'keycols' is a named list of vectors
     if (length(keycols) == 0L) {
-        keycols <- .freshName(colnames(conn), "row_number")
+        keycols <- freshName(colnames(conn), "row_number")
         keycols <- setNames(list(call("row_number")), keycols)
         conn <- mutate(conn, !!!keycols)
         keycols[[1L]] <- set_row_number(conn)
@@ -1432,7 +1436,7 @@ all.equal.DuckDBTable <- function(target, current, check.datacols = FALSE, ...) 
     if (isTRUE(pull(stats, "n") == pull(stats, "top"))) {
         return(filter(conn, !!call("%in%", key, as.integer64(pos))))
     }
-    pos_name <- .freshName(colnames(conn), "__position__")
+    pos_name <- freshName(colnames(conn), "__position__")
     conn <- window_order(conn, !!key)
     conn <- mutate(conn, !!!setNames(list(call("row_number")), pos_name))
     conn <- filter(conn, !!call("%in%", as.name(pos_name), as.integer64(pos)))

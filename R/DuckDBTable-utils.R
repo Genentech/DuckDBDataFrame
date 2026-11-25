@@ -1226,7 +1226,7 @@ addRowPosition <- function(x, conn, name) {
     idx_names <- character()
     for (k in names(keycols)) {
         keys <- unname(keycols[[k]])
-        idx_name <- .freshName(c(colnames(conn), idx_names),
+        idx_name <- freshName(c(colnames(conn), idx_names),
                                paste0("__position_", k, "__"))
         idx_names <- c(idx_names, idx_name)
         mapping <- setNames(data.frame(keys, seq_along(keys), stringsAsFactors = FALSE),
@@ -1256,16 +1256,16 @@ function (x, incomparables = FALSE, fromLast = FALSE, ...)  {
     # the rows of this object only: the filter on the keys is part of the object
     conn <- tblconn(x, select = FALSE)
     datacols <- x@datacols
-    keycols <- .freshName(colnames(conn), "row_number")
+    keycols <- freshName(colnames(conn), "row_number")
     keycols <- setNames(list(call("row_number")), keycols)
     # base R keeps the first occurrence of each value, or the last with
     # fromLast = TRUE, in the order of the occurrences that are kept
-    pos_name <- .freshName(colnames(conn), "__position__")
+    pos_name <- freshName(colnames(conn), "__position__")
     conn <- addRowPosition(x, conn, pos_name)
     kept <- setNames(list(call(if (fromLast) "max" else "min", as.name(pos_name), na.rm = TRUE)),
                      pos_name)
     groups <- as.list(datacols)
-    grouped <- .freshNames(c(colnames(conn), pos_name),
+    grouped <- freshNames(c(colnames(conn), pos_name),
                            sprintf("__g%d__", seq_along(groups)))
     conn <- summarize(group_by(conn, !!!setNames(groups, grouped)), !!!kept,
                       .groups = "drop")
@@ -1320,7 +1320,7 @@ setMethod("table", "DuckDBTable", function(x, ...) {
     }
     conn <- tblconn(x, select = FALSE)
     groups <- as.list(x@datacols)
-    grouped <- .freshNames(c(colnames(conn), "count"),
+    grouped <- freshNames(c(colnames(conn), "count"),
                            sprintf("__g%d__", seq_along(groups)))
     counts <- .withDuckDBError(
         as.data.frame(summarize(group_by(conn, !!!setNames(groups, grouped)),

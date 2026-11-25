@@ -57,7 +57,8 @@
 #'   (\code{\link{writeDuckDBTableParquet}}).
 #' @param indexcol Optional index column name for lazy table export.
 #' @param keycol Optional primary-key column name for lazy table export.
-#' @param dimtbl Optional single-row \link[S4Vectors]{DataFrame-class} of partition columns.
+#' @param dimtbl Optional single-row \link[S4Vectors]{DataFrame-class} of
+#'   partition columns.
 #' @param level Integer \code{zstd} compression level for
 #'   \code{\link{resolveParquetCompression}}.
 #' @param compression Codec name for \code{\link{buildParquetCopySQL}};
@@ -66,6 +67,11 @@
 #'   written (\code{\link{checkParquetColumnNames}}), or of the entries of an
 #'   object that are written as files or directories
 #'   (\code{\link{checkEntryNames}}).
+#' @param existing Character vector of the names that a fresh name has to differ
+#'   from.
+#' @param stem,stems Name, or names, to start from; a suffix \code{_1},
+#'   \code{_2}, ... is added until the name differs from \code{existing},
+#'   ignoring case.
 #' @param kind Single string that says what \code{names} are, as in
 #'   \code{"assays"}, for the message of \code{\link{checkEntryNames}}.
 #' @param reserved Optional character vector of names that
@@ -80,6 +86,9 @@
 #'   \item{\code{validateAppendOffset}}{Integer scalar.}
 #'   \item{\code{checkParquetColumnNames}}{\code{names}, invisibly.}
 #'   \item{\code{checkEntryNames}}{\code{names}, invisibly.}
+#'   \item{\code{freshName}, \code{freshNames}}{A name, or names, for a column
+#'     that code adds next to the columns of the user, that cannot be taken for
+#'     one of them: DuckDB treats names that differ in the case of A-Z as one.}
 #'   \item{\code{checkWritable}}{A list of class \code{checkWritable} with
 #'     \code{writable} (logical), \code{columns} (the names of the columns that
 #'     \code{writeDuckDBTableParquet} writes, in order) and \code{problems} (the
@@ -93,7 +102,8 @@
 #'     \code{DataType} objects.}
 #'   \item{\code{checkHiveAppendPartitions}, \code{checkAppendPart}}{
 #'     \code{NULL}, invisibly.}
-#'   \item{\code{parquetPartPath}}{Character path to a \code{part-*.parquet} file.}
+#'   \item{\code{parquetPartPath}}{Character path to a \code{part-*.parquet}
+#'     file.}
 #'   \item{\code{validateWriteParquetPart}}{Integer scalar or \code{NULL}.}
 #'   \item{\code{setupFlatParquetWrite}}{Named list with validated flat-write
 #'     parameters (\code{path}, \code{part}, \code{offset}, \code{pq_path},
@@ -125,12 +135,12 @@
 #'     has both \code{Sex} and \code{sex} returns the values of \code{Sex}
 #'     without a message, and \code{SELECT *} renames the second to
 #'     \code{sex_1}. DuckDB ignores the case of the letters A to Z only, so a
-#'     letter with an accent and the same letter without one are two columns. It is also an error
-#'     when a name is \code{NA} or empty, or when \code{names} is not a
-#'     character vector.
-#'   \item \code{checkEntryNames} is the check for names that become the names of
-#'     files or directories, as the names of the assays of an experiment do. It
-#'     is an error when a name is \code{NA} or empty, has a \code{/}, a
+#'     letter with an accent and the same letter without one are two columns. It
+#'     is also an error when a name is \code{NA} or empty, or when \code{names}
+#'     is not a character vector.
+#'   \item \code{checkEntryNames} is the check for names that become the names
+#'     of files or directories, as the names of the assays of an experiment do.
+#'     It is an error when a name is \code{NA} or empty, has a \code{/}, a
 #'     backslash or a control character, is \code{"."} or \code{".."}, is one
 #'     of \code{reserved}, or is the same as another name ignoring case, as
 #'     \code{counts} and \code{Counts} are one file on macOS and Windows.
@@ -160,6 +170,8 @@
 #' @aliases quoteSQLColumns
 #' @aliases checkParquetColumnNames
 #' @aliases checkEntryNames
+#' @aliases freshName
+#' @aliases freshNames
 #' @aliases checkWritable
 #' @aliases resolveParquetCompression
 #' @aliases buildParquetCopySQL
@@ -423,7 +435,9 @@ quoteSQLColumns <- function(conn, cols) {
     chartr("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz", x)
 }
 
-.freshName <- function(existing, stem) {
+#' @export
+#' @rdname parquet-io
+freshName <- function(existing, stem) {
     taken <- .foldAscii(as.character(existing))
     name <- stem
     i <- 0L
@@ -434,10 +448,12 @@ quoteSQLColumns <- function(conn, cols) {
     name
 }
 
-.freshNames <- function(existing, stems) {
+#' @export
+#' @rdname parquet-io
+freshNames <- function(existing, stems) {
     out <- character(length(stems))
     for (i in seq_along(stems))
-        out[i] <- .freshName(c(existing, out[seq_len(i - 1L)]), stems[i])
+        out[i] <- freshName(c(existing, out[seq_len(i - 1L)]), stems[i])
     out
 }
 
@@ -580,7 +596,7 @@ function(query_sql, target_path, order_cols = NULL, partition_by = NULL,
 #' @importFrom dplyr copy_to inner_join select
 .addKeyAlias <- function(x, conn, key_src) {
     keys <- x@keycols[[1L]]
-    names_col <- .freshName(c(colnames(conn), key_src), "__alias__")
+    names_col <- freshName(c(colnames(conn), key_src), "__alias__")
     mapping <- setNames(data.frame(unname(keys), names(keys), stringsAsFactors = FALSE),
                         c(key_src, names_col))
     mapping <- copy_to(dbconn(x), mapping, name = basename(tempfile("keyalias_")),
@@ -657,17 +673,18 @@ function(x, indexcol = NULL, keycol = NULL, dimtbl = NULL, offset = 0L,
     # the file would not do: a file that is not in key order then gets an index
     # that disagrees with the object, and a reader that keys the table by the
     # index gets the rows back in the order of the file. The position is held in
-    # a column of its own, whose name is not that of any column of the query: the
-    # key can be named like the index, as the keys of the sample and feature
+    # a column of its own, whose name is not that of any column of the query:
+    # the key can be named like the index, as the keys of the sample and feature
     # tables of an experiment are, and would be overwritten. It is added to the
     # columns of the file, before the data columns are named, so that the join
     # does not have to select between names that differ only in case.
-    pos_col <- .freshName(c(colnames(conn_x), data_cols, kcols), "__position__")
+    pos_col <- freshName(c(colnames(conn_x), data_cols, kcols), "__position__")
     if (!is.null(indexcol))
         conn_x <- addRowPosition(x, conn_x, pos_col)
-    # A key can stand for names: a table read from a file that stores a number per
-    # row and the names of the rows elsewhere has numbers as the values of its key
-    # and the names as the names of those values. The names are what is written
+    # A key can stand for names: a table read from a file that stores a number
+    # per row and the names of the rows elsewhere has numbers as the values of
+    # its key and the names as the names of those values. The names are what is
+    # written
     # as the key column, as rownames() gives them, and not the numbers.
     if (!is.null(key_src) && .hasKeyAlias(x, key_src))
         conn_x <- .addKeyAlias(x, conn_x, key_src)
@@ -1047,7 +1064,7 @@ function(path, n_parts, part_digits = 0L, conn = acquireDuckDBConn(),
         stop("the file has a column named 'file_row_number', which DuckDB uses for ",
              "the number of a row of a file, so the file cannot be split. Rename ",
              "the column.", call. = FALSE)
-    part_col <- .freshName(file_cols, "__split_part__")
+    part_col <- freshName(file_cols, "__split_part__")
     qpart <- as.character(dbQuoteIdentifier(conn, part_col))
     tmp_tbl <- basename(tempfile("splitParquetPart_"))
     dbExecute(conn, sprintf(

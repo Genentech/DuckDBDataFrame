@@ -49,14 +49,14 @@ test_that("checkEntryNames refuses names that cannot be files or are the same up
 })
 
 test_that("fresh names differ from the names of the user without regard to case", {
-    fresh <- DuckDBDataFrame:::.freshName
+    fresh <- DuckDBDataFrame:::freshName
     expect_identical(fresh(c("a", "b"), "__x__"), "__x__")
     expect_identical(fresh(c("a", "__x__"), "__x__"), "__x___1")
     expect_identical(fresh(c("a", "__X__", "__x___1"), "__x__"), "__x___2")
     expect_identical(fresh(character(), "__x__"), "__x__")
-    expect_identical(DuckDBDataFrame:::.freshNames(c("__G1__"), c("__g1__", "__g2__")),
+    expect_identical(DuckDBDataFrame:::freshNames(c("__G1__"), c("__g1__", "__g2__")),
                      c("__g1___1", "__g2__"))
-    expect_identical(DuckDBDataFrame:::.freshNames(character(), c("n", "n")), c("n", "n_1"))
+    expect_identical(DuckDBDataFrame:::freshNames(character(), c("n", "n")), c("n", "n_1"))
 })
 
 test_that("the lazy writer refuses a column that is named like the index, the key or a dimtbl column", {
@@ -142,4 +142,19 @@ test_that("splitParquetPart says why a file with a column file_row_number cannot
     arrow::write_parquet(data.frame(i = 1:6, File_Row_Number = 6:1), src)
     expect_error(splitParquetPart(dir, 2L), "'file_row_number'.*Rename")
     expect_identical(arrow::read_parquet(src)$i, 1:6)
+})
+
+test_that("a directory whose name has glob characters or a quote is read as that directory", {
+    for (nm in c("br[1]ck", "st*r", "q?mark", "it's", "a b", "[x]*?")) {
+        dir <- file.path(tempfile(), nm)
+        dir.create(dir, recursive = TRUE)
+        arrow::write_parquet(data.frame(id = c("a", "b"), v = c(1, 2)), file.path(dir, "part-0.parquet"))
+        # a sibling that the unescaped pattern would also match
+        other <- file.path(dirname(dir), "bring")
+        dir.create(other)
+        arrow::write_parquet(data.frame(id = "z", v = 99), file.path(other, "part-0.parquet"))
+        x <- DuckDBDataFrame(dir, datacols = "v", keycol = "id")
+        expect_identical(unname(as.vector(x[["v"]])), c(1, 2), info = nm)
+        unlink(dirname(dir), recursive = TRUE)
+    }
 })
