@@ -1,3 +1,105 @@
+# DuckDBDataFrame 1.0.1
+
+## Significant changes
+
+- Two columns whose names differ only in case, as `Sex` and `sex` do, can no
+  longer be written to a file. DuckDB binds a column name without regard to
+  case, so a query for `sex` on a file that holds both returns the values of
+  `Sex` without a message, and `writeDuckDBTableParquet()` wrote the wrong
+  values, even when only one of the two columns was exposed. The check is
+  `checkParquetColumnNames()`, which is now exported, and it also refuses a
+  name that is `NA`, empty or not a character. A table that is read from such a
+  file is still correct: DuckDB renames the second column and the table maps
+  the name to it. Rename the columns before writing.
+- `writeDuckDBTableParquet()` is an error when a column of the table is named
+  like the index, the row names or a column of `dimtbl` that is written. It used
+  to leave that column out without a message, or to take it for the row names,
+  so that the file read back with the wrong rows. Only the names that the
+  writer writes are refused, not every name of the form `__x__`.
+- `table()` follows base R for missing values. A missing value is not counted
+  unless `useNA = "ifany"` or `useNA = "always"` is given, where it was counted
+  under the label `"<NA>"`, which was also the label of a string that reads
+  `<NA>`, so the two were mixed. The values are sorted as they are, so that the
+  numbers 2 and 10 are in numerical order, and a `NaN` is a level of its own with
+  `useNA`, as in base R. A table of counts of such a column keeps one cell per
+  value, whatever the label.
+- Comparisons of a column that can hold a `NaN` (`==`, `!=`, `<`, `<=`, `>`
+  and `>=`) are `NA` when a side is a `NaN`, as in base R. They were `TRUE` or
+  `FALSE`, because DuckDB takes `NaN` for a number that is above every other
+  and equal to itself, so `x > 3` kept the rows with a `NaN`.
+- `pmax()` and `pmin()` return `NA` when a value is missing, unless
+  `na.rm = TRUE`, as in base R. They returned the other value, because DuckDB's
+  `greatest()` and `least()` skip a `NULL`. A `NaN` is returned, or dropped with
+  `na.rm = TRUE`, as in base R.
+- `grepl()` is `FALSE` for a missing string, as in base R, and `paste()` writes
+  a missing string as `"NA"`. They gave `NA` and left the string out.
+- `sub(fixed = TRUE)` matches the pattern as it is. It read the pattern as a
+  regular expression, so `sub(".", "Z", x, fixed = TRUE)` replaced the first
+  character of every string.
+- A collection of more values than `options(DuckDBDataFrame.max_cells)`, 5e8
+  unless set, is refused with a message before the query runs, where it ran
+  until the machine was out of memory. `Inf` turns the check off.
+
+## New features
+
+- `round()` and `signif()` of a column or a table. They give what base R gives,
+  including the round to even and the choice of the closer of the two numbers
+  that bracket the value, so `round(2.5)` is 2, `round(0.5)` is 0 and
+  `round(2.675, 2)` is 2.67, where DuckDB's own `round()` rounds half away from
+  zero.
+- `pmax()` and `pmin()` take a table or a column together with a single value,
+  as in `pmax(x, 0)`. They gave an error from base R, because the methods
+  dispatched only on calls whose arguments were all of one class.
+- `log(x, base)` takes its base. It ignored it before and returned the natural
+  logarithm.
+- `quantile()` checks `probs` as base R does, with the error `'probs' outside
+  [0,1]`, and gives `NA` for a missing probability.
+- `checkEntryNames()` is the check for names that become files or directories,
+  such as the names of the assays of an experiment: it refuses `NA`, empty names,
+  names with `/`, a backslash or a control character, `.` and `..`, names that
+  are reserved and names that are the same ignoring case.
+- `checkWritable()` is a dry run of `writeDuckDBTableParquet()`. It lists the
+  columns that would be written and the reason for a refusal, and it cannot
+  disagree with the write because both build the query with
+  `buildTableSelectSQL()`.
+- An error of DuckDB at a collection, a write or a summary is a condition of
+  class `duckdbdataframe_error` (and `duckdb_out_of_range`, `duckdb_binder` and
+  so on) whose message is the cause on one line, as in `DuckDB could not read
+  the values: Out of Range Error: Overflow in addition of INT32`, without the
+  query. The original error is the `parent` of the condition.
+
+## Bug fixes
+
+- `unique()` and `table()` of a column used the name of the column in the query,
+  so a data column named like another up to case, such as `sex` next to `Sex`,
+  gave the values of the other one, or an error. They group under names of their
+  own.
+- The columns that the code adds to a query, as the position of a row, the names
+  of an aliased key and the groups of `unique()` and `table()`, are named
+  against the columns of the query without regard to case, so a column of the
+  user named `__POSITION__` or `ROW_NUMBER` cannot be taken for them.
+- `splitParquetPart()` names its helper column against the columns of the file,
+  and its temporary table with `tempfile()`, so it no longer moves the random
+  number seed of the session. A file with a column `file_row_number`, which
+  DuckDB uses for the number of a row, is refused with a message that says so.
+- `sign()` of a `NaN` is `NaN`, `tanh()` is DuckDB's own and no longer overflows
+  for a large integer or is `NaN` for an infinite number, and `signif()` of an
+  infinite number is that number.
+
+## Known limits, now tested
+
+- Arithmetic on a narrow integer column that overflows its type, as `x + 1L`
+  for a `uint8` column that holds 255, is an error from DuckDB where base R
+  widens the value. It is never a wrong value.
+- `pmin()` and `table(useNA = "ifany")` of a column that holds both an `NA` and
+  a `NaN` differ from base R in the order of the two or in a `NaN` against an
+  `NA`, which a query that groups the values has no way to know.
+- A parity matrix, `tests/testthat/test-parity-matrix.R`, compares the methods
+  of a column with base R on a registry of edge cases (ties, `NA`, `NaN`, `Inf`,
+  the ends of the integer range). A coverage test fails when a method of the
+  classes, or a member of the `Math`, `Math2`, `Ops` and `Summary` groups, has
+  no row and no reason for having none.
+
 # DuckDBDataFrame 0.99.37
 
 ## Significant changes

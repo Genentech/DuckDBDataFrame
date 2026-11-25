@@ -300,18 +300,26 @@ test_that("table method handles NA values correctly", {
     tbl <- DuckDBTable(test_path, datacols = "category", keycols = "id")
     result <- table(tbl)
 
-    # Verify NA values are represented as "<NA>" string
-    expect_true("<NA>" %in% names(result))
-
-    # Test that the table counts are correct
-    expect_equal(sum(result), nrow(test_df))
-    expect_equal(result[["<NA>"]], 2L)
+    # as in base R, a missing value is not counted unless useNA says so
+    expect_false(anyNA(names(result)))
+    expect_equal(sum(result), sum(!is.na(test_df$category)))
     expect_equal(result[["A"]], 3L)
     expect_equal(result[["B"]], 3L)
     expect_equal(result[["C"]], 2L)
+    expect_setequal(names(result), c("A", "B", "C"))
 
-    # Verify all unique values are present
-    expect_setequal(names(result), c("<NA>", "A", "B", "C"))
+    counted <- table(tbl, useNA = "ifany")
+    expect_equal(sum(counted), nrow(test_df))
+    expect_identical(names(counted), c("A", "B", "C", NA))
+    expect_identical(as.vector(counted), as.vector(table(test_df$category, useNA = "ifany")))
+    # a string that reads "<NA>" is a value, not a missing one
+    lit <- data.frame(id = 1:4, s = c("<NA>", NA, NA, "<NA>"))
+    lit_path <- tempfile(fileext = ".parquet")
+    arrow::write_parquet(lit, lit_path)
+    on.exit(unlink(lit_path), add = TRUE)
+    lit_tbl <- DuckDBTable(lit_path, datacols = "s", keycols = "id")
+    expect_identical(as.vector(table(lit_tbl, useNA = "ifany")), c(2L, 2L))
+    expect_identical(unname(dimnames(table(lit_tbl, useNA = "ifany"))), list(c("<NA>", NA)))
 })
 
 test_that("Character methods work as expected for a DuckDBTable", {

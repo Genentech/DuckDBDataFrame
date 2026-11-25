@@ -25,6 +25,10 @@
 #'     \code{"<="}, \code{">="}}
 #'   \item{\code{Logic}}{\code{"&"}, \code{"|"}, \code{"!"}}
 #'   \item{\code{Ops}}{\code{"Arith"}, \code{"Compare"}, \code{"Logic"}}
+#'   \item{\code{log(x, base = exp(1))}}{The logarithm to \code{base}, a single
+#'     positive number other than 1, as in base R. \code{log2} and \code{log10}
+#'     are used for the bases 2 and 10, and the quotient of two natural
+#'     logarithms for any other.}
 #'   \item{\code{Math}}{\code{"abs"}, \code{"sign"}, \code{"sqrt"},
 #'     \code{"ceiling"}, \code{"floor"}, \code{"trunc"}, \code{"log"},
 #'     \code{"log10"}, \code{"log2"}, \code{"acos"}, \code{"acosh"},
@@ -108,12 +112,18 @@
 #'     }
 #'   }
 #'   \item{\code{pmax(..., na.rm = FALSE)}:}{
-#'     Returns the parallel maxima of multiple DuckDBTable objects.
-#'     All arguments must be DuckDBTable objects with compatible dimensions.
+#'     Returns the parallel maxima of DuckDBTable objects and single values, as
+#'     in base R. A missing value gives a missing value, unless \code{na.rm} is
+#'     \code{TRUE}. A \code{NaN} is not told from a missing value by
+#'     \code{pmin}: DuckDB sorts it above every number, so \code{pmin} returns
+#'     the other value where base R returns \code{NaN}.
 #'   }
 #'   \item{\code{pmin(..., na.rm = FALSE)}:}{
-#'     Returns the parallel minima of multiple DuckDBTable objects.
-#'     All arguments must be DuckDBTable objects with compatible dimensions.
+#'     Returns the parallel minima of DuckDBTable objects and single values, as
+#'     in base R. A missing value gives a missing value, unless \code{na.rm} is
+#'     \code{TRUE}. A \code{NaN} is not told from a missing value by
+#'     \code{pmin}: DuckDB sorts it above every number, so \code{pmin} returns
+#'     the other value where base R returns \code{NaN}.
 #'   }
 #' }
 #'
@@ -251,6 +261,9 @@
 #' @aliases Ops,DuckDBTable,missing-method
 #' @aliases !,DuckDBTable-method
 #' @aliases Math,DuckDBTable-method
+#' @aliases Math2,DuckDBTable,missing-method
+#' @aliases Math2,DuckDBTable,numeric-method
+#' @aliases log,DuckDBTable-method
 #' @aliases Summary,DuckDBTable-method
 #'
 #' @aliases anyNA,DuckDBTable-method
@@ -281,8 +294,8 @@
 #' @aliases paste2,DuckDBTable,character-method
 #' @aliases paste2,character,DuckDBTable-method
 #' @aliases paste,DuckDBTable-method
-#' @aliases pmax,DuckDBTable-method
-#' @aliases pmin,DuckDBTable-method
+#' @aliases pmax,DuckDBTableOrAtomic-method
+#' @aliases pmin,DuckDBTableOrAtomic-method
 #'
 #' @aliases unique,DuckDBTable-method
 #' @aliases %in%,DuckDBTable,ANY-method
@@ -415,10 +428,28 @@ ORDER BY function_name",
 ###
 
 #' @importFrom stats setNames
-.Ops.DuckDBTable <- function(.Generic, x, fin1, fin2, fout) {
-    datacols <- setNames(as.expression(Map(function(x, y) call(.Generic, x, y), fin1, fin2)), fout)
+.Ops.DuckDBTable <- function(.Generic, x, fin1, fin2, fout, t1 = NULL, t2 = NULL) {
+    if (.Generic %in% c("==", "!=", "<", "<=", ">", ">=") &&
+        any(c(t1, t2) %in% "double")) {
+        n <- max(length(fin1), length(fin2))
+        a <- rep_len(as.list(fin1), n); b <- rep_len(as.list(fin2), n)
+        ta <- rep_len(if (is.null(t1)) "other" else t1, n)
+        tb <- rep_len(if (is.null(t2)) "other" else t2, n)
+        datacols <- Map(function(a, b, ta, tb) {
+            ans <- call(.Generic, a, b)
+            nan <- c(if (ta == "double") call("is.nan", a), if (tb == "double") call("is.nan", b))
+            if (length(nan) == 0L) return(ans)
+            cond <- if (length(nan) == 1L) nan[[1L]] else call("|", nan[[1L]], nan[[2L]])
+            call("ifelse", cond, NA, ans)
+        }, a, b, ta, tb)
+        datacols <- setNames(as.expression(datacols), fout)
+    } else {
+        datacols <- setNames(as.expression(Map(function(x, y) call(.Generic, x, y), fin1, fin2)), fout)
+    }
     replaceSlots(x, datacols = datacols, check = FALSE)
 }
+
+.opsScalarType <- function(v) if (is.double(v)) "double" else "other"
 
 #' @export
 setMethod("Ops", c(e1 = "DuckDBTable", e2 = "DuckDBTable"), function(e1, e2) {
@@ -433,7 +464,9 @@ setMethod("Ops", c(e1 = "DuckDBTable", e2 = "DuckDBTable"), function(e1, e2) {
     } else {
         fout <- colnames(e2)
     }
-    .Ops.DuckDBTable(.Generic, x = comb, fin1 = fin1, fin2 = fin2, fout = fout)
+    ct <- unname(coltypes(comb))
+    .Ops.DuckDBTable(.Generic, x = comb, fin1 = fin1, fin2 = fin2, fout = fout,
+                     t1 = ct[seq_along(fin1)], t2 = ct[length(fin1) + seq_along(fin2)])
 })
 
 #' @export
@@ -441,7 +474,8 @@ setMethod("Ops", c(e1 = "DuckDBTable", e2 = "atomic"), function(e1, e2) {
     if (length(e2) != 1L) {
         stop("can only perform binary operations with a scalar value")
     }
-    .Ops.DuckDBTable(.Generic, x = e1, fin1 = e1@datacols, fin2 = e2, fout = colnames(e1))
+    .Ops.DuckDBTable(.Generic, x = e1, fin1 = e1@datacols, fin2 = e2, fout = colnames(e1),
+                     t1 = unname(coltypes(e1)), t2 = .opsScalarType(e2))
 })
 
 #' @export
@@ -449,7 +483,8 @@ setMethod("Ops", c(e1 = "atomic", e2 = "DuckDBTable"), function(e1, e2) {
     if (length(e1) != 1L) {
         stop("can only perform binary operations with a scalar value")
     }
-    .Ops.DuckDBTable(.Generic, x = e2, fin1 = e1, fin2 = e2@datacols, fout = colnames(e2))
+    .Ops.DuckDBTable(.Generic, x = e2, fin1 = e1, fin2 = e2@datacols, fout = colnames(e2),
+                     t1 = .opsScalarType(e1), t2 = unname(coltypes(e2)))
 })
 
 #' @export
@@ -468,6 +503,11 @@ setMethod("Math", "DuckDBTable", function(x) {
         return(log(x + 1))
     } else if (.Generic == "expm1") {
         return(exp(x) - 1)
+    }
+    if (.Generic == "sign" && .aggrCanHoldNaN(x)) {
+        return(.mapDatacols(x, function(col) call("ifelse", call("is.nan", col), col, call("sign", col))))
+    } else if (.Generic == "tanh") {
+        return(.mapDatacols(x, function(col) call("TANH", col)))
     }
     datacols <-
       switch(.Generic,
@@ -498,6 +538,85 @@ setMethod("Math", "DuckDBTable", function(x) {
                 sql_call(x, .Generic)
              },
              stop("unsupported Math operator: ", .Generic))
+})
+
+.rintExpr <- function(y) {
+    substitute(ifelse(Y - floor(Y) == 0.5, 2 * floor(Y / 2 + 0.5), round(Y)),
+               list(Y = y))
+}
+
+.roundExpr <- function(x, digits) {
+    if (digits == 0) {
+        return(.rintExpr(x))
+    } else if (digits < 0) {
+        p <- 10^(-digits)
+        return(substitute(P * R, list(P = p, R = .rintExpr(substitute(X / P, list(X = x, P = p))))))
+    }
+    p <- 10^digits
+    limit <- 10^(15 - digits)
+    inner <- substitute(
+        ifelse(A > L, A,
+               ifelse((A - floor(A * P) / P) < (ceiling(A * P) / P - A) |
+                      ((A - floor(A * P) / P) == (ceiling(A * P) / P - A) &
+                       floor(A * P) %% 2 == 0),
+                      floor(A * P) / P, ceiling(A * P) / P)),
+        list(A = call("abs", x), P = p, L = limit))
+    substitute(ifelse(X == 0, X, sign(X) * INNER), list(X = x, INNER = inner))
+}
+
+.signifExpr <- function(x, digits) {
+    digits <- max(1, digits)
+    a <- call("abs", x)
+    e10 <- substitute(D - 1 - floor(log10(A)), list(D = digits, A = a))
+    up <- substitute(R / 10^E,
+                     list(R = .rintExpr(substitute(A * 10^E, list(A = a, E = e10))), E = e10))
+    down <- substitute(R * 10^(-E),
+                       list(R = .rintExpr(substitute(A / 10^(-E), list(A = a, E = e10))), E = e10))
+    substitute(ifelse(X == 0 | abs(X) > 1e308, X,
+                      sign(X) * ifelse(E > 0, UP, DOWN)),
+               list(X = x, E = e10, UP = up, DOWN = down))
+}
+
+.checkDigits <- function(digits) {
+    if (!is.numeric(digits) || length(digits) != 1L || is.na(digits))
+        stop("'digits' must be a single number")
+    as.integer(round(digits))
+}
+
+.mapDatacols <- function(x, FUN) {
+    datacols <- setNames(as.expression(lapply(x@datacols, FUN)), colnames(x))
+    replaceSlots(x, datacols = datacols, check = FALSE)
+}
+
+#' @export
+setMethod("Math2", c("DuckDBTable", "numeric"), function(x, digits) {
+    digits <- .checkDigits(digits)
+    switch(.Generic,
+           round = .mapDatacols(x, function(col) .roundExpr(col, digits)),
+           signif = .mapDatacols(x, function(col) .signifExpr(col, digits)),
+           stop("unsupported Math2 operator: ", .Generic))
+})
+
+#' @export
+setMethod("Math2", c("DuckDBTable", "missing"), function(x, digits) {
+    callGeneric(x, if (.Generic == "round") 0 else 6)
+})
+
+#' @export
+setMethod("log", "DuckDBTable", function(x, base = exp(1)) {
+    if (!is.numeric(base) || length(base) != 1L || !is.finite(base) ||
+        base <= 0 || base == 1) {
+        stop("'base' must be a single positive number other than 1")
+    }
+    if (isTRUE(all.equal(base, exp(1), tolerance = 0))) {
+        sql_call(x, "log")
+    } else if (base == 2) {
+        sql_call(x, "log2")
+    } else if (base == 10) {
+        sql_call(x, "log10")
+    } else {
+        sql_call(x, "log") / log(base)
+    }
 })
 
 #' @importFrom dplyr pull summarize
@@ -579,7 +698,7 @@ setMethod("Math", "DuckDBTable", function(x) {
     aggr <- lapply(specs, function(spec) .aggrExpr(x, y, spec$fun, na.rm, spec$nan))
     aggr[["__nonmissing__"]] <- call("count", y)
     aggr[["__n__"]] <- call("n")
-    res <- as.data.frame(collect(summarize(tblconn(x, select = FALSE), !!!aggr)))
+    res <- .withDuckDBError(as.data.frame(collect(summarize(tblconn(x, select = FALSE), !!!aggr))), "compute a summary")
     nothing_left <- res[["__n__"]] == 0L || (na.rm && res[["__nonmissing__"]] == 0L)
     ans <- lapply(names(specs), function(nm) {
         value <- res[[nm]]
@@ -616,7 +735,7 @@ setMethod("Math", "DuckDBTable", function(x) {
     } else {
         call("ifelse", hit, decided, call("ifelse", nas, NA, value))
     }
-    res <- collect(summarize(tblconn(x, select = FALSE), !!expr))
+    res <- .withDuckDBError(collect(summarize(tblconn(x, select = FALSE), !!expr)), "compute a summary")
     res[[1L]]
 }
 
@@ -774,12 +893,23 @@ function(x, probs = seq(0, 1, 0.25), na.rm = FALSE, names = TRUE, type = 7, digi
     if (na.rm && .aggrCanHoldNaN(x)) {
         y <- call("ifelse", call("is.nan", y), NA, y)
     }
-    aggr <- lapply(probs, function(p) call(fun, y, p))
-    ans <- unlist(as.data.frame(summarize(tblconn(x, select = FALSE), !!!aggr)),
-                  use.names = FALSE)
+    if (!is.numeric(probs))
+        stop("'probs' must be numeric")
+    eps <- 100 * .Machine$double.eps
+    ok <- !is.na(probs)
+    if (any(probs[ok] < -eps | probs[ok] > 1 + eps))
+        stop("'probs' outside [0,1]")
+    ans <- rep(NA_real_, length(probs))
+    if (any(ok)) {
+        aggr <- lapply(pmax(0, pmin(1, probs[ok])), function(p) call(fun, y, p))
+        ans[ok] <- unlist(.withDuckDBError(as.data.frame(summarize(tblconn(x, select = FALSE), !!!aggr)),
+                                           "compute a quantile"), use.names = FALSE)
+    }
     if (names) {
         stopifnot(isSingleNumber(digits), digits >= 1)
-        names(ans) <- paste0(formatC(100 * probs, format = "fg", width = 1, digits = digits), "%")
+        nms <- character(length(probs))
+        nms[ok] <- paste0(formatC(100 * probs[ok], format = "fg", width = 1, digits = digits), "%")
+        names(ans) <- nms
     }
     ans
 }
@@ -798,8 +928,20 @@ setMethod("IQR", "DuckDBTable", function(x, na.rm = FALSE, type = 7) {
     diff(quantile(x, c(0.25, 0.75), na.rm = na.rm, names = FALSE, type = type))
 })
 
+.extremeCall <- function(fun, a, b, na.rm, nan = c(FALSE, FALSE)) {
+    ans <- call(fun, a, b)
+    if (isTRUE(na.rm)) {
+        if (nan[1L]) ans <- call("ifelse", call("is.nan", a), b, ans)
+        if (nan[2L]) ans <- call("ifelse", call("is.nan", b), a, ans)
+        return(ans)
+    }
+    if (nan[1L]) ans <- call("ifelse", call("is.nan", a), a, ans)
+    if (nan[2L]) ans <- call("ifelse", call("is.nan", b), b, ans)
+    call("ifelse", call("|", call("is.na", a), call("is.na", b)), NA, ans)
+}
+
 #' @importFrom stats setNames
-.pmaxTwoDuckDBTables <- function(x, y) {
+.extremeTwoDuckDBTables <- function(fun, x, y, na.rm) {
     if (!isTRUE(all.equal(x, y)) || ((ncol(x) > 1L) && (ncol(y) > 1L) && (ncol(x) != ncol(y)))) {
         stop("can only perform operations with compatible objects")
     }
@@ -807,65 +949,57 @@ setMethod("IQR", "DuckDBTable", function(x, na.rm = FALSE, type = 7) {
     fin1 <- head(comb@datacols, ncol(x))
     fin2 <- tail(comb@datacols, ncol(y))
     fout <- if (ncol(x) >= ncol(y)) colnames(x) else colnames(y)
-    datacols <- setNames(as.expression(Map(function(a, b) call("greatest", a, b), fin1, fin2)), fout)
+    ct <- unname(coltypes(comb))
+    n <- max(length(fin1), length(fin2))
+    nan1 <- rep_len(ct[seq_along(fin1)], n) == "double"
+    nan2 <- rep_len(ct[length(fin1) + seq_along(fin2)], n) == "double"
+    datacols <- setNames(as.expression(Map(function(a, b, n1, n2) .extremeCall(fun, a, b, na.rm, c(n1, n2)),
+                                            rep_len(as.list(fin1), n), rep_len(as.list(fin2), n), nan1, nan2)), fout)
     replaceSlots(comb, datacols = datacols, check = FALSE)
 }
 
-#' @export
-setMethod("pmax", "DuckDBTable", function(..., na.rm = FALSE) {
-    args <- list(...)
+#' @importFrom stats setNames
+.extremeDuckDBTable <- function(fun, args, na.rm) {
     ans <- args[[1L]]
-    if (length(args) > 1L) {
-        for (i in 2:length(args)) {
-            if (is(args[[i]], "DuckDBTable")) {
-                ans <- .pmaxTwoDuckDBTables(ans, args[[i]])
-            } else if (is.atomic(args[[i]])) {
-                if (length(args[[i]]) != 1L) {
-                    stop("can only perform operations with scalar values")
-                }
-                datacols <- setNames(as.expression(Map(function(col) call("greatest", col, args[[i]]), ans@datacols)), colnames(ans))
-                ans <- replaceSlots(ans, datacols = datacols, check = FALSE)
-            } else {
-                stop("all arguments must be DuckDBTable objects or scalar values")
+    for (arg in args[-1L]) {
+        if (is(arg, "DuckDBTable")) {
+            ans <- .extremeTwoDuckDBTables(fun, ans, arg, na.rm)
+        } else if (is.atomic(arg)) {
+            if (length(arg) != 1L) {
+                stop("can only perform operations with scalar values")
             }
+            ct <- unname(coltypes(ans))
+            datacols <- setNames(as.expression(Map(function(col, nan) .extremeCall(fun, col, arg, na.rm, c(nan, is.double(arg))),
+                                                   ans@datacols, ct == "double")), colnames(ans))
+            ans <- replaceSlots(ans, datacols = datacols, check = FALSE)
+        } else {
+            stop("all arguments must be DuckDBTable objects or scalar values")
         }
     }
     ans
+}
+
+setClassUnion("DuckDBTableOrAtomic", c("DuckDBTable", "atomic"))
+
+.extremeDispatch <- function(fun, base_fun, args, na.rm, type) {
+    is_obj <- vapply(args, is, logical(1L), type)
+    if (!any(is_obj))
+        return(do.call(base_fun, c(args, list(na.rm = na.rm))))
+    first <- which(is_obj)[1L]
+    args <- c(args[first], args[-first])
+    fun(args, na.rm)
+}
+
+#' @export
+setMethod("pmax", "DuckDBTableOrAtomic", function(..., na.rm = FALSE) {
+    .extremeDispatch(function(args, na.rm) .extremeDuckDBTable("greatest", args, na.rm),
+                     base::pmax, list(...), na.rm, "DuckDBTable")
 })
 
-#' @importFrom stats setNames
-.pminTwoDuckDBTables <- function(x, y) {
-    if (!isTRUE(all.equal(x, y)) || ((ncol(x) > 1L) && (ncol(y) > 1L) && (ncol(x) != ncol(y)))) {
-        stop("can only perform operations with compatible objects")
-    }
-    comb <- cbind(x, y)
-    fin1 <- head(comb@datacols, ncol(x))
-    fin2 <- tail(comb@datacols, ncol(y))
-    fout <- if (ncol(x) >= ncol(y)) colnames(x) else colnames(y)
-    datacols <- setNames(as.expression(Map(function(a, b) call("least", a, b), fin1, fin2)), fout)
-    replaceSlots(comb, datacols = datacols, check = FALSE)
-}
-
 #' @export
-setMethod("pmin", "DuckDBTable", function(..., na.rm = FALSE) {
-    args <- list(...)
-    ans <- args[[1L]]
-    if (length(args) > 1L) {
-        for (i in 2:length(args)) {
-            if (is(args[[i]], "DuckDBTable")) {
-                ans <- .pminTwoDuckDBTables(ans, args[[i]])
-            } else if (is.atomic(args[[i]])) {
-                if (length(args[[i]]) != 1L) {
-                    stop("can only perform operations with scalar values")
-                }
-                datacols <- setNames(as.expression(Map(function(col) call("least", col, args[[i]]), ans@datacols)), colnames(ans))
-                ans <- replaceSlots(ans, datacols = datacols, check = FALSE)
-            } else {
-                stop("all arguments must be DuckDBTable objects or scalar values")
-            }
-        }
-    }
-    ans
+setMethod("pmin", "DuckDBTableOrAtomic", function(..., na.rm = FALSE) {
+    .extremeDispatch(function(args, na.rm) .extremeDuckDBTable("least", args, na.rm),
+                     base::pmin, list(...), na.rm, "DuckDBTable")
 })
 
 ### - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -918,6 +1052,10 @@ setMethod("substring", "DuckDBTable", function(text, first, last = 1000000L) {
 })
 
 #' @export
+.escapeRegex <- function(pattern) {
+    base::gsub("([][{}()+*^$|\\\\?.])", "\\\\\\1", as.character(pattern))
+}
+
 setMethod("grepl", signature(x = "DuckDBTable"), function(pattern, x, ignore.case = FALSE, perl = FALSE, fixed = FALSE, useBytes = FALSE) {
     if (fixed) {
         if (ignore.case) {
@@ -933,6 +1071,7 @@ setMethod("grepl", signature(x = "DuckDBTable"), function(pattern, x, ignore.cas
             tbl <- sql_call(x, "regexp_matches", pattern)
         }
     }
+    tbl <- .mapDatacols(tbl, function(col) call("coalesce", col, FALSE))
     coltypes(tbl) <- rep.int("logical", ncol(tbl))
     tbl
 })
@@ -941,7 +1080,7 @@ setMethod("grepl", signature(x = "DuckDBTable"), function(pattern, x, ignore.cas
 #' @importMethodsFrom IRanges sub
 setMethod("sub", signature(x = "DuckDBTable"), function(pattern, replacement, x, ignore.case = FALSE, perl = FALSE, fixed = FALSE, useBytes = FALSE) {
     if (fixed) {
-        escaped_pattern <- base::gsub("([.*+?^${}()|[\\]\\\\])", "\\\\\\1", pattern)
+        escaped_pattern <- .escapeRegex(pattern)
         if (ignore.case) {
             sql_call(x, "regexp_replace", paste0("(?i)", escaped_pattern), replacement)
         } else {
@@ -961,7 +1100,7 @@ setMethod("sub", signature(x = "DuckDBTable"), function(pattern, replacement, x,
 setMethod("gsub", signature(x = "DuckDBTable"), function(pattern, replacement, x, ignore.case = FALSE, perl = FALSE, fixed = FALSE, useBytes = FALSE) {
     if (fixed) {
         if (ignore.case) {
-            escaped_pattern <- base::gsub("([.*+?^${}()|[\\]\\\\])", "\\\\\\1", pattern)
+            escaped_pattern <- .escapeRegex(pattern)
             sql_call(x, "regexp_replace", paste0("(?i)", escaped_pattern), replacement, "g")
         } else {
             sql_call(x, "replace", pattern, replacement)
@@ -1026,6 +1165,8 @@ setMethod("paste2", signature(x = "character", y = "DuckDBTable"), function(x, y
     replaceSlots(y, datacols = datacols, check = FALSE)
 })
 
+.pasteText <- function(col) call("coalesce", call("as.character", col), "NA")
+
 #' @importFrom stats setNames
 .pasteTwoDuckDBTables <- function(x, y, sep = " ") {
     if (!isTRUE(all.equal(x, y)) || ((ncol(x) > 1L) && (ncol(y) > 1L) && (ncol(x) != ncol(y)))) {
@@ -1035,7 +1176,7 @@ setMethod("paste2", signature(x = "character", y = "DuckDBTable"), function(x, y
     fin1 <- head(comb@datacols, ncol(x))
     fin2 <- tail(comb@datacols, ncol(y))
     fout <- if (ncol(x) >= ncol(y)) colnames(x) else colnames(y)
-    datacols <- setNames(as.expression(Map(function(a, b) call("concat_ws", sep, a, b), fin1, fin2)), fout)
+    datacols <- setNames(as.expression(Map(function(a, b) call("concat_ws", sep, .pasteText(a), .pasteText(b)), fin1, fin2)), fout)
     replaceSlots(comb, datacols = datacols, check = FALSE)
 }
 
@@ -1054,7 +1195,7 @@ setMethod("paste", "DuckDBTable", function(..., sep = " ", collapse = NULL) {
                 if (length(args[[i]]) != 1L) {
                     stop("can only perform operations with scalar values")
                 }
-                datacols <- setNames(as.expression(Map(function(col) call("concat_ws", sep, col, args[[i]]), ans@datacols)), colnames(ans))
+                datacols <- setNames(as.expression(Map(function(col) call("concat_ws", sep, .pasteText(col), as.character(args[[i]])), ans@datacols)), colnames(ans))
                 ans <- replaceSlots(ans, datacols = datacols, check = FALSE)
             } else {
                 stop("all arguments must be DuckDBTable objects or scalar values")
@@ -1085,8 +1226,8 @@ addRowPosition <- function(x, conn, name) {
     idx_names <- character()
     for (k in names(keycols)) {
         keys <- unname(keycols[[k]])
-        idx_name <- tail(make.unique(c(colnames(conn), idx_names,
-                                       paste0("__position_", k, "__")), sep = "_"), 1L)
+        idx_name <- .freshName(c(colnames(conn), idx_names),
+                               paste0("__position_", k, "__"))
         idx_names <- c(idx_names, idx_name)
         mapping <- setNames(data.frame(keys, seq_along(keys), stringsAsFactors = FALSE),
                             c(k, idx_name))
@@ -1115,18 +1256,24 @@ function (x, incomparables = FALSE, fromLast = FALSE, ...)  {
     # the rows of this object only: the filter on the keys is part of the object
     conn <- tblconn(x, select = FALSE)
     datacols <- x@datacols
-    keycols <- tail(make.unique(c(colnames(conn), "row_number"), sep = "_"), 1L)
+    keycols <- .freshName(colnames(conn), "row_number")
     keycols <- setNames(list(call("row_number")), keycols)
     # base R keeps the first occurrence of each value, or the last with
     # fromLast = TRUE, in the order of the occurrences that are kept
-    pos_name <- tail(make.unique(c(colnames(conn), "__position__"), sep = "_"), 1L)
+    pos_name <- .freshName(colnames(conn), "__position__")
     conn <- addRowPosition(x, conn, pos_name)
     kept <- setNames(list(call(if (fromLast) "max" else "min", as.name(pos_name), na.rm = TRUE)),
                      pos_name)
-    conn <- summarize(group_by(conn, !!!as.list(datacols)), !!!kept, .groups = "drop")
+    groups <- as.list(datacols)
+    grouped <- .freshNames(c(colnames(conn), pos_name),
+                           sprintf("__g%d__", seq_along(groups)))
+    conn <- summarize(group_by(conn, !!!setNames(groups, grouped)), !!!kept,
+                      .groups = "drop")
     conn <- mutate(window_order(conn, !!as.name(pos_name)), !!!keycols)
     keycols[[1L]] <- set_row_number(conn)
-    replaceSlots(x, conn = conn, keycols = keycols, check = FALSE)
+    datacols <- as.expression(setNames(lapply(grouped, as.name), names(datacols)))
+    replaceSlots(x, conn = conn, datacols = datacols, keycols = keycols,
+                 check = FALSE)
 })
 
 #' @export
@@ -1163,18 +1310,54 @@ setMethod("%in%", c(x = "DuckDBTable", table = "ANY"), function(x, table) {
 #' @importFrom dplyr group_by n summarize
 #' @importFrom stats setNames
 setMethod("table", "DuckDBTable", function(x, ...) {
-    if (...length() != 0L) {
-        stop("\"table\" method for DuckDB data can only take one input object")
+    args <- list(...)
+    useNA <- "no"
+    if (length(args) != 0L) {
+        if (length(args) != 1L || !identical(names(args), "useNA"))
+            stop("\"table\" method for DuckDB data can only take one input object, ",
+                 "and the argument 'useNA'")
+        useNA <- match.arg(args[["useNA"]], c("no", "ifany", "always"))
     }
     conn <- tblconn(x, select = FALSE)
     groups <- as.list(x@datacols)
-    counts <- as.data.frame(summarize(group_by(conn, !!!groups), count = n(), .groups = "drop"))
-    counts[seq_along(groups)] <- lapply(counts[seq_along(groups)], function(j) {
-        ifelse(is.na(j), "<NA>", as.character(j))
+    grouped <- .freshNames(c(colnames(conn), "count"),
+                           sprintf("__g%d__", seq_along(groups)))
+    counts <- .withDuckDBError(
+        as.data.frame(summarize(group_by(conn, !!!setNames(groups, grouped)),
+                                count = n(), .groups = "drop")), "count the values")
+    values <- counts[seq_along(groups)]
+    n <- as.integer(counts[["count"]])
+    if (useNA == "no") {
+        keep <- !Reduce(`|`, lapply(values, is.na), logical(nrow(counts)))
+        values <- lapply(values, function(j) j[keep])
+        n <- n[keep]
+    }
+    isMissing <- function(j) {
+        if (is.double(j) && useNA != "no") is.na(j) & !is.nan(j) else is.na(j)
+    }
+    levels <- lapply(values, function(j) {
+        lev <- sort(unique(j[!is.na(j)]))
+        if (is.double(j) && useNA != "no" && any(is.nan(j)))
+            lev <- c(lev, NaN)
+        lev
     })
-    dnames <- lapply(counts[seq_along(groups)], function(j) as.character(sort(unique(j))))
-    ans <- array(0L, dim = lengths(dnames, use.names = FALSE), dimnames = dnames)
-    ans[do.call(cbind, counts[seq_along(groups)])] <- as.integer(counts[["count"]])
+    with_na <- vapply(values, function(j) {
+        useNA == "always" || (useNA == "ifany" && any(isMissing(j)))
+    }, logical(1L))
+    dnames <- Map(function(lev, na) c(as.character(lev), if (na) NA_character_),
+                  levels, with_na)
+    names(dnames) <- names(x@datacols)
+    codes <- Map(function(j, lev) {
+        ifelse(isMissing(j), length(lev) + 1L, match(j, lev))
+    }, values, levels)
+    dims <- lengths(dnames, use.names = FALSE)
+    ans <- array(0L, dim = dims, dimnames = dnames)
+    if (length(n)) {
+        lin <- 1 + Reduce(`+`, Map(function(code, stride) (code - 1) * stride, codes,
+                                   cumprod(c(1, dims))[seq_along(dims)]))
+        cells <- tapply(n, lin, sum)
+        ans[as.integer(names(cells))] <- as.integer(cells)
+    }
     class(ans) <- "table"
     ans
 })

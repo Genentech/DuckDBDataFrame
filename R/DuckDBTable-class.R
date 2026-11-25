@@ -1336,7 +1336,7 @@ function(conn, datacols = colnames(conn), keycols = NULL, dimtbls = NULL, type =
 
     # Ensure 'keycols' is a named list of vectors
     if (length(keycols) == 0L) {
-        keycols <- tail(make.unique(c(colnames(conn), "row_number"), sep = "_"), 1L)
+        keycols <- .freshName(colnames(conn), "row_number")
         keycols <- setNames(list(call("row_number")), keycols)
         conn <- mutate(conn, !!!keycols)
         keycols[[1L]] <- set_row_number(conn)
@@ -1432,7 +1432,7 @@ all.equal.DuckDBTable <- function(target, current, check.datacols = FALSE, ...) 
     if (isTRUE(pull(stats, "n") == pull(stats, "top"))) {
         return(filter(conn, !!call("%in%", key, as.integer64(pos))))
     }
-    pos_name <- tail(make.unique(c(colnames(conn), "__position__"), sep = "_"), 1L)
+    pos_name <- .freshName(colnames(conn), "__position__")
     conn <- window_order(conn, !!key)
     conn <- mutate(conn, !!!setNames(list(call("row_number")), pos_name))
     conn <- filter(conn, !!call("%in%", as.name(pos_name), as.integer64(pos)))
@@ -1752,10 +1752,11 @@ function(x, row.names = NULL, optional = FALSE, ..., limit.rows = TRUE) {
 
         if (limit.rows) {
             n <- as.integer(min(nrow(x), .Machine$integer.max))
+            .checkCollectSize(x, n)
             conn <- head(conn, n = n)
         }
 
-        df <- as.data.frame(conn, optional = TRUE)
+        df <- .withDuckDBError(as.data.frame(conn, optional = TRUE), "read the values")
     }
 
     df

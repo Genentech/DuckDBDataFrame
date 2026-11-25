@@ -62,6 +62,14 @@
 #'   \code{\link{resolveParquetCompression}}.
 #' @param compression Codec name for \code{\link{buildParquetCopySQL}};
 #'   defaults to \code{\link{resolveParquetCompression}}.
+#' @param names Character vector of the column names of a table that is to be
+#'   written (\code{\link{checkParquetColumnNames}}), or of the entries of an
+#'   object that are written as files or directories
+#'   (\code{\link{checkEntryNames}}).
+#' @param kind Single string that says what \code{names} are, as in
+#'   \code{"assays"}, for the message of \code{\link{checkEntryNames}}.
+#' @param reserved Optional character vector of names that
+#'   \code{\link{checkEntryNames}} refuses, ignoring case.
 #' @param compression_level Optional integer compression level for
 #'   \code{\link{buildParquetCopySQL}}; defaults to
 #'   \code{\link{resolveParquetCompression}} and is omitted from the SQL
@@ -70,6 +78,12 @@
 #' @return
 #' \describe{
 #'   \item{\code{validateAppendOffset}}{Integer scalar.}
+#'   \item{\code{checkParquetColumnNames}}{\code{names}, invisibly.}
+#'   \item{\code{checkEntryNames}}{\code{names}, invisibly.}
+#'   \item{\code{checkWritable}}{A list of class \code{checkWritable} with
+#'     \code{writable} (logical), \code{columns} (the names of the columns that
+#'     \code{writeDuckDBTableParquet} writes, in order) and \code{problems} (the
+#'     message of the refusal, if there is one). Nothing is written.}
 #'   \item{\code{resolveParquetCompression}}{Named list with
 #'     \code{compression} and \code{compression_level}: \code{"zstd"} and
 #'     \code{level} when \code{\link[arrow]{codec_is_available}("zstd")} is
@@ -105,6 +119,27 @@
 #'     \code{checkHiveAppendPartitions} guards partition collisions.
 #'   \item \code{readParquetSchema} reads the first \code{*.parquet} file
 #'     found under \code{path} (recursive search).
+#'   \item \code{checkParquetColumnNames} is an error when two columns have the
+#'     same name, ignoring case. DuckDB, which reads these files, treats column
+#'     names as case-insensitive, so a query for \code{"sex"} on a file that
+#'     has both \code{Sex} and \code{sex} returns the values of \code{Sex}
+#'     without a message, and \code{SELECT *} renames the second to
+#'     \code{sex_1}. DuckDB ignores the case of the letters A to Z only, so a
+#'     letter with an accent and the same letter without one are two columns. It is also an error
+#'     when a name is \code{NA} or empty, or when \code{names} is not a
+#'     character vector.
+#'   \item \code{checkEntryNames} is the check for names that become the names of
+#'     files or directories, as the names of the assays of an experiment do. It
+#'     is an error when a name is \code{NA} or empty, has a \code{/}, a
+#'     backslash or a control character, is \code{"."} or \code{".."}, is one
+#'     of \code{reserved}, or is the same as another name ignoring case, as
+#'     \code{counts} and \code{Counts} are one file on macOS and Windows.
+#'   \item \code{writeDuckDBTableParquet} is an error when a column of the table
+#'     has the name of the index, of the row names or of a column of
+#'     \code{dimtbl}, as the column would be read back as that index, those row
+#'     names or that column. Only the names that the writer reserves are
+#'     refused: a column named \code{__x__} is not, as long as the name is not
+#'     one that is written.
 #' }
 #'
 #' @author Patrick Aboyoun
@@ -123,6 +158,9 @@
 #' @aliases setupFlatParquetWrite
 #' @aliases escapeSQLPath
 #' @aliases quoteSQLColumns
+#' @aliases checkParquetColumnNames
+#' @aliases checkEntryNames
+#' @aliases checkWritable
 #' @aliases resolveParquetCompression
 #' @aliases buildParquetCopySQL
 #' @aliases writeDuckDBTableParquet
@@ -381,6 +419,100 @@ quoteSQLColumns <- function(conn, cols) {
     }, character(1L), USE.NAMES = FALSE)
 }
 
+.foldAscii <- function(x) {
+    chartr("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz", x)
+}
+
+.freshName <- function(existing, stem) {
+    taken <- .foldAscii(as.character(existing))
+    name <- stem
+    i <- 0L
+    while (.foldAscii(name) %in% taken) {
+        i <- i + 1L
+        name <- sprintf("%s_%d", stem, i)
+    }
+    name
+}
+
+.freshNames <- function(existing, stems) {
+    out <- character(length(stems))
+    for (i in seq_along(stems))
+        out[i] <- .freshName(c(existing, out[seq_len(i - 1L)]), stems[i])
+    out
+}
+
+.formatNames <- function(x) {
+    paste(sprintf("'%s'", x), collapse = ", ")
+}
+
+#' @export
+#' @rdname parquet-io
+checkParquetColumnNames <- function(names) {
+    if (!is.character(names))
+        stop("the names of the columns must be a character vector, not ",
+             if (is.null(names)) "NULL" else class(names)[1L], call. = FALSE)
+    if (anyNA(names))
+        stop("the names of the columns must not be NA; the columns at ",
+             "positions ", paste(which(is.na(names)), collapse = ", "),
+             " have no name", call. = FALSE)
+    if (any(!nzchar(names)))
+        stop("the names of the columns must not be empty; the columns at ",
+             "positions ", paste(which(!nzchar(names)), collapse = ", "),
+             " have no name", call. = FALSE)
+    folded <- .foldAscii(names)
+    same <- duplicated(folded) | duplicated(folded, fromLast = TRUE)
+    if (any(same)) {
+        groups <- split(names[same], folded[same])
+        found <- vapply(groups, .formatNames, character(1L))
+        stop("these columns have the same name, ignoring case: ",
+             paste0("(", found, ")", collapse = " "), ". DuckDB treats column ",
+             "names as case-insensitive, so a query for one of them returns the ",
+             "values of the other without a message. Rename the columns before ",
+             "writing.", call. = FALSE)
+    }
+    invisible(names)
+}
+
+#' @export
+#' @rdname parquet-io
+checkEntryNames <- function(kind, names, reserved = NULL) {
+    if (!is.character(kind) || length(kind) != 1L || is.na(kind))
+        stop("'kind' must be a single string")
+    if (is.null(names) || length(names) == 0L)
+        return(invisible(character()))
+    if (!is.character(names))
+        stop("the names of the ", kind, " must be a character vector, not ",
+             class(names)[1L], call. = FALSE)
+    if (anyNA(names) || any(!nzchar(names)))
+        stop("the names of the ", kind, " must not be NA or empty; ",
+             "those at positions ",
+             paste(which(is.na(names) | !nzchar(names)), collapse = ", "),
+             " are. Name every one of them.", call. = FALSE)
+    bad <- grepl("[/\\\\]", names) | names %in% c(".", "..") |
+        grepl("[[:cntrl:]]", names)
+    if (any(bad))
+        stop("the names of the ", kind, " become file names, and these cannot: ",
+             .formatNames(names[bad]), ". A name must not contain '/', a backslash ",
+             "or a control character, and must not be '.' or '..'. Rename them.",
+             call. = FALSE)
+    if (!is.null(reserved)) {
+        taken <- names[.foldAscii(names) %in% .foldAscii(reserved)]
+        if (length(taken))
+            stop("the names of the ", kind, " include names that are reserved: ",
+                 .formatNames(unique(taken)), ". Rename them.", call. = FALSE)
+    }
+    folded <- .foldAscii(names)
+    same <- duplicated(folded) | duplicated(folded, fromLast = TRUE)
+    if (any(same)) {
+        groups <- split(names[same], folded[same])
+        found <- vapply(groups, .formatNames, character(1L))
+        stop("the ", kind, " include names that are the same, ignoring case: ",
+             paste0("(", found, ")", collapse = " "), ". They would be written ",
+             "to the same file on some systems. Rename them.", call. = FALSE)
+    }
+    invisible(names)
+}
+
 #' @export
 #' @rdname parquet-io
 resolveParquetCompression <- function(level = 3L) {
@@ -439,19 +571,16 @@ function(query_sql, target_path, order_cols = NULL, partition_by = NULL,
 ### SQL COPY TO for DuckDBTable objects; preflight via setupFlatParquetWrite.
 ###
 
-# Does the single key of 'x' stand for names, as the names of its values?
 .hasKeyAlias <- function(x, key_src) {
     if (has_row_number(x) || length(x@keycols) != 1L)
         return(FALSE)
     identical(names(x@keycols)[1L], key_src) && !is.null(names(x@keycols[[1L]]))
 }
 
-# Replace the values of the key column of 'conn' by their names, by joining a
-# mapping from the values to the names. The key column keeps its name.
 #' @importFrom dplyr copy_to inner_join select
 .addKeyAlias <- function(x, conn, key_src) {
     keys <- x@keycols[[1L]]
-    names_col <- "__alias__"
+    names_col <- .freshName(c(colnames(conn), key_src), "__alias__")
     mapping <- setNames(data.frame(unname(keys), names(keys), stringsAsFactors = FALSE),
                         c(key_src, names_col))
     mapping <- copy_to(dbconn(x), mapping, name = basename(tempfile("keyalias_")),
@@ -466,16 +595,10 @@ function(query_sql, target_path, order_cols = NULL, partition_by = NULL,
     if (is.null(keycol))
         return(NULL)
     kcols <- keynames(x)
-    cols <- unique(c(colnames(x), kcols))
-    if (keycol %in% cols)
+    if (keycol %in% kcols)
         return(keycol)
-    if (length(kcols) == 1L && kcols %in% cols)
+    if (length(kcols) == 1L)
         return(kcols)
-    if (is(x, "DuckDBDataFrame")) {
-        rnms <- rownames(x)
-        if (!is.integer(rnms) && length(rnms) > 0L && length(kcols) == 1L)
-            return(kcols)
-    }
     NULL
 }
 
@@ -516,6 +639,7 @@ function(query_sql, target_path, order_cols = NULL, partition_by = NULL,
 
 #' @importFrom dbplyr sql_render
 #' @importFrom DBI dbQuoteIdentifier
+#' @importFrom dplyr select
 buildTableSelectSQL <-
 function(x, indexcol = NULL, keycol = NULL, dimtbl = NULL, offset = 0L,
          index_type = NULL, conn = dbconn(x))
@@ -523,8 +647,11 @@ function(x, indexcol = NULL, keycol = NULL, dimtbl = NULL, offset = 0L,
     if (!inherits(x, "DuckDBTable"))
         stop("'x' must be a DuckDBTable")
     conn_x <- tblconn(x, select = FALSE)
-    if (inherits(conn_x, "tbl_duckdb_connection") && length(x@datacols))
-        conn_x <- .mutate_datacols(conn_x, x@datacols)
+    data_cols <- colnames(x)
+    kcols <- keynames(x)
+    table_cols <- unique(c(data_cols, setdiff(kcols, data_cols)))
+    key_src <- .tableKeycolName(x, keycol)
+
     # The index is the position of the row in the order of the object, which is
     # the stored order of its keys. Numbering the rows in the order DuckDB scans
     # the file would not do: a file that is not in key order then gets an index
@@ -532,29 +659,43 @@ function(x, indexcol = NULL, keycol = NULL, dimtbl = NULL, offset = 0L,
     # index gets the rows back in the order of the file. The position is held in
     # a column of its own, whose name is not that of any column of the query: the
     # key can be named like the index, as the keys of the sample and feature
-    # tables of an experiment are, and would be overwritten.
-    pos_col <- tail(make.unique(c(colnames(conn_x), "__position__"), sep = "_"), 1L)
+    # tables of an experiment are, and would be overwritten. It is added to the
+    # columns of the file, before the data columns are named, so that the join
+    # does not have to select between names that differ only in case.
+    pos_col <- .freshName(c(colnames(conn_x), data_cols, kcols), "__position__")
     if (!is.null(indexcol))
         conn_x <- addRowPosition(x, conn_x, pos_col)
-    key_src <- .tableKeycolName(x, keycol)
     # A key can stand for names: a table read from a file that stores a number per
     # row and the names of the rows elsewhere has numbers as the values of its key
     # and the names as the names of those values. The names are what is written
     # as the key column, as rownames() gives them, and not the numbers.
     if (!is.null(key_src) && .hasKeyAlias(x, key_src))
         conn_x <- .addKeyAlias(x, conn_x, key_src)
-    tbl_q <- sql_render(conn_x)
-    data_cols <- colnames(x)
-    kcols <- keynames(x)
-    table_cols <- unique(c(data_cols, setdiff(kcols, data_cols)))
+    if (inherits(conn_x, "tbl_duckdb_connection") && length(x@datacols))
+        conn_x <- .mutate_datacols(conn_x, x@datacols)
+
+    # The outer SELECT reads the columns it needs under names of their own,
+    # __w1__, __w2__, ... DuckDB binds a name without regard to case, so a query
+    # that holds both Sex and sex returns the values of Sex for both. The query
+    # below holds only the columns that are read, none of which can be mistaken
+    # for another, and the names of the file are given in the outer SELECT.
+    used <- character()
+    ref <- function(src) {
+        i <- match(src, used)
+        if (is.na(i)) {
+            used <<- c(used, src)
+            i <- length(used)
+        }
+        sprintf("t.%s", as.character(dbQuoteIdentifier(conn, sprintf("__w%d__", i))))
+    }
 
     select_parts <- character()
     output_names <- character()
 
     if (!is.null(indexcol)) {
         qidx <- as.character(dbQuoteIdentifier(conn, indexcol))
-        idx_expr <- sprintf("(%s + t.%s)", format(offset, scientific = FALSE, trim = TRUE),
-                            as.character(dbQuoteIdentifier(conn, pos_col)))
+        idx_expr <- sprintf("(%s + %s)", format(offset, scientific = FALSE, trim = TRUE),
+                            ref(pos_col))
         if (!is.null(index_type))
             idx_expr <- sprintf("CAST(%s AS %s)", idx_expr, index_type)
         select_parts <- c(select_parts, sprintf("%s AS %s", idx_expr, qidx))
@@ -562,13 +703,8 @@ function(x, indexcol = NULL, keycol = NULL, dimtbl = NULL, offset = 0L,
     }
 
     if (!is.null(keycol) && !is.null(key_src)) {
-        qsrc <- as.character(dbQuoteIdentifier(conn, key_src))
         qdst <- as.character(dbQuoteIdentifier(conn, keycol))
-        if (identical(key_src, keycol)) {
-                select_parts <- c(select_parts, sprintf("t.%s", qsrc))
-        } else {
-            select_parts <- c(select_parts, sprintf("t.%s AS %s", qsrc, qdst))
-        }
+        select_parts <- c(select_parts, sprintf("%s AS %s", ref(key_src), qdst))
         output_names <- c(output_names, keycol)
     }
 
@@ -576,18 +712,28 @@ function(x, indexcol = NULL, keycol = NULL, dimtbl = NULL, offset = 0L,
     if (!is.null(dimtbl) && ncol(dimtbl) > 0L)
         output_names <- c(output_names, colnames(dimtbl))
 
-    reserved <- unique(c(output_names, if (!is.null(indexcol)) indexcol,
-                         if (!is.null(keycol)) keycol,
-                         if (!is.null(key_src)) key_src))
+    roles <- c(
+        setNames(rep("the row index", length(indexcol)), indexcol),
+        setNames(rep("the row names", length(keycol)), keycol),
+        if (!is.null(dimtbl) && ncol(dimtbl) > 0L)
+            setNames(rep("a column of 'dimtbl'", ncol(dimtbl)), colnames(dimtbl)))
     for (col in table_cols) {
-        if (col %in% reserved)
+        if (!is.null(key_src) && identical(col, key_src))
             next
+        if (!is.null(roles)) {
+            hit <- match(.foldAscii(col), .foldAscii(names(roles)))
+            if (!is.na(hit))
+                stop("the table has a column named '", col, "', which is the name ",
+                     "of ", roles[[hit]], " in the file that is written. Rename ",
+                     "the column, or write the file under other names.",
+                     call. = FALSE)
+        }
         qcol <- as.character(dbQuoteIdentifier(conn, col))
-        select_parts <- c(select_parts, sprintf("t.%s", qcol))
+        select_parts <- c(select_parts, sprintf("%s AS %s", ref(col), qcol))
         output_names <- c(output_names, col)
     }
 
-    output_names <- make.unique(output_names, sep = "_")
+    checkParquetColumnNames(output_names)
     if (length(select_parts) != length(output_names))
         stop("internal problem building table SELECT")
 
@@ -597,6 +743,10 @@ function(x, indexcol = NULL, keycol = NULL, dimtbl = NULL, offset = 0L,
             select_parts[i] <- sprintf("%s AS %s", select_parts[i], qout)
         }
     }
+
+    conn_x <- select(conn_x, !!!setNames(lapply(used, as.name),
+                                         sprintf("__w%d__", seq_along(used))))
+    tbl_q <- sql_render(conn_x)
 
     list(
         sql = sprintf("SELECT %s FROM (%s) t",
@@ -608,6 +758,32 @@ function(x, indexcol = NULL, keycol = NULL, dimtbl = NULL, offset = 0L,
             NULL
         }
     )
+}
+
+#' @export
+#' @rdname parquet-io
+checkWritable <- function(x, indexcol = "__index__", keycol = "__name__", dimtbl = NULL) {
+    built <- tryCatch(buildTableSelectSQL(x, indexcol = indexcol, keycol = keycol,
+                                          dimtbl = dimtbl),
+                      error = function(e) e)
+    if (inherits(built, "error")) {
+        return(structure(list(writable = FALSE, columns = character(),
+                              problems = conditionMessage(built)),
+                         class = "checkWritable"))
+    }
+    structure(list(writable = TRUE, columns = built[["colnames"]],
+                   problems = character()),
+              class = "checkWritable")
+}
+
+#' @export
+print.checkWritable <- function(x, ...) {
+    if (x$writable) {
+        cat("writable, with the columns: ", paste(x$columns, collapse = ", "), "\n", sep = "")
+    } else {
+        cat("not writable:\n", paste0("  ", x$problems, collapse = "\n"), "\n", sep = "")
+    }
+    invisible(x)
 }
 
 # Mirrors, without reading anything back, the R class arrow::read_parquet()
@@ -686,7 +862,7 @@ function(x, path, indexcol = "__index__", keycol = "__name__", dimtbl = NULL,
     copy_sql <- buildParquetCopySQL(built$sql, prep$pq_path,
                                     order_cols = order_cols,
                                     row_group_size = row_group_size)
-    DBI::dbExecute(conn, copy_sql)
+    .withDuckDBError(DBI::dbExecute(conn, copy_sql), "write the Parquet file")
 
     # DuckDB has no categorical SQL type, so need to restore factor levels
     collevels <- x@collevels[intersect(names(x@collevels), built$colnames)]
@@ -866,11 +1042,17 @@ function(path, n_parts, part_digits = 0L, conn = acquireDuckDBConn(),
 
     factor_cols <- .findFactorColumns(src)
 
-    tmp_tbl <- sprintf("splitParquetPart_%s",
-                       paste(sample(letters, 16L, replace = TRUE), collapse = ""))
+    file_cols <- names(.parquetFileSchema(src))
+    if (.foldAscii("file_row_number") %in% .foldAscii(file_cols))
+        stop("the file has a column named 'file_row_number', which DuckDB uses for ",
+             "the number of a row of a file, so the file cannot be split. Rename ",
+             "the column.", call. = FALSE)
+    part_col <- .freshName(file_cols, "__split_part__")
+    qpart <- as.character(dbQuoteIdentifier(conn, part_col))
+    tmp_tbl <- basename(tempfile("splitParquetPart_"))
     dbExecute(conn, sprintf(
-        "CREATE TEMP TABLE %s AS SELECT *, ntile(%d) OVER (ORDER BY file_row_number) - 1 AS __split_part__ FROM read_parquet('%s', file_row_number = true)",
-        tmp_tbl, n_parts, escapeSQLPath(src)))
+        "CREATE TEMP TABLE %s AS SELECT *, ntile(%d) OVER (ORDER BY file_row_number) - 1 AS %s FROM read_parquet('%s', file_row_number = true)",
+        tmp_tbl, n_parts, qpart, escapeSQLPath(src)))
     on.exit(dbExecute(conn, sprintf("DROP TABLE IF EXISTS %s", tmp_tbl)), add = TRUE)
 
     tmp_dir <- tempfile("split-parquet-")
@@ -880,8 +1062,8 @@ function(path, n_parts, part_digits = 0L, conn = acquireDuckDBConn(),
     for (i in seq_len(n_parts) - 1L) {
         target <- parquetPartPath(tmp_dir, i, part_digits)
         select_sql <- sprintf(
-            "SELECT * EXCLUDE (__split_part__, file_row_number) FROM %s WHERE __split_part__ = %d",
-            tmp_tbl, i)
+            "SELECT * EXCLUDE (%s, file_row_number) FROM %s WHERE %s = %d",
+            qpart, tmp_tbl, qpart, i)
         dbExecute(conn, buildParquetCopySQL(select_sql, target,
                                             order_cols = "file_row_number",
                                             row_group_size = row_group_size))

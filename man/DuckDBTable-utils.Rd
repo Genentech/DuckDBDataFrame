@@ -10,6 +10,9 @@
 \alias{Ops,DuckDBTable,missing-method}
 \alias{!,DuckDBTable-method}
 \alias{Math,DuckDBTable-method}
+\alias{Math2,DuckDBTable,missing-method}
+\alias{Math2,DuckDBTable,numeric-method}
+\alias{log,DuckDBTable-method}
 \alias{Summary,DuckDBTable-method}
 \alias{anyNA,DuckDBTable-method}
 \alias{is.finite,DuckDBTable-method}
@@ -38,8 +41,8 @@
 \alias{paste2,DuckDBTable,character-method}
 \alias{paste2,character,DuckDBTable-method}
 \alias{paste,DuckDBTable-method}
-\alias{pmax,DuckDBTable-method}
-\alias{pmin,DuckDBTable-method}
+\alias{pmax,DuckDBTableOrAtomic-method}
+\alias{pmin,DuckDBTableOrAtomic-method}
 \alias{unique,DuckDBTable-method}
 \alias{\%in\%,DuckDBTable,ANY-method}
 \alias{table,DuckDBTable-method}
@@ -79,6 +82,10 @@ DuckDBTable objects have support for S4 group generic functionality:
     \code{"<="}, \code{">="}}
   \item{\code{Logic}}{\code{"&"}, \code{"|"}, \code{"!"}}
   \item{\code{Ops}}{\code{"Arith"}, \code{"Compare"}, \code{"Logic"}}
+  \item{\code{log(x, base = exp(1))}}{The logarithm to \code{base}, a single
+    positive number other than 1, as in base R. \code{log2} and \code{log10}
+    are used for the bases 2 and 10, and the quotient of two natural
+    logarithms for any other.}
   \item{\code{Math}}{\code{"abs"}, \code{"sign"}, \code{"sqrt"},
     \code{"ceiling"}, \code{"floor"}, \code{"trunc"}, \code{"log"},
     \code{"log10"}, \code{"log2"}, \code{"acos"}, \code{"acosh"},
@@ -164,12 +171,18 @@ In the code snippets below, \code{x} is a DuckDBTable object:
     }
   }
   \item{\code{pmax(..., na.rm = FALSE)}:}{
-    Returns the parallel maxima of multiple DuckDBTable objects.
-    All arguments must be DuckDBTable objects with compatible dimensions.
+    Returns the parallel maxima of DuckDBTable objects and single values, as
+    in base R. A missing value gives a missing value, unless \code{na.rm} is
+    \code{TRUE}. A \code{NaN} is not told from a missing value by
+    \code{pmin}: DuckDB sorts it above every number, so \code{pmin} returns
+    the other value where base R returns \code{NaN}.
   }
   \item{\code{pmin(..., na.rm = FALSE)}:}{
-    Returns the parallel minima of multiple DuckDBTable objects.
-    All arguments must be DuckDBTable objects with compatible dimensions.
+    Returns the parallel minima of DuckDBTable objects and single values, as
+    in base R. A missing value gives a missing value, unless \code{na.rm} is
+    \code{TRUE}. A \code{NaN} is not told from a missing value by
+    \code{pmin}: DuckDB sorts it above every number, so \code{pmin} returns
+    the other value where base R returns \code{NaN}.
   }
 }
 }
