@@ -14,6 +14,8 @@
 \alias{quoteSQLColumns}
 \alias{checkParquetColumnNames}
 \alias{checkEntryNames}
+\alias{freshName}
+\alias{freshNames}
 \alias{checkWritable}
 \alias{resolveParquetCompression}
 \alias{buildParquetCopySQL}
@@ -56,6 +58,10 @@ setupFlatParquetWrite(
 escapeSQLPath(path)
 
 quoteSQLColumns(conn, cols)
+
+freshName(existing, stem)
+
+freshNames(existing, stems)
 
 checkParquetColumnNames(names)
 
@@ -146,6 +152,13 @@ append.}
 
 \item{cols}{Character vector of column names to quote.}
 
+\item{existing}{Character vector of the names that a fresh name has to differ
+from.}
+
+\item{stem, stems}{Name, or names, to start from; a suffix \code{_1},
+\code{_2}, ... is added until the name differs from \code{existing},
+ignoring case.}
+
 \item{names}{Character vector of the column names of a table that is to be
 written (\code{\link{checkParquetColumnNames}}), or of the entries of an
 object that are written as files or directories
@@ -193,7 +206,8 @@ when \code{NULL}.}
 
 \item{keycol}{Optional primary-key column name for lazy table export.}
 
-\item{dimtbl}{Optional single-row \link[S4Vectors]{DataFrame-class} of partition columns.}
+\item{dimtbl}{Optional single-row \link[S4Vectors]{DataFrame-class} of
+partition columns.}
 
 \item{n_parts}{Number of files to split into
 (\code{\link{splitParquetPart}}).}
@@ -203,6 +217,9 @@ when \code{NULL}.}
   \item{\code{validateAppendOffset}}{Integer scalar.}
   \item{\code{checkParquetColumnNames}}{\code{names}, invisibly.}
   \item{\code{checkEntryNames}}{\code{names}, invisibly.}
+  \item{\code{freshName}, \code{freshNames}}{A name, or names, for a column
+    that code adds next to the columns of the user, that cannot be taken for
+    one of them: DuckDB treats names that differ in the case of A-Z as one.}
   \item{\code{checkWritable}}{A list of class \code{checkWritable} with
     \code{writable} (logical), \code{columns} (the names of the columns that
     \code{writeDuckDBTableParquet} writes, in order) and \code{problems} (the
@@ -216,7 +233,8 @@ when \code{NULL}.}
     \code{DataType} objects.}
   \item{\code{checkHiveAppendPartitions}, \code{checkAppendPart}}{
     \code{NULL}, invisibly.}
-  \item{\code{parquetPartPath}}{Character path to a \code{part-*.parquet} file.}
+  \item{\code{parquetPartPath}}{Character path to a \code{part-*.parquet}
+    file.}
   \item{\code{validateWriteParquetPart}}{Integer scalar or \code{NULL}.}
   \item{\code{setupFlatParquetWrite}}{Named list with validated flat-write
     parameters (\code{path}, \code{part}, \code{offset}, \code{pq_path},
@@ -256,12 +274,12 @@ no silent overwrite):
     has both \code{Sex} and \code{sex} returns the values of \code{Sex}
     without a message, and \code{SELECT *} renames the second to
     \code{sex_1}. DuckDB ignores the case of the letters A to Z only, so a
-    letter with an accent and the same letter without one are two columns. It is also an error
-    when a name is \code{NA} or empty, or when \code{names} is not a
-    character vector.
-  \item \code{checkEntryNames} is the check for names that become the names of
-    files or directories, as the names of the assays of an experiment do. It
-    is an error when a name is \code{NA} or empty, has a \code{/}, a
+    letter with an accent and the same letter without one are two columns. It
+    is also an error when a name is \code{NA} or empty, or when \code{names}
+    is not a character vector.
+  \item \code{checkEntryNames} is the check for names that become the names
+    of files or directories, as the names of the assays of an experiment do.
+    It is an error when a name is \code{NA} or empty, has a \code{/}, a
     backslash or a control character, is \code{"."} or \code{".."}, is one
     of \code{reserved}, or is the same as another name ignoring case, as
     \code{counts} and \code{Counts} are one file on macOS and Windows.

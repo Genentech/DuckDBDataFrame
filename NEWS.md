@@ -1,3 +1,22 @@
+# DuckDBDataFrame 1.0.2
+
+## New features
+
+- `freshName()` and `freshNames()` are exported. They give a name, or names, for
+  a column that code adds next to the columns of a user, and the name differs
+  from the existing ones without regard to the case of the letters A to Z, as
+  DuckDB binds them. The other packages of the suite use them for their own
+  helper columns, so that a column of a user cannot be taken for one of them.
+
+## Bug fixes
+
+- A table can be read from a directory whose name has a character that DuckDB
+  reads as a glob, as `[`, `*` or `?`, or a quote. `DuckDBDataFrame("br[1]ck")`
+  looked for the files that match the pattern and failed with "No files found",
+  and `DuckDBDataFrame("*")` could read the files of other directories whose
+  names matched. A quote in a path ended the string of the query. The directory
+  is read as the directory, whatever its name.
+
 # DuckDBDataFrame 1.0.1
 
 ## Significant changes

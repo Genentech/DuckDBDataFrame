@@ -1,6 +1,6 @@
 Package: DuckDBDataFrame
-Version: 1.0.1
-Date: 2026-11-24
+Version: 1.0.2
+Date: 2026-11-25
 Title: DuckDB-Backed DataFrame and Table Structures
 Description:
     Provides DuckDB-backed implementations of core tabular data structures
