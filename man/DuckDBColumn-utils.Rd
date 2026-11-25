@@ -10,6 +10,9 @@
 \alias{Ops,DuckDBColumn,missing-method}
 \alias{!,DuckDBColumn-method}
 \alias{Math,DuckDBColumn-method}
+\alias{Math2,DuckDBColumn,missing-method}
+\alias{Math2,DuckDBColumn,numeric-method}
+\alias{log,DuckDBColumn-method}
 \alias{Summary,DuckDBColumn-method}
 \alias{anyNA,DuckDBColumn-method}
 \alias{is.finite,DuckDBColumn-method}
@@ -23,8 +26,8 @@
 \alias{quantile.DuckDBColumn}
 \alias{mad,DuckDBColumn-method}
 \alias{IQR,DuckDBColumn-method}
-\alias{pmax,DuckDBColumn-method}
-\alias{pmin,DuckDBColumn-method}
+\alias{pmax,DuckDBColumnOrAtomic-method}
+\alias{pmin,DuckDBColumnOrAtomic-method}
 \alias{nchar,DuckDBColumn-method}
 \alias{tolower,DuckDBColumn-method}
 \alias{toupper,DuckDBColumn-method}
@@ -164,12 +167,18 @@ In the code snippets below, \code{x} is a DuckDBColumn object:
     }
   }
   \item{\code{pmax(..., na.rm = FALSE)}:}{
-    Returns the parallel maxima of multiple DuckDBColumn objects.
-    All arguments must be DuckDBColumn objects with compatible dimensions.
+    Returns the parallel maxima of DuckDBColumn objects and single values, as
+    in base R. A missing value gives a missing value, unless \code{na.rm} is
+    \code{TRUE}. A \code{NaN} is not told from a missing value by
+    \code{pmin}: DuckDB sorts it above every number, so \code{pmin} returns
+    the other value where base R returns \code{NaN}.
   }
   \item{\code{pmin(..., na.rm = FALSE)}:}{
-    Returns the parallel minima of multiple DuckDBColumn objects.
-    All arguments must be DuckDBColumn objects with compatible dimensions.
+    Returns the parallel minima of DuckDBColumn objects and single values, as
+    in base R. A missing value gives a missing value, unless \code{na.rm} is
+    \code{TRUE}. A \code{NaN} is not told from a missing value by
+    \code{pmin}: DuckDB sorts it above every number, so \code{pmin} returns
+    the other value where base R returns \code{NaN}.
   }
 }
 }

@@ -12,6 +12,9 @@
 \alias{setupFlatParquetWrite}
 \alias{escapeSQLPath}
 \alias{quoteSQLColumns}
+\alias{checkParquetColumnNames}
+\alias{checkEntryNames}
+\alias{checkWritable}
 \alias{resolveParquetCompression}
 \alias{buildParquetCopySQL}
 \alias{writeDuckDBTableParquet}
@@ -54,6 +57,10 @@ escapeSQLPath(path)
 
 quoteSQLColumns(conn, cols)
 
+checkParquetColumnNames(names)
+
+checkEntryNames(kind, names, reserved = NULL)
+
 resolveParquetCompression(level = 3L)
 
 buildParquetCopySQL(
@@ -66,6 +73,8 @@ buildParquetCopySQL(
   compression = resolveParquetCompression()[["compression"]],
   compression_level = resolveParquetCompression()[["compression_level"]]
 )
+
+checkWritable(x, indexcol = "__index__", keycol = "__name__", dimtbl = NULL)
 
 writeDuckDBTableParquet(
   x,
@@ -137,6 +146,17 @@ append.}
 
 \item{cols}{Character vector of column names to quote.}
 
+\item{names}{Character vector of the column names of a table that is to be
+written (\code{\link{checkParquetColumnNames}}), or of the entries of an
+object that are written as files or directories
+(\code{\link{checkEntryNames}}).}
+
+\item{kind}{Single string that says what \code{names} are, as in
+\code{"assays"}, for the message of \code{\link{checkEntryNames}}.}
+
+\item{reserved}{Optional character vector of names that
+\code{\link{checkEntryNames}} refuses, ignoring case.}
+
 \item{level}{Integer \code{zstd} compression level for
 \code{\link{resolveParquetCompression}}.}
 
@@ -181,6 +201,12 @@ when \code{NULL}.}
 \value{
 \describe{
   \item{\code{validateAppendOffset}}{Integer scalar.}
+  \item{\code{checkParquetColumnNames}}{\code{names}, invisibly.}
+  \item{\code{checkEntryNames}}{\code{names}, invisibly.}
+  \item{\code{checkWritable}}{A list of class \code{checkWritable} with
+    \code{writable} (logical), \code{columns} (the names of the columns that
+    \code{writeDuckDBTableParquet} writes, in order) and \code{problems} (the
+    message of the refusal, if there is one). Nothing is written.}
   \item{\code{resolveParquetCompression}}{Named list with
     \code{compression} and \code{compression_level}: \code{"zstd"} and
     \code{level} when \code{\link[arrow]{codec_is_available}("zstd")} is
@@ -224,6 +250,27 @@ no silent overwrite):
     \code{checkHiveAppendPartitions} guards partition collisions.
   \item \code{readParquetSchema} reads the first \code{*.parquet} file
     found under \code{path} (recursive search).
+  \item \code{checkParquetColumnNames} is an error when two columns have the
+    same name, ignoring case. DuckDB, which reads these files, treats column
+    names as case-insensitive, so a query for \code{"sex"} on a file that
+    has both \code{Sex} and \code{sex} returns the values of \code{Sex}
+    without a message, and \code{SELECT *} renames the second to
+    \code{sex_1}. DuckDB ignores the case of the letters A to Z only, so a
+    letter with an accent and the same letter without one are two columns. It is also an error
+    when a name is \code{NA} or empty, or when \code{names} is not a
+    character vector.
+  \item \code{checkEntryNames} is the check for names that become the names of
+    files or directories, as the names of the assays of an experiment do. It
+    is an error when a name is \code{NA} or empty, has a \code{/}, a
+    backslash or a control character, is \code{"."} or \code{".."}, is one
+    of \code{reserved}, or is the same as another name ignoring case, as
+    \code{counts} and \code{Counts} are one file on macOS and Windows.
+  \item \code{writeDuckDBTableParquet} is an error when a column of the table
+    has the name of the index, of the row names or of a column of
+    \code{dimtbl}, as the column would be read back as that index, those row
+    names or that column. Only the names that the writer reserves are
+    refused: a column named \code{__x__} is not, as long as the name is not
+    one that is written.
 }
 }
 \section{Functions}{

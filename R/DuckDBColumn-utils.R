@@ -108,12 +108,18 @@
 #'     }
 #'   }
 #'   \item{\code{pmax(..., na.rm = FALSE)}:}{
-#'     Returns the parallel maxima of multiple DuckDBColumn objects.
-#'     All arguments must be DuckDBColumn objects with compatible dimensions.
+#'     Returns the parallel maxima of DuckDBColumn objects and single values, as
+#'     in base R. A missing value gives a missing value, unless \code{na.rm} is
+#'     \code{TRUE}. A \code{NaN} is not told from a missing value by
+#'     \code{pmin}: DuckDB sorts it above every number, so \code{pmin} returns
+#'     the other value where base R returns \code{NaN}.
 #'   }
 #'   \item{\code{pmin(..., na.rm = FALSE)}:}{
-#'     Returns the parallel minima of multiple DuckDBColumn objects.
-#'     All arguments must be DuckDBColumn objects with compatible dimensions.
+#'     Returns the parallel minima of DuckDBColumn objects and single values, as
+#'     in base R. A missing value gives a missing value, unless \code{na.rm} is
+#'     \code{TRUE}. A \code{NaN} is not told from a missing value by
+#'     \code{pmin}: DuckDB sorts it above every number, so \code{pmin} returns
+#'     the other value where base R returns \code{NaN}.
 #'   }
 #' }
 #'
@@ -233,6 +239,9 @@
 #' @aliases Ops,DuckDBColumn,missing-method
 #' @aliases !,DuckDBColumn-method
 #' @aliases Math,DuckDBColumn-method
+#' @aliases Math2,DuckDBColumn,missing-method
+#' @aliases Math2,DuckDBColumn,numeric-method
+#' @aliases log,DuckDBColumn-method
 #' @aliases Summary,DuckDBColumn-method
 #'
 #' @aliases anyNA,DuckDBColumn-method
@@ -247,8 +256,8 @@
 #' @aliases quantile.DuckDBColumn
 #' @aliases mad,DuckDBColumn-method
 #' @aliases IQR,DuckDBColumn-method
-#' @aliases pmax,DuckDBColumn-method
-#' @aliases pmin,DuckDBColumn-method
+#' @aliases pmax,DuckDBColumnOrAtomic-method
+#' @aliases pmin,DuckDBColumnOrAtomic-method
 #'
 #' @aliases nchar,DuckDBColumn-method
 #' @aliases tolower,DuckDBColumn-method
@@ -358,6 +367,21 @@ setMethod("Math", "DuckDBColumn", function(x) {
 })
 
 #' @export
+setMethod("Math2", c("DuckDBColumn", "numeric"), function(x, digits) {
+    replaceSlots(x, table = callGeneric(x@table, digits), check = FALSE)
+})
+
+#' @export
+setMethod("Math2", c("DuckDBColumn", "missing"), function(x, digits) {
+    replaceSlots(x, table = callGeneric(x@table), check = FALSE)
+})
+
+#' @export
+setMethod("log", "DuckDBColumn", function(x, base = exp(1)) {
+    replaceSlots(x, table = log(x@table, base), check = FALSE)
+})
+
+#' @export
 setMethod("Summary", "DuckDBColumn", function(x, ..., na.rm = FALSE) {
     callGeneric(x@table, ..., na.rm = na.rm)
 })
@@ -433,22 +457,24 @@ setMethod("IQR", "DuckDBColumn", function(x, na.rm = FALSE, type = 7) {
     callGeneric(x@table, na.rm = na.rm, type = type)
 })
 
+setClassUnion("DuckDBColumnOrAtomic", c("DuckDBColumn", "atomic"))
+
+.extremeDuckDBColumn <- function(generic, args, na.rm) {
+    table_args <- lapply(args, function(a) if (is(a, "DuckDBColumn")) a@table else a)
+    replaceSlots(args[[1L]], table = do.call(generic, c(table_args, list(na.rm = na.rm))),
+                 check = FALSE)
+}
+
 #' @export
-setMethod("pmax", "DuckDBColumn", function(..., na.rm = FALSE) {
-    args <- list(...)
-    table_args <- lapply(args, function(a) {
-        if (is(a, "DuckDBColumn")) a@table else a
-    })
-    replaceSlots(args[[1L]], table = do.call(callGeneric, c(table_args, list(na.rm = na.rm))), check = FALSE)
+setMethod("pmax", "DuckDBColumnOrAtomic", function(..., na.rm = FALSE) {
+    .extremeDispatch(function(args, na.rm) .extremeDuckDBColumn(pmax, args, na.rm),
+                     base::pmax, list(...), na.rm, "DuckDBColumn")
 })
 
 #' @export
-setMethod("pmin", "DuckDBColumn", function(..., na.rm = FALSE) {
-    args <- list(...)
-    table_args <- lapply(args, function(a) {
-        if (is(a, "DuckDBColumn")) a@table else a
-    })
-    replaceSlots(args[[1L]], table = do.call(callGeneric, c(table_args, list(na.rm = na.rm))), check = FALSE)
+setMethod("pmin", "DuckDBColumnOrAtomic", function(..., na.rm = FALSE) {
+    .extremeDispatch(function(args, na.rm) .extremeDuckDBColumn(pmin, args, na.rm),
+                     base::pmin, list(...), na.rm, "DuckDBColumn")
 })
 
 ### - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -574,7 +600,11 @@ function(x, table) {
 
 #' @export
 setMethod("table", "DuckDBColumn", function(x, ...) {
-    callGeneric(cbind.DuckDBDataFrame(x, ...))
+    dots <- list(...)
+    nms <- names(dots)
+    is_option <- if (is.null(nms)) rep(FALSE, length(dots)) else nms == "useNA"
+    callGeneric(do.call(cbind.DuckDBDataFrame, c(list(x), dots[!is_option])),
+                useNA = if (any(is_option)) dots[[which(is_option)]] else "no")
 })
 
 ### - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
